@@ -117,7 +117,7 @@ beforeEach(() => {
   state.deleted = [];
   state.deletedAll = 0;
 
-  initOutput({ isTTY: true, command: 'test' });
+  initOutput({ isTTY: true, env: {}, command: 'test' });
   setInteractive(true);
 });
 

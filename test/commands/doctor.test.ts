@@ -256,7 +256,7 @@ describe('doctor', () => {
   });
 
   it('renders one glyph per check in human mode', async () => {
-    initOutput({ isTTY: true, command: 'doctor' });
+    initOutput({ isTTY: true, env: {}, command: 'doctor' });
     stubFetch();
 
     await run();
