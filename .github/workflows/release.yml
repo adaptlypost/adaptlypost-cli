@@ -113,7 +113,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: [npm, binaries]
+    needs: [binaries]
     runs-on: ubuntu-latest
     permissions:
       contents: write
