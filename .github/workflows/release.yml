@@ -32,7 +32,19 @@ jobs:
       - run: npm run build
 
       # Trusted publishing supplies auth, provenance and access; see README "Releasing".
-      - run: npm publish
+      - name: publish
+        shell: bash
+        run: |
+          set +e
+          out="$(npm publish 2>&1)"
+          code=$?
+          set -e
+          printf '%s\n' "$out"
+          [ $code -eq 0 ] && exit 0
+          case "$(printf '%s' "$out" | tr 'A-Z' 'a-z')" in
+            *"cannot publish over"*) echo "this version is already on the registry" ;;
+            *) exit $code ;;
+          esac
 
   binaries:
     runs-on: ${{ matrix.os }}
@@ -128,6 +140,7 @@ jobs:
 
   homebrew:
     needs: release
+    if: vars.TAP_CONFIGURED == 'true'
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ needs.release.outputs.version }}

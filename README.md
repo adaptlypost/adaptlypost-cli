@@ -16,13 +16,17 @@ npm install -g @adaptlypost/cli
 npx -p @adaptlypost/cli adaptlypost --help
 
 # macOS and Linux, standalone binary, no Node required
-brew install adaptlypost/tap/adaptlypost
+brew trust adaptlypost/tap && brew install adaptlypost/tap/adaptlypost
 
 # or
 curl -fsSL https://adaptlypost.com/install.sh | sh
 ```
 
 `npx @adaptlypost/cli` prompts instead of running, because npx resolves a bin named after the unscoped package. Use `npx -p @adaptlypost/cli adaptlypost`. There is no unscoped `adaptlypost` package, so plain `npx adaptlypost` will not find anything.
+
+Homebrew 7 refuses to load a formula from a third-party tap until you trust it, which is
+what `brew trust` does. Skip it and both `brew install` and `brew upgrade` stop with
+"Refusing to load formula ... from untrusted tap".
 
 The install script downloads the release archive for your platform, verifies its checksum, and puts the binary in `~/.local/bin`. It never edits your shell rc files; it prints the `export PATH` line for you to add. Override the destination with `ADAPTLYPOST_INSTALL_DIR`.
 
