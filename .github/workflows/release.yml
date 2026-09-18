@@ -137,31 +137,3 @@ jobs:
           files: artifacts/*
           generate_release_notes: true
           fail_on_unmatched_files: true
-
-  homebrew:
-    needs: release
-    if: vars.TAP_CONFIGURED == 'true'
-    runs-on: ubuntu-latest
-    env:
-      VERSION: ${{ needs.release.outputs.version }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          repository: adaptlypost/homebrew-tap
-          token: ${{ secrets.TAP_GITHUB_TOKEN }}
-
-      - name: rewrite formula
-        run: |
-          BASE="https://github.com/adaptlypost/adaptlypost-cli/releases/download/v${VERSION}"
-          sh_for() { curl -fsSL "$BASE/adaptlypost_${VERSION}_$1.tar.gz" | sha256sum | cut -d' ' -f1; }
-          python3 scripts/bump.py "$VERSION" \
-            "$(sh_for darwin_arm64)" "$(sh_for darwin_x64)" \
-            "$(sh_for linux_arm64)"  "$(sh_for linux_x64)"
-
-      - name: commit
-        run: |
-          git config user.name "release-bot"
-          git config user.email "release-bot@users.noreply.github.com"
-          git add Formula/adaptlypost.rb
-          git commit -m "adaptlypost ${VERSION}"
-          git push
