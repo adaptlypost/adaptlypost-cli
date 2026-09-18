@@ -1,0 +1,154 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  npm:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - run: npm install -g npm@latest
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      - run: npm run build
+
+      # Trusted publishing supplies auth, provenance and access; see README "Releasing".
+      - run: npm publish
+
+  binaries:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15, target: bun-darwin-arm64, asset: darwin_arm64 }
+          - { os: macos-15, target: bun-darwin-x64, asset: darwin_x64 }
+          - { os: ubuntu-latest, target: bun-linux-x64, asset: linux_x64 }
+          - { os: ubuntu-24.04-arm, target: bun-linux-arm64, asset: linux_arm64 }
+          - { os: ubuntu-latest, target: bun-linux-x64-musl, asset: linux_x64_musl }
+          - { os: windows-latest, target: bun-windows-x64, asset: windows_x64, ext: ".exe" }
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - run: npm ci
+
+      - name: compile
+        shell: bash
+        run: |
+          mkdir -p dist
+          bun build src/cli.ts --compile --minify --sourcemap \
+            --define __CLI_VERSION__="\"${GITHUB_REF_NAME#v}\"" \
+            --target=${{ matrix.target }} \
+            --outfile dist/adaptlypost${{ matrix.ext }}
+
+      # Bun's Linux-hosted Mach-O signer has shipped truncated signatures, and Apple
+      # Silicon answers a bad signature with "Killed: 9" rather than a dialog.
+      - name: codesign (macOS)
+        if: startsWith(matrix.target, 'bun-darwin')
+        run: |
+          codesign --force --sign - dist/adaptlypost
+          codesign -dv dist/adaptlypost
+
+      - name: smoke test
+        if: matrix.asset != 'linux_arm64' && matrix.asset != 'linux_x64_musl'
+        shell: bash
+        run: ./dist/adaptlypost${{ matrix.ext }} --version
+
+      - name: archive
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          NAME="adaptlypost_${VERSION}_${{ matrix.asset }}"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a "${NAME}.zip" ./dist/adaptlypost.exe
+          else
+            tar -czf "${NAME}.tar.gz" -C dist adaptlypost
+          fi
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: ${{ matrix.asset }}
+          path: |
+            *.tar.gz
+            *.zip
+          if-no-files-found: error
+
+  release:
+    needs: [npm, binaries]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - id: meta
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: checksums
+        working-directory: artifacts
+        run: sha256sum * > checksums.txt
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+
+  homebrew:
+    needs: release
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          repository: adaptlypost/homebrew-tap
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+
+      - name: rewrite formula
+        run: |
+          BASE="https://github.com/adaptlypost/adaptlypost-cli/releases/download/v${VERSION}"
+          sh_for() { curl -fsSL "$BASE/adaptlypost_${VERSION}_$1.tar.gz" | sha256sum | cut -d' ' -f1; }
+          python3 scripts/bump.py "$VERSION" \
+            "$(sh_for darwin_arm64)" "$(sh_for darwin_x64)" \
+            "$(sh_for linux_arm64)"  "$(sh_for linux_x64)"
+
+      - name: commit
+        run: |
+          git config user.name "release-bot"
+          git config user.email "release-bot@users.noreply.github.com"
+          git add Formula/adaptlypost.rb
+          git commit -m "adaptlypost ${VERSION}"
+          git push

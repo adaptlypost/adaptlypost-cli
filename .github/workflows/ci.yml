@@ -1,0 +1,54 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm run lint
+
+      - run: npm test
+
+      - run: npm run build
+
+      - name: cli smoke test
+        run: node dist/cli.js --version
+
+      - name: src/core drift
+        env:
+          CORE_SRC: ${{ vars.CORE_SRC }}
+        shell: bash
+        run: |
+          SRC="${CORE_SRC:-../../adaptlypost/adaptlypost-cli/src/core}"
+          if [ ! -d "$SRC" ]; then
+            echo "CORE_SRC ($SRC) is not reachable from this checkout, skipping drift check"
+            exit 0
+          fi
+          sh scripts/sync-core.sh
+          git diff --exit-code src/core

@@ -1,0 +1,66 @@
+{
+  "name": "@adaptlypost/cli",
+  "version": "0.1.0",
+  "description": "AdaptlyPost from your terminal",
+  "keywords": [
+    "cli",
+    "adaptlypost",
+    "social-media",
+    "scheduling",
+    "claude",
+    "cursor",
+    "windsurf"
+  ],
+  "homepage": "https://adaptlypost.com",
+  "bugs": {
+    "url": "https://github.com/adaptlypost/adaptlypost-cli/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adaptlypost/adaptlypost-cli.git"
+  },
+  "license": "MIT",
+  "author": "AdaptlyPost <support@adaptlypost.com> (https://adaptlypost.com)",
+  "type": "module",
+  "bin": {
+    "adaptlypost": "./dist/cli.js",
+    "apost": "./dist/cli.js"
+  },
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run",
+    "compile": "bun build src/cli.ts --compile --minify --sourcemap --define __CLI_VERSION__=\"\\\"$npm_package_version\\\"\" --outfile dist/adaptlypost",
+    "sync-core": "sh scripts/sync-core.sh",
+    "prepack": "npm run build"
+  },
+  "devDependencies": {
+    "@clack/prompts": "^0.11.0",
+    "@types/node": "^22.15.0",
+    "commander": "^14.0.0",
+    "eslint": "^9.39.0",
+    "picocolors": "^1.1.1",
+    "tsdown": "^0.15.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "^8.46.0",
+    "vitest": "^3.2.0"
+  }
+}
