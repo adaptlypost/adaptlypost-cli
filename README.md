@@ -124,6 +124,7 @@ Grammar is noun then verb, space-separated. `ls` works wherever `list` does, `rm
 | Command | Key flags | Notes |
 |---|---|---|
 | `accounts list` | `--platform`, `--status` | Connected accounts and which need reconnecting |
+| `accounts view <id>` | | One account by its id or Facebook page id |
 | `accounts check <id>` | | Facebook pages only. Takes the account id or the Facebook page id |
 
 ### post

@@ -1,11 +1,12 @@
 import type { Command } from 'commander';
 
-import { listSocialAccounts } from '../api/client.js';
+import { checkSocialAccount, listSocialAccounts } from '../api/client.js';
 import {
   PLATFORM_TYPES,
   SOCIAL_ACCOUNT_STATUSES,
   type PlatformType,
   type SocialAccount,
+  type SocialAccountCheck,
   type SocialAccountStatus,
 } from '../api/types.js';
 import {
@@ -182,6 +183,56 @@ const runView = async (id: string): Promise<void> => {
   }
 };
 
+const runCheck = async (id: string): Promise<void> => {
+  const account = findAccount(await fetchAccounts('Loading account…'), id);
+
+  if (!account) {
+    throw notFoundError(
+      `No account with id "${id}" in this workspace`,
+      'list them with: adaptlypost accounts list',
+    );
+  }
+
+  if (account.platform !== 'FACEBOOK') {
+    throw usageError(
+      `${account.platform} accounts cannot be re-checked`,
+      'only Facebook pages expose a token check',
+    );
+  }
+
+  const progress = isQuiet() || isMachine() ? null : spinner('Asking Facebook…');
+  let checked: SocialAccountCheck;
+  try {
+    checked = await checkSocialAccount(account.id);
+  } finally {
+    progress?.stop();
+  }
+
+  if (isMachine()) {
+    printResult('accounts.check', checked);
+    return;
+  }
+
+  const entries: Array<[string, string]> = [
+    ['name', checked.displayName || '—'],
+    ['status', checked.status],
+    ['checked', checked.checkedAt],
+  ];
+  if (checked.unauthorizedReason) entries.push(['reason', checked.unauthorizedReason]);
+
+  print(checked.id);
+  print();
+  printKeyValues(entries);
+  print();
+
+  if (checked.status === 'unauthorized') {
+    print(yellow('! Facebook still rejects this token.'));
+    hint('reconnect: adaptlypost open accounts');
+  } else {
+    print('Facebook accepts this token; the page can publish.');
+  }
+};
+
 export const registerAccountCommands = (program: Command): void => {
   const accounts = program
     .command('accounts')
@@ -213,5 +264,12 @@ export const registerAccountCommands = (program: Command): void => {
     .description('show one account by its id or Facebook page id')
     .action(async (id: string) => {
       await runView(id);
+    });
+
+  accounts
+    .command('check <id>')
+    .description('ask Facebook whether a page token still works (Facebook pages only)')
+    .action(async (id: string) => {
+      await runCheck(id);
     });
 };
