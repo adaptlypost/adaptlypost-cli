@@ -190,7 +190,7 @@ describe('login', () => {
 
     await run(['login']);
 
-    expect(state.opened).toEqual(['https://app.adaptlypost.com/api-tokens']);
+    expect(state.opened).toEqual(['https://adaptlypost.com/api-tokens']);
     expect(state.saved[0]?.input.token).toBe('adaptly_typed12345');
   });
 
@@ -264,7 +264,7 @@ describe('logout', () => {
 
     expect(state.deleted).toEqual(['default']);
     expect(stdout).toContain('Removed profile "default"');
-    expect(stdout).toContain('revoke it at https://app.adaptlypost.com/api-tokens');
+    expect(stdout).toContain('revoke it at https://adaptlypost.com/api-tokens');
   });
 
   it('removes every profile with --all', async () => {

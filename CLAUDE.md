@@ -4,7 +4,7 @@ Command line interface for the AdaptlyPost social media scheduling platform. Bin
 
 ## Setup
 
-1. Get an API token from https://app.adaptlypost.com/api-tokens
+1. Get an API token from https://adaptlypost.com/api-tokens
 2. `adaptlypost login`, or set `ADAPTLYPOST_API_TOKEN`
 3. Talks to one host only: `https://post.adaptlypost.com/post/api/v1`
 

@@ -9,21 +9,30 @@ interface Target {
 
 const TARGETS: Record<string, Target> = {
   dashboard: { path: () => '/dashboard', needsId: false },
-  post: { path: (id) => `/posts/${id}`, needsId: true },
-  posts: { path: () => '/posts', needsId: false },
-  accounts: { path: () => '/accounts', needsId: false },
+  calendar: { path: () => '/calendar', needsId: false },
+  create: { path: () => '/create-post', needsId: false },
+  scheduled: { path: () => '/scheduled', needsId: false },
+  posted: { path: () => '/posted', needsId: false },
+  drafts: { path: () => '/drafts', needsId: false },
+  accounts: { path: () => '/connectors', needsId: false },
   analytics: { path: () => '/analytics', needsId: false },
   tokens: { path: () => '/api-tokens', needsId: false },
-  webhooks: { path: () => '/webhooks', needsId: false },
+  billing: { path: () => '/billing', needsId: false },
+  settings: { path: () => '/settings/general', needsId: false },
+  workspaces: { path: () => '/workspaces', needsId: false },
 };
 
 const ALIASES: Record<string, string> = {
   home: 'dashboard',
   account: 'accounts',
+  connectors: 'accounts',
   token: 'tokens',
   'api-tokens': 'tokens',
-  webhook: 'webhooks',
   stats: 'analytics',
+  draft: 'drafts',
+  'create-post': 'create',
+  new: 'create',
+  workspace: 'workspaces',
 };
 
 export function registerOpenCommand(program: Command): void {

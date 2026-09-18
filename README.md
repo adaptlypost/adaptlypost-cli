@@ -30,7 +30,7 @@ Both bins run the same program. `apost` is the short one.
 
 ## Authentication
 
-Create an API token at <https://app.adaptlypost.com/api-tokens> and hand it to `login`:
+Create an API token at <https://adaptlypost.com/api-tokens> and hand it to `login`:
 
 ```bash
 adaptlypost login
@@ -54,7 +54,7 @@ There is no OAuth or device-code flow yet. There is also no `/me` endpoint on th
 
 ```
 $ adaptlypost login
-  Opening https://app.adaptlypost.com/api-tokens in your browser.
+  Opening https://adaptlypost.com/api-tokens in your browser.
   Create a token, then paste it here.
 
   Token (starts with adaptly_): ****************************
@@ -354,8 +354,8 @@ Add the line to your shell rc file to keep it. The Homebrew formula installs com
 
 ## Links
 
-- Dashboard: <https://app.adaptlypost.com>
-- API tokens: <https://app.adaptlypost.com/api-tokens>
+- Dashboard: <https://adaptlypost.com>
+- API tokens: <https://adaptlypost.com/api-tokens>
 - MCP server, for Claude, Cursor, VS Code and Windsurf: <https://mcp.adaptlypost.com/mcp>. Run `adaptlypost mcp` to print the client config, or `adaptlypost mcp --install` to write it.
 - RedReplier CLI, for Reddit and Hacker News mention monitoring: <https://github.com/RedReplier/redreplier-cli>
 - Flowsery CLI, for web analytics, session replay and issue triage: <https://github.com/Flowsery/flowsery-cli>
