@@ -31,7 +31,7 @@ const account = (overrides: Partial<SocialAccount> = {}): SocialAccount =>
   }) as SocialAccount;
 
 const page = (overrides: Partial<SocialAccount> = {}): SocialAccount =>
-  account({ id: 'acc_fb', platform: 'FACEBOOK', pageId: 'fb_page_91c', username: null, ...overrides });
+  account({ id: 'acc_fb', platform: 'FACEBOOK', pageId: 'fb_page_91c', username: undefined, ...overrides });
 
 const buildProgram = (): Command => {
   const program = new Command();
@@ -46,13 +46,17 @@ const accountsCommand = (program: Command): Command =>
 const run = (args: string[]): Promise<unknown> =>
   buildProgram().parseAsync(['node', 'adaptlypost', 'accounts', ...args]);
 
-let write: ReturnType<typeof vi.spyOn>;
+let stdout: string[];
 
 beforeEach(() => {
   checkSocialAccount.mockReset();
   listSocialAccounts.mockReset();
   setOutputMode('machine');
-  write = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+  stdout = [];
+  vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+    stdout.push(String(chunk));
+    return true;
+  });
 });
 
 describe('registerAccountCommands', () => {
@@ -80,7 +84,7 @@ describe('accounts check', () => {
     await run(['check', 'fb_page_91c']);
 
     expect(checkSocialAccount).toHaveBeenCalledWith('acc_fb');
-    expect(JSON.parse(write.mock.calls.map((call) => call[0]).join(''))).toMatchObject({
+    expect(JSON.parse(stdout.join(''))).toMatchObject({
       command: 'accounts.check',
       data: { id: 'acc_fb', status: 'active', checkedAt: '2026-09-18T10:00:00.000Z' },
     });
