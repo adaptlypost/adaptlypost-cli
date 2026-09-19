@@ -90,7 +90,7 @@ $ adaptlypost post watch post_9c3e1f
 
 ## The parts worth the install
 
-**Post from a file or a pipe.** `post create --file launch.md` reads YAML frontmatter for platforms, accounts, schedule, timezone and per-platform overrides, and the markdown body as the post text. Local paths under `media:` are uploaded before the post is created and replaced with their public URLs. Flags override frontmatter.
+**Post from a file or a pipe.** `post create --file launch.md` reads YAML frontmatter for platforms, accounts, schedule, timezone and per-platform overrides, and the markdown body as the post text. Local paths under `media:` are uploaded before the post is created and replaced with their public URLs. `alt:` holds the alt text for each image, in the same order as `media:`. Flags override frontmatter.
 
 ```markdown
 ---
@@ -99,6 +99,7 @@ accounts: [tw_4d1b, li_22aa]
 at: 2026-09-20T09:00:00Z
 timezone: Europe/Berlin
 media: [./hero.png]
+alt: ["The new CLI printing a scheduled post in a dark terminal"]
 linkedin:
   text: |
     A longer version for LinkedIn, because the audience is different.
