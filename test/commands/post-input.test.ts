@@ -155,6 +155,14 @@ describe("parsePostInput", () => {
     expect(input.platformTexts?.LINKEDIN).toBe("A longer version for LinkedIn.\n");
   });
 
+  it("keeps each alt text whole, commas included", () => {
+    const input = parsePostInput(
+      ["---", "media: [./a.png, ./b.png]", 'alt: ["A red bike, parked", "A blue door"]', "---", "Body"].join("\n"),
+    );
+
+    expect(input.alt).toEqual(["A red bike, parked", "A blue door"]);
+  });
+
   it("turns the non-text keys of a platform block into its config", () => {
     const input = parsePostInput(
       ["---", "tiktok:", "  privacyLevel: SELF_ONLY", "  title: Demo", "---", "Body"].join("\n"),
@@ -215,6 +223,17 @@ describe("buildPostBody", () => {
     expect(body.linkedinConnectionIds).toEqual(["li_22aa"]);
     expect(body.contentType).toBe("TEXT");
     expect(body.timezone).toBe("Europe/Berlin");
+  });
+
+  it("sends alt texts only when the post has media", () => {
+    const withMedia = buildPostBody(
+      { text: "hello", accounts: ["tw_4d1b"], alt: ["A red bike"] },
+      { accounts, mediaUrls: ["https://cdn.example.com/a.jpg"] },
+    );
+    const withoutMedia = buildPostBody({ text: "hello", accounts: ["tw_4d1b"], alt: ["A red bike"] }, { accounts });
+
+    expect(withMedia.mediaAltTexts).toEqual(["A red bike"]);
+    expect(withoutMedia.mediaAltTexts).toBeUndefined();
   });
 
   it("routes a Facebook page by its page id into pageIds", () => {

@@ -356,6 +356,7 @@ export interface CreatePostRequest extends PostTargets {
   text?: string;
   platformTexts?: PlatformText[];
   mediaUrls?: string[];
+  mediaAltTexts?: string[];
   thumbnailUrl?: string;
   thumbnailTimestampMs?: number;
   scheduledAt?: string;
@@ -369,6 +370,7 @@ export interface UpdatePostRequest extends PostTargets {
   text?: string;
   platformTexts?: PlatformText[];
   mediaUrls?: string[];
+  mediaAltTexts?: string[];
   thumbnailUrl?: string;
   thumbnailTimestampMs?: number;
   scheduledAt?: string;
@@ -429,6 +431,7 @@ export interface BulkPostInput {
   scheduledAt: string;
   text?: string;
   mediaUrls?: string[];
+  mediaAltTexts?: string[];
   thumbnailUrl?: string;
   thumbnailTimestampMs?: number;
   platformTexts?: PlatformText[];

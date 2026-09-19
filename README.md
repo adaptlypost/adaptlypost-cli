@@ -131,7 +131,7 @@ Grammar is noun then verb, space-separated. `ls` works wherever `list` does, `rm
 
 | Command | Key flags | Notes |
 |---|---|---|
-| `post create` | `-t/--text`, `-f/--file`, `-P/--platform`, `-a/--account`, `-m/--media`, `-s/--at`, `--timezone`, `--draft`, `--watch`, `--dry-run` | `-` on `--text` or `--file` reads stdin |
+| `post create` | `-t/--text`, `-f/--file`, `-P/--platform`, `-a/--account`, `-m/--media`, `--alt`, `-s/--at`, `--timezone`, `--draft`, `--watch`, `--dry-run` | `-` on `--text` or `--file` reads stdin. `--alt` is the alt text for the `--media` image at the same position |
 | `post list` | `--status`, `--platform`, `--from`, `--to`, `--sort`, `--limit`, `--offset`, `--all` | |
 | `post get <id>` | | Post header plus one row per platform |
 | `post update <id>` | Same as `create` minus `--draft` and `--watch` | `--platform` replaces every target on the post, so it confirms first |

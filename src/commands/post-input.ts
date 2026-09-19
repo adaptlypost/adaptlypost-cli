@@ -47,6 +47,7 @@ export interface PostInput {
   at?: string;
   timezone?: string;
   media?: string[];
+  alt?: string[];
   thumbnail?: string;
   thumbnailMs?: number;
   draft?: boolean;
@@ -101,6 +102,11 @@ const SCALAR_KEYS = new Map<string, keyof PostInput>([
   ["tz", "timezone"],
   ["media", "media"],
   ["mediaurls", "media"],
+  ["alt", "alt"],
+  ["alts", "alt"],
+  ["alttext", "alt"],
+  ["alttexts", "alt"],
+  ["mediaalttexts", "alt"],
   ["thumbnail", "thumbnail"],
   ["thumbnailurl", "thumbnail"],
   ["thumbnailms", "thumbnailMs"],
@@ -457,6 +463,10 @@ export function parsePostInput(source: string): PostInput {
     }
     if (target === "media") {
       input.media = asStringList(value, rawKey);
+      continue;
+    }
+    if (target === "alt") {
+      input.alt = Array.isArray(value) ? value.map((item) => asString(item, rawKey)) : [asString(value, rawKey)];
       continue;
     }
     if (target === "thumbnail") {
@@ -924,6 +934,7 @@ export function buildPostBody(
   if (input.at !== undefined) body.scheduledAt = input.at;
   if (input.draft) body.saveAsDraft = true;
   if (mediaUrls.length > 0) body.mediaUrls = mediaUrls;
+  if (mediaUrls.length > 0 && input.alt?.length) body.mediaAltTexts = input.alt;
   if (input.thumbnail !== undefined) body.thumbnailUrl = input.thumbnail;
   if (input.thumbnailMs !== undefined) body.thumbnailTimestampMs = input.thumbnailMs;
   if (platformTexts.length > 0) body.platformTexts = platformTexts;

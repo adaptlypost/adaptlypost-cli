@@ -140,6 +140,7 @@ interface ContentOptions {
   platform: PlatformType[];
   type?: string;
   media: string[];
+  alt: string[];
   thumbnail?: string;
   thumbnailMs?: string;
   at?: string;
@@ -169,6 +170,7 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
 
   if (options.type !== undefined) input.contentType = normalizeContentType(options.type);
   if (options.media.length > 0) input.media = options.media;
+  if (options.alt.length > 0) input.alt = options.alt;
   if (options.thumbnail !== undefined) input.thumbnail = options.thumbnail;
   if (options.at !== undefined) input.at = options.at;
   if (options.timezone !== undefined) input.timezone = options.timezone;
@@ -549,6 +551,7 @@ async function runUpdate(id: string, options: UpdateOptions): Promise<void> {
     Object.assign(body, carried);
     if (options.platform.length > 0) body.platforms = platforms;
     if (mediaUrls.length > 0) body.mediaUrls = mediaUrls;
+    if (full.mediaAltTexts) body.mediaAltTexts = full.mediaAltTexts;
   }
 
   if (Object.keys(body).length === 0) {
@@ -1006,6 +1009,8 @@ async function rowsFromDirectory(path: string, timezone: string): Promise<BulkRo
     }));
     if (platformTexts.length > 0) item.platformTexts = platformTexts;
 
+    if (input.media?.length && input.alt?.length) item.mediaAltTexts = input.alt;
+
     rows.push({
       line: index + 1,
       item,
@@ -1283,6 +1288,7 @@ const withContentOptions = (command: Command): Command =>
     .option("-P, --platform <platform>", "Target platform, repeatable", collectPlatform, [])
     .option("--type <type>", "TEXT, IMAGE, VIDEO or CAROUSEL")
     .option("-m, --media <path|url>", "Media to attach, repeatable", collect, [])
+    .option("--alt <text>", "Alt text for the image at the same position as --media, repeatable", collect, [])
     .option("--thumbnail <path|url>", "Custom thumbnail for video posts")
     .option("--thumbnail-ms <ms>", "Take the thumbnail from the video at this millisecond")
     .option("-s, --at <when>", 'When to publish: ISO 8601, "+2h" or "tomorrow 09:00"')
