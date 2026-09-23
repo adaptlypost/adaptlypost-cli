@@ -291,6 +291,7 @@ export interface SocialPostPlatform {
   rawErrorMessage?: string;
   publishedAt?: string;
   mediaUrls: string[];
+  previewUrls: string[];
   createdAt: string;
   updatedAt: string;
   linkedinDocumentTitle?: string;
