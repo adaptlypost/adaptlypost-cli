@@ -62,6 +62,7 @@ export const CONNECTION_FIELD: Record<PlatformType, keyof PostTargets> = {
   TIKTOK: "tiktokConnectionIds",
   TWITTER: "twitterConnectionIds",
   BLUESKY: "blueskyConnectionIds",
+  MASTODON: "mastodonConnectionIds",
   LINKEDIN: "linkedinConnectionIds",
   PINTEREST: "pinterestConnectionIds",
   YOUTUBE: "youtubeConnectionIds",

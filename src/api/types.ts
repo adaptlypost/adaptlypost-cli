@@ -8,6 +8,7 @@ export const PLATFORM_TYPES = [
   'LINKEDIN',
   'PINTEREST',
   'YOUTUBE',
+  'MASTODON',
 ] as const;
 export type PlatformType = (typeof PLATFORM_TYPES)[number];
 
@@ -128,6 +129,7 @@ export type ImageJobStatus = (typeof IMAGE_JOB_STATUSES)[number];
 export const CAPTION_PLATFORMS = [
   'TWITTER',
   'BLUESKY',
+  'MASTODON',
   'THREADS',
   'PINTEREST',
   'INSTAGRAM',
@@ -264,6 +266,7 @@ export interface PostTargets {
   instagramConnectionIds?: string[];
   twitterConnectionIds?: string[];
   blueskyConnectionIds?: string[];
+  mastodonConnectionIds?: string[];
   linkedinConnectionIds?: string[];
   pinterestConnectionIds?: string[];
   youtubeConnectionIds?: string[];
