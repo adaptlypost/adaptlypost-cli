@@ -711,11 +711,12 @@ async function runResults(id: string, options: GlobalOptions): Promise<void> {
 
 interface RetryOptions extends GlobalOptions {
   platformId: string[];
+  platform: PlatformType[];
   failed?: boolean;
 }
 
 async function runRetry(id: string, options: RetryOptions): Promise<void> {
-  let platformIds = options.platformId;
+  let platformIds: string[] = [...options.platformId, ...options.platform];
 
   if (options.failed) {
     const response = await listPostResults(id);
@@ -727,21 +728,15 @@ async function runRetry(id: string, options: RetryOptions): Promise<void> {
     ];
   }
 
-  if (platformIds.length === 0) {
-    throw new CliError("No platform to retry.", {
-      exitCode: ExitCode.USAGE,
-      hint: "Pass --platform-id <id> (repeatable), or --failed to retry every failed platform",
-    });
-  }
-
-  const retried = await retryFailedPlatforms(id, { platformIds });
+  const retried = await retryFailedPlatforms(id, platformIds.length > 0 ? { platformIds } : {});
 
   if (isMachine()) {
     printResult("post.retry", retried);
     return;
   }
 
-  success(`Retrying ${platformIds.length} platform(s) on ${formatId(retried.postId)}`);
+  const scope = platformIds.length > 0 ? `${platformIds.length} platform(s)` : "every failed platform";
+  success(`Retrying ${scope} on ${formatId(retried.postId)}`);
   printKeyValues([
     ["queued", retried.queuedPlatforms.join(", ") || "—"],
     ["watch", `adaptlypost post watch ${retried.postId}`],
@@ -1395,9 +1390,10 @@ export function registerPostCommands(program: Command): void {
 
   post
     .command("retry <id>")
-    .description("Re-queue the platforms that failed")
-    .option("--platform-id <id>", "Failed platform id, repeatable", collect, [])
-    .option("--failed", "Retry every platform that ended FAILED")
+    .description("Re-queue the platforms that failed; with no flags every FAILED platform is retried")
+    .option("--platform-id <id>", "Failed platform id from `post results`, repeatable", collect, [])
+    .option("-P, --platform <platform>", "Retry every failed entry of this platform, repeatable", collectPlatform, [])
+    .option("--failed", "Resolve the FAILED platform ids locally before sending")
     .action(async (id: string, _options: RetryOptions, command: Command) => {
       await runRetry(id, command.optsWithGlobals() as RetryOptions);
     });

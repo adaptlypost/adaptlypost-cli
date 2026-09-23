@@ -315,8 +315,28 @@ describe("post retry", () => {
     expect(client.retryFailedPlatforms).toHaveBeenCalledWith("post_1", { platformIds: ["pp_2"] });
   });
 
-  it("refuses a retry with no platform", async () => {
-    await expect(run(["post", "retry", "post_1"])).rejects.toMatchObject({ exitCode: 2 });
+  it("retries every failed platform when no flag is given", async () => {
+    vi.mocked(client.retryFailedPlatforms).mockResolvedValue({
+      postId: "post_1",
+      queuedPlatforms: ["LINKEDIN", "BLUESKY"],
+      isScheduled: false,
+    } as never);
+
+    await run(["post", "retry", "post_1"]);
+
+    expect(client.retryFailedPlatforms).toHaveBeenCalledWith("post_1", {});
+  });
+
+  it("sends platform names alongside ids", async () => {
+    vi.mocked(client.retryFailedPlatforms).mockResolvedValue({
+      postId: "post_1",
+      queuedPlatforms: ["BLUESKY"],
+      isScheduled: false,
+    } as never);
+
+    await run(["post", "retry", "post_1", "--platform-id", "pp_2", "-P", "bluesky"]);
+
+    expect(client.retryFailedPlatforms).toHaveBeenCalledWith("post_1", { platformIds: ["pp_2", "BLUESKY"] });
   });
 });
 

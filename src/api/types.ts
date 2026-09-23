@@ -350,6 +350,9 @@ export interface SocialPost {
   scheduledAt?: string;
   timezone: string;
   status: PostStatus;
+  thumbnailUrl?: string;
+  mediaUrls: string[];
+  mediaAltTexts?: string[];
   platforms: SocialPostPlatform[];
   createdAt: string;
   updatedAt: string;
@@ -422,7 +425,7 @@ export interface PublishDraftRequest {
 }
 
 export interface RetryFailedPlatformsRequest {
-  platformIds: string[];
+  platformIds?: string[];
 }
 
 export interface DeletedResponse {

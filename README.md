@@ -170,7 +170,7 @@ Grammar is noun then verb, space-separated. `ls` works wherever `list` does, `rm
 | `post update <id>` | Same as `create` minus `--draft` and `--watch` | `--platform` replaces every target on the post, so it confirms first. Moving a scheduled post more than a minute into the past fails with a 400 |
 | `post delete <id>` | `--yes` | |
 | `post results <id>` | | The only source of truth for what published |
-| `post retry <id>` | `--platform-id` (repeatable), `--failed` | `--failed` reads the results first and retries every failed row |
+| `post retry <id>` | `--platform-id` (repeatable), `-P, --platform` (repeatable), `--failed` | No flags retries every FAILED platform server-side. `--platform BLUESKY` retries every failed entry of that platform. `--failed` resolves the ids locally first |
 | `post publish <id>` | `--at`, `--timezone` | Drafts only |
 | `post unschedule <id>` | | Turns a scheduled or dated draft post back into an undated draft. 404 for another workspace's post |
 | `post watch <id>` | `--timeout` | Exit 0 all published, 1 any failed, 8 timeout |
