@@ -46,10 +46,29 @@ const { registerDoctorCommand } = await import('../../src/commands/doctor.js');
 
 interface Answers {
   ping?: () => Response;
+  me?: () => Response;
   openapi?: () => Response;
 }
 
 let stdout = '';
+
+const ME = {
+  tokenType: 'api_token',
+  tokenId: 'tok_1',
+  tokenName: 'CI deploy',
+  workspace: { id: 'ws_1', name: 'Acme' },
+  organizationId: 'org_1',
+  role: { key: 'editor', name: 'Editor' },
+  issuerRole: 'admin',
+  permissions: ['posts.read', 'posts.draft', 'posts.schedule', 'posts.publish'],
+  can: { draft: true, schedule: true, publish: true },
+  summary: 'Editor: creates, schedules and publishes posts',
+  expiresAt: null,
+};
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+}
 
 function okPing(headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify({ accounts: [] }), {
@@ -75,6 +94,7 @@ function stubFetch(answers: Answers = {}): void {
           ? answers.openapi()
           : new Response(JSON.stringify({ info: { version: '1.0.0' } }), { status: 200 });
       }
+      if (url.endsWith('/me')) return answers.me ? answers.me() : jsonResponse(ME);
       return answers.ping ? answers.ping() : okPing();
     }),
   );
@@ -154,7 +174,103 @@ describe('doctor', () => {
     expect(checkFor('api').detail).toContain('https://post.adaptlypost.com/post/api/v1');
     expect(checkFor('rate limit')).toMatchObject({ status: 'pass', detail: '599 of 600 left, resets in 41s' });
     expect(checkFor('clock').status).toBe('pass');
+    expect(checkFor('role')).toMatchObject({ status: 'pass', detail: 'Editor in Acme: draft, schedule, publish' });
     expect(checkFor('openapi').detail).toBe('reachable, version 1.0.0');
+  });
+
+  it('warns when the key is valid but its role cannot publish', async () => {
+    stubFetch({
+      me: () =>
+        jsonResponse({
+          ...ME,
+          role: { key: 'contributor', name: 'Contributor' },
+          can: { draft: true, schedule: false, publish: false },
+        }),
+    });
+
+    await run();
+
+    expect(checkFor('api').status).toBe('pass');
+    expect(checkFor('role')).toMatchObject({ status: 'warn' });
+    expect(checkFor('role').detail).toBe('Contributor in Acme: draft. The key is valid but cannot publish');
+    expect(checkFor('role').fix).toContain('editor or admin role');
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it('calls a viewer key read only', async () => {
+    stubFetch({
+      me: () =>
+        jsonResponse({
+          ...ME,
+          role: { key: 'viewer', name: 'Viewer' },
+          workspace: { id: 'ws_1', name: null },
+          can: { draft: false, schedule: false, publish: false },
+        }),
+    });
+
+    await run();
+
+    expect(checkFor('role').detail).toBe('Viewer in ws_1: read only. The key is valid but cannot publish');
+  });
+
+  it('warns instead of failing when the API has no /me yet', async () => {
+    stubFetch({ me: () => new Response('Not Found', { status: 404 }) });
+
+    await run();
+
+    expect(checkFor('role')).toMatchObject({ status: 'warn' });
+    expect(checkFor('role').detail).toContain('no /me endpoint');
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it('fails when the creator of the key lost access to the workspace', async () => {
+    stubFetch({
+      ping: () =>
+        jsonResponse({ statusCode: 401, code: 'token_issuer_lost_access', message: 'Key creator left' }, 401),
+    });
+
+    await run();
+
+    expect(checkFor('api').status).toBe('fail');
+    expect(checkFor('api').detail).toContain('lost access');
+    expect(checkFor('api').fix).toContain('Ask a workspace admin for a new key');
+    expect(checks().some((entry) => entry.id === 'role')).toBe(false);
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('separates a valid key on an inactive plan from a rejected key', async () => {
+    stubFetch({
+      ping: () => jsonResponse({ statusCode: 403, code: 'subscription_required', message: 'Plan not active' }, 403),
+    });
+
+    await run();
+
+    expect(checkFor('api').detail).toContain('the token is valid but the workspace plan is not active');
+    expect(checkFor('api').fix).not.toBe('adaptlypost login');
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('separates a valid key that cannot read accounts from a rejected key', async () => {
+    stubFetch({
+      ping: () =>
+        jsonResponse(
+          {
+            statusCode: 403,
+            code: 'permission_denied',
+            requiredPermission: 'accounts.read',
+            role: 'viewer',
+            tokenType: 'api_token',
+            message: 'no',
+          },
+          403,
+        ),
+    });
+
+    await run();
+
+    expect(checkFor('api').detail).toContain('the token is valid but its role cannot read connected accounts');
+    expect(checkFor('api').fix).toContain('accounts.read');
+    expect(process.exitCode).toBe(1);
   });
 
   it('redacts the token it reports', async () => {
@@ -187,6 +303,8 @@ describe('doctor', () => {
     await run();
 
     expect(checkFor('api')).toMatchObject({ status: 'fail', fix: 'adaptlypost login' });
+    expect(checkFor('api').detail).toContain('the token was rejected');
+    expect(checks().some((entry) => entry.id === 'role')).toBe(false);
     expect(process.exitCode).toBe(1);
   });
 

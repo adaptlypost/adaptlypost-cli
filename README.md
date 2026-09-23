@@ -50,9 +50,41 @@ echo "$ADAPTLYPOST_TOKEN" | adaptlypost login --token-stdin --profile ci
 
 Or skip `login` entirely and export `ADAPTLYPOST_API_TOKEN`. The CLI reads it on every command.
 
-There is no OAuth or device-code flow yet. There is also no `/me` endpoint on the API, so `whoami` reconstructs your identity from the cheapest authenticated listing and says where each field came from.
+There is no OAuth or device-code flow yet.
+
+`whoami` calls `GET /me` and prints the workspace the key belongs to, its role, and whether it can draft, schedule and publish:
+
+```
+$ adaptlypost whoami
+  profile    default
+  token      adaptly_4f2a… ("CI deploy", from credentials file)
+  api        https://post.adaptlypost.com/post/api/v1
+  workspace  Acme (ws_9c3e1f)
+  role       Contributor (contributor, key issued by admin)
+  can        draft
+  accounts   7 connected accounts, 4 platforms
+  limits     598 of 600 requests left this minute
+  This key can save drafts but cannot schedule or publish. Ask a workspace admin for a key with the editor or admin role if it should.
+```
+
+Under `--json` the `data` object carries `workspace`, `role`, `issuerRole`, `permissions`, `can` and `expiresAt` as the API returns them, plus the account count.
 
 `logout` removes the profile from the credentials file. It does not revoke the token; do that in the dashboard.
+
+## Roles
+
+Every API key is issued under a workspace role, chosen when the key is created, and can never do more than the member who created it. The CLI sends the key; the API decides.
+
+| Role | Can |
+|---|---|
+| Admin | Everything, including connecting and disconnecting accounts, connect links and account checks |
+| Editor | Create, schedule, publish, retry, bulk schedule and delete posts, edit teammates' posts, manage webhooks and the signature, upload media, use AI |
+| Contributor | Create and edit its own drafts, upload media, use AI. Cannot schedule, publish, retry, bulk schedule, or touch teammates' posts |
+| Viewer | Read posts, accounts and analytics |
+
+When a key's role does not cover a command, the API answers 403 with `code: permission_denied` and the CLI exits 10 with a hint that names the role and the missing permission. Retrying, or switching to another key of the same role, does not help; ask a workspace admin for a key issued under a higher role. `adaptlypost whoami` shows the role in hand before you try.
+
+A key stops working when the member who created it loses access to the workspace: the API answers 401 with `code: token_issuer_lost_access` and the CLI exits 3. Ask a workspace admin for a new key. A demoted creator shrinks the key to the creator's new permissions.
 
 ## Quick start
 
@@ -198,10 +230,10 @@ Insufficient credits come back as exit 9, not a generic failure.
 |---|---|---|
 | `login` | `--token-stdin`, `--profile`, `--api-url`, `--name` | |
 | `logout` | `--profile`, `--all` | |
-| `whoami` | | Prints which source each of the token and the API URL came from |
+| `whoami` | | Workspace, role, what the key can do, and which source the token and the API URL came from |
 | `config list \| get \| set \| unset \| path` | | Reads and writes `config.json` |
 | `open [what] [id]` | | `dashboard`, `post <id>`, `accounts`, `analytics`, `tokens`, `webhooks` |
-| `doctor` | `--json` | Node version, files, permissions, token, API reachability, rate limit |
+| `doctor` | `--json` | Node version, files, permissions, token, role, API reachability, rate limit |
 | `completion <shell>` | | `bash`, `zsh`, `fish`, `powershell` |
 | `mcp` | `--client`, `--local`, `--install` | Prints or installs the MCP client config |
 | `api <method> <path>` | `-q/--query`, `-d/--data`, `-H/--header`, `-i/--include` | Raw authenticated request |
@@ -274,14 +306,17 @@ Add `--json` to a list command and the available field names are printed to stde
 | 0 | Success |
 | 1 | Generic failure, including 5xx |
 | 2 | Usage error: bad flag, missing argument, unknown enum, prompt needed under `--no-input` |
-| 3 | Auth failure: 401, 403, missing or malformed token |
+| 3 | Auth failure: 401, missing or malformed token, or a key whose creator lost access (`token_issuer_lost_access`) |
 | 4 | Not found: 404 |
 | 5 | Validation or other 400 |
 | 6 | Conflict: 409 |
 | 7 | Rate limited: 429 after retries |
 | 8 | Network failure or timeout |
-| 9 | Quota or plan limit: 402, insufficient credits |
+| 9 | Quota or plan limit: 402, insufficient credits, 403 `subscription_required` |
+| 10 | Permission denied: 403, the key is valid but its role cannot do this (`permission_denied`) |
 | 130 | Interrupted with Ctrl-C |
+
+Exit 3 means get a working key. Exit 10 means the key works and a workspace admin has to issue one under a higher role; nothing you retry from this machine changes it. In machine mode the `error.code` field carries the API's code (`permission_denied`, `subscription_required`, `token_issuer_lost_access`) verbatim.
 
 ## Configuration and profiles
 
@@ -320,7 +355,7 @@ adaptlypost config list
 adaptlypost config path
 ```
 
-Run `adaptlypost doctor` when something is off. It checks the Node version, both files and their permissions, the token, API reachability and latency, the OpenAPI document, the rate-limit budget and any proxy variables, and prints the fix for each failure. It exits 1 when any check fails and supports `--json`.
+Run `adaptlypost doctor` when something is off. It checks the Node version, both files and their permissions, the token, API reachability and latency, the key's role, the OpenAPI document, the rate-limit budget and any proxy variables, and prints the fix for each failure. A rejected token fails the `api` check; a valid token whose role cannot publish passes it and warns on the `role` check instead, so the two never look alike. It exits 1 when any check fails and supports `--json`.
 
 ## Environment variables
 

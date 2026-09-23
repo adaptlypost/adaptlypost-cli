@@ -1,4 +1,11 @@
-import { ExitCode, httpStatusToExitCode, type ExitCodeValue } from "./exit-codes.js";
+import {
+  API_CODE_PERMISSION_DENIED,
+  API_CODE_SUBSCRIPTION_REQUIRED,
+  API_CODE_TOKEN_ISSUER_LOST_ACCESS,
+  ExitCode,
+  httpStatusToExitCode,
+  type ExitCodeValue,
+} from "./exit-codes.js";
 
 export interface CliErrorOptions {
   exitCode?: ExitCodeValue;
@@ -26,6 +33,7 @@ const CODE_FOR_EXIT: Record<ExitCodeValue, string> = {
   7: "rate_limited",
   8: "network_error",
   9: "quota_exceeded",
+  10: API_CODE_PERMISSION_DENIED,
   130: "cancelled",
 };
 
@@ -79,9 +87,51 @@ export class ApiError extends Error {
     this.details = flat.details;
     this.method = init.method;
     this.path = init.path;
-    this.hint = init.hint;
-    this.exitCode = httpStatusToExitCode(init.status);
+    this.hint = init.hint ?? accessHintFor(init.status, this.code, init.body);
+    this.exitCode = httpStatusToExitCode(init.status, this.code);
   }
+}
+
+export interface AccessDenial {
+  requiredPermission?: string;
+  role?: string;
+  tokenType?: string;
+}
+
+export function readAccessDenial(body: unknown): AccessDenial {
+  if (!isRecord(body)) return {};
+  const pick = (key: string): string | undefined => {
+    const value = body[key];
+    return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
+  };
+  return { requiredPermission: pick("requiredPermission"), role: pick("role"), tokenType: pick("tokenType") };
+}
+
+export function accessHintFor(status: number, code: string, body: unknown): string | undefined {
+  if (status === 401 && code === API_CODE_TOKEN_ISSUER_LOST_ACCESS) {
+    return "The member who created this key no longer has access to the workspace, so the key stopped working. Ask a workspace admin for a new key.";
+  }
+  if (status !== 403) return undefined;
+  if (code === API_CODE_SUBSCRIPTION_REQUIRED) {
+    return "The workspace plan does not cover this. A workspace admin can change the plan in the dashboard.";
+  }
+  if (code !== API_CODE_PERMISSION_DENIED) return undefined;
+
+  const { requiredPermission, role, tokenType } = readAccessDenial(body);
+  const who = tokenType === "oauth" ? "Your role" : "This key's role";
+  const lead =
+    role !== undefined && requiredPermission !== undefined
+      ? `${who} is ${role} and this needs the ${requiredPermission} permission.`
+      : requiredPermission !== undefined
+        ? `This needs the ${requiredPermission} permission, which ${who.toLowerCase()} does not have.`
+        : role !== undefined
+          ? `${who} is ${role}, which does not allow this.`
+          : `${who} does not allow this.`;
+  const ask =
+    tokenType === "oauth"
+      ? "Ask a workspace admin to change your role."
+      : "Ask a workspace admin for a key issued under a role that has it. Retrying or swapping keys of the same role will not help.";
+  return `${lead} ${ask}`;
 }
 
 export function flattenApiMessage(body: unknown): { message: string | null; details: string[] | null } {

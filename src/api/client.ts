@@ -27,6 +27,7 @@ import type {
   ListPostAnalyticsResponse,
   ListPostsQuery,
   ListPostsResponse,
+  Me,
   PlatformBreakdownResponse,
   PostResultsResponse,
   PublishDraftRequest,
@@ -48,6 +49,8 @@ import type {
 } from './types.js';
 
 const segment = (value: string): string => encodeURIComponent(value);
+
+export const getMe = (): Promise<Me> => request<Me>({ method: 'GET', path: '/me' });
 
 export const listSocialAccounts = (): Promise<SocialAccountsResponse> =>
   request<SocialAccountsResponse>({ method: 'GET', path: '/social-accounts' });

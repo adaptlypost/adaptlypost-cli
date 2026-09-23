@@ -1,13 +1,28 @@
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { SocialAccount } from '../../src/api/types.js';
+import type { Me, SocialAccount } from '../../src/api/types.js';
 import type { ResolvedProfile, StoredProfile } from '../../src/core/index.js';
+
+const EDITOR_ME: Me = {
+  tokenType: 'api_token',
+  tokenId: 'tok_1',
+  tokenName: 'CI deploy',
+  workspace: { id: 'ws_1', name: 'Acme' },
+  organizationId: 'org_1',
+  role: { key: 'editor', name: 'Editor' },
+  issuerRole: 'admin',
+  permissions: ['posts.read', 'posts.draft', 'posts.schedule', 'posts.publish'],
+  can: { draft: true, schedule: true, publish: true },
+  summary: 'Editor: creates, schedules and publishes posts',
+  expiresAt: null,
+};
 
 const state = vi.hoisted(() => ({
   globals: {} as Record<string, unknown>,
   profile: {} as ResolvedProfile,
   stored: {} as Record<string, StoredProfile>,
+  me: {} as Me,
   accounts: [] as SocialAccount[],
   rateLimit: undefined as { limit?: number; remaining?: number; reset?: number } | undefined,
   confirmed: true,
@@ -20,6 +35,7 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock('../../src/api/client.js', () => ({
+  getMe: async () => state.me,
   listSocialAccounts: async () => ({ accounts: state.accounts }),
 }));
 
@@ -64,7 +80,7 @@ vi.mock('../../src/core/index.js', async (importOriginal) => {
 });
 
 const { initOutput, setInteractive } = await import('../../src/core/index.js');
-const { registerAuthCommands, assertTokenShape } = await import('../../src/commands/auth.js');
+const { registerAuthCommands, assertTokenShape, describeAbilities } = await import('../../src/commands/auth.js');
 
 let stdout = '';
 let stderr = '';
@@ -107,6 +123,7 @@ beforeEach(() => {
     defaults: {},
   };
   state.stored = {};
+  state.me = { ...EDITOR_ME };
   state.accounts = [];
   state.rateLimit = undefined;
   state.confirmed = true;
@@ -220,8 +237,16 @@ describe('login', () => {
   });
 });
 
+describe('describeAbilities', () => {
+  it('lists what the key can do in order', () => {
+    expect(describeAbilities({ draft: true, schedule: true, publish: true })).toBe('draft, schedule, publish');
+    expect(describeAbilities({ draft: true, schedule: false, publish: false })).toBe('draft');
+    expect(describeAbilities({ draft: false, schedule: false, publish: false })).toBe('read only');
+  });
+});
+
 describe('whoami', () => {
-  it('prints the profile, the redacted token, the api and the account count', async () => {
+  it('prints the profile, the redacted token, the workspace, the role and what the key can do', async () => {
     state.accounts = [account('ig_1', 'INSTAGRAM')];
     state.rateLimit = { limit: 600, remaining: 598, reset: 41 };
 
@@ -229,14 +254,56 @@ describe('whoami', () => {
 
     expect(stdout).toContain('profile');
     expect(stdout).toContain('adaptly_stor…');
-    expect(stdout).toContain('credentials file');
+    expect(stdout).toContain('"CI deploy", from credentials file');
     expect(stdout).toContain('https://post.adaptlypost.com/post/api/v1');
+    expect(stdout).toContain('workspace  Acme (ws_1)');
+    expect(stdout).toContain('role       Editor (editor, key issued by admin)');
+    expect(stdout).toContain('can        draft, schedule, publish');
     expect(stdout).toContain('1 connected account, 1 platform');
     expect(stdout).toContain('598 of 600 requests left this minute');
+    expect(stdout).not.toContain('expires');
     expect(stdout).not.toContain('adaptly_stored9999');
+    expect(stderr).not.toContain('/me');
+    expect(stderr).not.toContain('Ask a workspace admin');
   });
 
-  it('carries the rate limit in meta under --json', async () => {
+  it('says a contributor key cannot schedule or publish', async () => {
+    state.me = {
+      ...EDITOR_ME,
+      tokenName: null,
+      role: { key: 'contributor', name: 'Contributor' },
+      issuerRole: 'contributor',
+      can: { draft: true, schedule: false, publish: false },
+      expiresAt: '2099-01-01T00:00:00.000Z',
+    };
+
+    await run(['whoami']);
+
+    expect(stdout).toContain('role       Contributor (contributor)');
+    expect(stdout).toContain('can        draft');
+    expect(stdout).not.toContain('schedule');
+    expect(stdout).toContain('expires    2099-01-01 00:00 UTC');
+    expect(stderr).toContain('cannot schedule or publish');
+    expect(stderr).toContain('Ask a workspace admin');
+  });
+
+  it('says a viewer key is read only', async () => {
+    state.me = {
+      ...EDITOR_ME,
+      workspace: { id: 'ws_1', name: null },
+      role: { key: 'viewer', name: 'Viewer' },
+      issuerRole: 'admin',
+      can: { draft: false, schedule: false, publish: false },
+    };
+
+    await run(['whoami']);
+
+    expect(stdout).toContain('workspace  ws_1');
+    expect(stdout).toContain('can        read only');
+    expect(stderr).toContain('This key is read only');
+  });
+
+  it('carries the role, the permissions and the rate limit under --json', async () => {
     initOutput({ json: true, command: 'whoami' });
     state.accounts = [account('ig_1', 'INSTAGRAM'), account('tw_1', 'TWITTER')];
     state.rateLimit = { limit: 600, remaining: 598, reset: 41 };
@@ -244,7 +311,18 @@ describe('whoami', () => {
     await run(['whoami']);
 
     const payload = JSON.parse(stdout) as { data: Record<string, unknown>; meta: Record<string, unknown> };
-    expect(payload.data).toMatchObject({ accounts: 2, platforms: ['INSTAGRAM', 'TWITTER'] });
+    expect(payload.data).toMatchObject({
+      tokenType: 'api_token',
+      tokenName: 'CI deploy',
+      workspace: { id: 'ws_1', name: 'Acme' },
+      role: { key: 'editor', name: 'Editor' },
+      issuerRole: 'admin',
+      permissions: ['posts.read', 'posts.draft', 'posts.schedule', 'posts.publish'],
+      can: { draft: true, schedule: true, publish: true },
+      expiresAt: null,
+      accounts: 2,
+      platforms: ['INSTAGRAM', 'TWITTER'],
+    });
     expect(payload.meta).toEqual({ rateLimit: { limit: 600, remaining: 598, resetSeconds: 41 } });
   });
 });

@@ -15,6 +15,7 @@ beforeEach(() => {
 
 describe('endpoint mapping', () => {
   const cases: [string, () => Promise<unknown>, Record<string, unknown>][] = [
+    ['getMe', () => client.getMe(), { method: 'GET', path: '/me' }],
     [
       'listSocialAccounts',
       () => client.listSocialAccounts(),

@@ -176,6 +176,22 @@ export interface SocialAccountsResponse {
   accounts: SocialAccount[];
 }
 
+export type TokenType = 'api_token' | 'oauth';
+
+export interface Me {
+  tokenType: TokenType;
+  tokenId: string | null;
+  tokenName: string | null;
+  workspace: { id: string; name: string | null };
+  organizationId: string;
+  role: { key: string; name: string };
+  issuerRole: string | null;
+  permissions: string[];
+  can: { draft: boolean; schedule: boolean; publish: boolean };
+  summary: string;
+  expiresAt: string | null;
+}
+
 export interface SocialAccountCheck {
   id: string;
   platform: PlatformType;

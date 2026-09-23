@@ -1,7 +1,7 @@
 import type { Command } from 'commander';
 
-import { listSocialAccounts } from '../api/client.js';
-import type { SocialAccount } from '../api/types.js';
+import { getMe, listSocialAccounts } from '../api/client.js';
+import type { Me, SocialAccount } from '../api/types.js';
 import {
   CliError,
   ExitCode,
@@ -11,6 +11,7 @@ import {
   deleteAllProfiles,
   deleteProfile,
   describeTokenSource,
+  formatTimestamp,
   getGlobalOptions,
   getLastRateLimit,
   getProfile,
@@ -38,6 +39,22 @@ const TOKEN_PREFIX = PRODUCT.tokenPrefixes[0];
 
 function platformsOf(accounts: readonly SocialAccount[]): string[] {
   return [...new Set(accounts.map((account) => account.platform))].sort();
+}
+
+export function describeAbilities(can: Me['can']): string {
+  const abilities = [can.draft && 'draft', can.schedule && 'schedule', can.publish && 'publish'].filter(
+    (entry): entry is string => typeof entry === 'string',
+  );
+  return abilities.length === 0 ? 'read only' : abilities.join(', ');
+}
+
+function describeWorkspace(me: Me): string {
+  return me.workspace.name ? `${me.workspace.name} (${me.workspace.id})` : me.workspace.id;
+}
+
+function describeRole(me: Me): string {
+  const issued = me.issuerRole && me.issuerRole !== me.role.key ? `, key issued by ${me.issuerRole}` : '';
+  return `${me.role.name} (${me.role.key}${issued})`;
 }
 
 async function readStdin(): Promise<string> {
@@ -189,12 +206,14 @@ export function registerAuthCommands(program: Command): void {
 
   program
     .command('whoami')
-    .description('show which token is in use and what it can see')
+    .description('show which token is in use, its workspace, its role and what it can do')
     .action(async () => {
       const profile = resolveProfile();
+      const me = await getMe();
       const { accounts } = await listSocialAccounts();
       const platforms = platformsOf(accounts);
       const rateLimit = getLastRateLimit();
+      const expiresAt = me.expiresAt ? new Date(me.expiresAt) : null;
 
       printResult(
         'whoami',
@@ -202,7 +221,17 @@ export function registerAuthCommands(program: Command): void {
           profile: profile.name,
           tokenPrefix: redactToken(profile.token),
           tokenSource: profile.tokenSource,
+          tokenType: me.tokenType,
+          tokenName: me.tokenName,
           apiUrl: profile.apiUrl,
+          workspace: me.workspace,
+          organizationId: me.organizationId,
+          role: me.role,
+          issuerRole: me.issuerRole,
+          permissions: me.permissions,
+          can: me.can,
+          summary: me.summary,
+          expiresAt: me.expiresAt,
           accounts: accounts.length,
           platforms,
         },
@@ -217,16 +246,21 @@ export function registerAuthCommands(program: Command): void {
           : undefined,
       );
 
+      const tokenLabel = me.tokenName ? `"${me.tokenName}", ` : '';
       printKeyValues([
         ['profile', profile.name],
-        ['token', `${redactToken(profile.token)} (from ${describeTokenSource(profile.tokenSource)})`],
+        ['token', `${redactToken(profile.token)} (${tokenLabel}from ${describeTokenSource(profile.tokenSource)})`],
         ['api', profile.apiUrl],
+        ['workspace', describeWorkspace(me)],
+        ['role', describeRole(me)],
+        ['can', describeAbilities(me.can)],
         [
-          'workspace',
+          'accounts',
           `${accounts.length} connected ${accounts.length === 1 ? 'account' : 'accounts'}, ${platforms.length} ${
             platforms.length === 1 ? 'platform' : 'platforms'
           }`,
         ],
+        ...(expiresAt ? [['expires', formatTimestamp(expiresAt)] as [string, string]] : []),
         ...(rateLimit?.remaining !== undefined && rateLimit.limit !== undefined
           ? [
               [
@@ -236,6 +270,12 @@ export function registerAuthCommands(program: Command): void {
             ]
           : []),
       ]);
-      hint('There is no /me endpoint, so this is read back from your connected accounts.');
+      if (!me.can.publish) {
+        hint(
+          me.can.draft
+            ? 'This key can save drafts but cannot schedule or publish. Ask a workspace admin for a key with the editor or admin role if it should.'
+            : 'This key is read only. Ask a workspace admin for a key with a role that can create posts if it should.',
+        );
+      }
     });
 }

@@ -1,7 +1,11 @@
 import type { Command } from 'commander';
 import { statSync } from 'node:fs';
 
+import type { Me } from '../api/types.js';
+import { describeAbilities } from './auth.js';
 import {
+  API_CODE_SUBSCRIPTION_REQUIRED,
+  API_CODE_TOKEN_ISSUER_LOST_ACCESS,
   ExitCode,
   PRODUCT,
   VERSION,
@@ -129,6 +133,62 @@ function checkProxy(): Check | null {
   return null;
 }
 
+const authedFetch = (apiUrl: string, path: string, token: string): Promise<Response> =>
+  fetch(`${apiUrl}${path}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json',
+      'User-Agent': userAgent(PRODUCT.id),
+    },
+    signal: AbortSignal.timeout(PING_TIMEOUT_MS),
+  });
+
+async function readJson(response: Response): Promise<Record<string, unknown> | undefined> {
+  try {
+    const body: unknown = await response.json();
+    return typeof body === 'object' && body !== null && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function apiCodeOf(body: Record<string, unknown> | undefined): string | undefined {
+  return typeof body?.code === 'string' ? body.code : undefined;
+}
+
+function tokenCheck(apiUrl: string, status: number, code: string | undefined): Check {
+  if (status === 401 && code === API_CODE_TOKEN_ISSUER_LOST_ACCESS) {
+    return check(
+      'api',
+      'fail',
+      `${apiUrl} answered 401, the member who created this key lost access to the workspace`,
+      `Ask a workspace admin for a new key, then ${PRODUCT.binName} login`,
+    );
+  }
+  if (status === 401) {
+    return check('api', 'fail', `${apiUrl} answered 401, the token was rejected`, `${PRODUCT.binName} login`);
+  }
+  if (status === 403 && code === API_CODE_SUBSCRIPTION_REQUIRED) {
+    return check(
+      'api',
+      'fail',
+      `${apiUrl} answered 403, the token is valid but the workspace plan is not active`,
+      'Ask a workspace admin to check the plan in the dashboard',
+    );
+  }
+  if (status === 403) {
+    return check(
+      'api',
+      'fail',
+      `${apiUrl} answered 403, the token is valid but its role cannot read connected accounts`,
+      'Ask a workspace admin for a key issued under a role that has accounts.read',
+    );
+  }
+  return check('api', 'fail', `${apiUrl} answered ${status}`);
+}
+
 async function pingApi(apiUrl: string, token: string | undefined): Promise<Check[]> {
   if (!token) {
     return [check('api', 'warn', 'skipped, no token to authenticate with', `${PRODUCT.binName} login`)];
@@ -137,14 +197,7 @@ async function pingApi(apiUrl: string, token: string | undefined): Promise<Check
   const started = Date.now();
   let response: Response;
   try {
-    response = await fetch(`${apiUrl}${PRODUCT.verifyPath}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/json',
-        'User-Agent': userAgent(PRODUCT.id),
-      },
-      signal: AbortSignal.timeout(PING_TIMEOUT_MS),
-    });
+    response = await authedFetch(apiUrl, PRODUCT.verifyPath, token);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     return [
@@ -155,17 +208,9 @@ async function pingApi(apiUrl: string, token: string | undefined): Promise<Check
   const elapsed = Date.now() - started;
   const checks: Check[] = [];
 
-  if (response.status === 401 || response.status === 403) {
-    checks.push(
-      check(
-        'api',
-        'fail',
-        `${apiUrl} answered ${response.status}, the token was rejected`,
-        `${PRODUCT.binName} login`,
-      ),
-    );
-  } else if (!response.ok) {
-    checks.push(check('api', 'fail', `${apiUrl} answered ${response.status}`));
+  if (!response.ok) {
+    const body = await readJson(response);
+    checks.push(tokenCheck(apiUrl, response.status, apiCodeOf(body)));
   } else {
     checks.push(check('api', 'pass', `${apiUrl}  ${elapsed} ms`));
   }
@@ -200,6 +245,33 @@ async function pingApi(apiUrl: string, token: string | undefined): Promise<Check
 
   await response.arrayBuffer().catch(() => undefined);
   return checks;
+}
+
+async function checkRole(apiUrl: string, token: string | undefined, tokenValid: boolean): Promise<Check | null> {
+  if (!token || !tokenValid) return null;
+
+  let response: Response;
+  try {
+    response = await authedFetch(apiUrl, '/me', token);
+  } catch {
+    return check('role', 'warn', 'could not read /me');
+  }
+  if (response.status === 404) {
+    await response.arrayBuffer().catch(() => undefined);
+    return check('role', 'warn', 'the API has no /me endpoint yet, so the role is unknown');
+  }
+  const body = await readJson(response);
+  if (!response.ok || !body) return check('role', 'warn', `/me answered ${response.status}`);
+
+  const me = body as unknown as Me;
+  const label = `${me.role.name} in ${me.workspace.name ?? me.workspace.id}: ${describeAbilities(me.can)}`;
+  if (me.can.publish) return check('role', 'pass', label);
+  return check(
+    'role',
+    'warn',
+    `${label}. The key is valid but cannot publish`,
+    'Ask a workspace admin for a key with the editor or admin role if this key should publish',
+  );
 }
 
 async function checkOpenApi(apiUrl: string): Promise<Check> {
@@ -256,7 +328,10 @@ export function registerDoctorCommand(program: Command): void {
       }
 
       checks.push(check('api url', 'pass', `${apiUrl} (from ${describeApiUrlSource(resolveApiUrl().source)})`));
-      checks.push(...(await pingApi(apiUrl, token)));
+      const apiChecks = await pingApi(apiUrl, token);
+      checks.push(...apiChecks);
+      const role = await checkRole(apiUrl, token, apiChecks[0]?.status === 'pass');
+      if (role) checks.push(role);
       checks.push(await checkOpenApi(apiUrl));
 
       const proxy = checkProxy();

@@ -9,6 +9,7 @@ export const ExitCode = {
   RATE_LIMITED: 7,
   NETWORK: 8,
   QUOTA: 9,
+  FORBIDDEN: 10,
   CANCELLED: 130,
 } as const;
 
@@ -26,15 +27,21 @@ export const EXIT_CODE_MEANINGS: Record<ExitCodeValue, string> = {
   7: "Rate limited",
   8: "Network failure or timeout",
   9: "Quota or plan limit",
+  10: "Permission denied: the key is valid but its role cannot do this",
   130: "Interrupted",
 };
 
-export function httpStatusToExitCode(status: number): ExitCodeValue {
+export const API_CODE_PERMISSION_DENIED = "permission_denied";
+export const API_CODE_SUBSCRIPTION_REQUIRED = "subscription_required";
+export const API_CODE_TOKEN_ISSUER_LOST_ACCESS = "token_issuer_lost_access";
+
+export function httpStatusToExitCode(status: number, apiCode?: string): ExitCodeValue {
   if (status >= 200 && status < 400) return ExitCode.OK;
   switch (status) {
     case 401:
-    case 403:
       return ExitCode.AUTH;
+    case 403:
+      return apiCode === API_CODE_SUBSCRIPTION_REQUIRED ? ExitCode.QUOTA : ExitCode.FORBIDDEN;
     case 402:
       return ExitCode.QUOTA;
     case 404:
