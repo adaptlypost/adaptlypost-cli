@@ -106,6 +106,11 @@ describe('endpoint mapping', () => {
       },
     ],
     [
+      'unschedulePost',
+      () => client.unschedulePost('post_9c3e1f'),
+      { method: 'POST', path: '/social-posts/post_9c3e1f/unschedule' },
+    ],
+    [
       'listPostResults',
       () => client.listPostResults('post_9c3e1f'),
       { method: 'GET', path: '/social-posts/post_9c3e1f/results' },

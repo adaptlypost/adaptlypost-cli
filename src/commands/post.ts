@@ -13,6 +13,7 @@ import {
   listSocialAccounts,
   publishDraft,
   retryFailedPlatforms,
+  unschedulePost,
   updatePost,
 } from "../api/client.js";
 import {
@@ -611,6 +612,21 @@ async function runDelete(id: string, options: GlobalOptions): Promise<void> {
   }
 
   success("Deleted");
+}
+
+async function runUnschedule(id: string): Promise<void> {
+  const post = await unschedulePost(id);
+
+  if (isMachine()) {
+    printResult("post.unschedule", post);
+    return;
+  }
+
+  success(`Unscheduled  ${formatId(post.id)}`);
+  printKeyValues([
+    ["status", post.status],
+    ["publish", `adaptlypost post publish ${post.id} --at <when>`],
+  ]);
 }
 
 interface PublishOptions extends GlobalOptions {
@@ -1340,7 +1356,7 @@ export function registerPostCommands(program: Command): void {
     });
 
   withContentOptions(post.command("update <id>"))
-    .description("Update a draft or scheduled post")
+    .description("Update a draft or scheduled post. A scheduled post cannot move into the past")
     .option("--dry-run", "Print the request body and exit")
     .action(async (id: string, _options: UpdateOptions, command: Command) => {
       await runUpdate(id, command.optsWithGlobals() as UpdateOptions);
@@ -1361,6 +1377,13 @@ export function registerPostCommands(program: Command): void {
     .option("--timezone <tz>", "IANA timezone stored with the post")
     .action(async (id: string, _options: PublishOptions, command: Command) => {
       await runPublish(id, command.optsWithGlobals() as PublishOptions);
+    });
+
+  post
+    .command("unschedule <id>")
+    .description("Turn a scheduled post back into an undated draft")
+    .action(async (id: string) => {
+      await runUnschedule(id);
     });
 
   post

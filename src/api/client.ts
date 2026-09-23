@@ -110,6 +110,12 @@ export const deletePost = (postId: string): Promise<DeletedResponse> =>
     path: `/social-posts/${segment(postId)}`,
   });
 
+export const unschedulePost = (postId: string): Promise<SocialPost> =>
+  request<SocialPost>({
+    method: 'POST',
+    path: `/social-posts/${segment(postId)}/unschedule`,
+  });
+
 export const publishDraft = (
   postId: string,
   publishDraftRequest: PublishDraftRequest,

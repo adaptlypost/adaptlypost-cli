@@ -12,6 +12,7 @@ vi.mock("../../src/api/client.js", () => ({
   updatePost: vi.fn(),
   deletePost: vi.fn(),
   publishDraft: vi.fn(),
+  unschedulePost: vi.fn(),
   listPostResults: vi.fn(),
   retryFailedPlatforms: vi.fn(),
   bulkSchedulePosts: vi.fn(),
@@ -95,6 +96,7 @@ describe("the post command tree", () => {
       "update",
       "delete",
       "publish",
+      "unschedule",
       "results",
       "retry",
       "bulk",
@@ -278,6 +280,17 @@ describe("post publish", () => {
       timezone: "UTC",
       scheduledAt: "2026-09-20T09:00:00.000Z",
     });
+  });
+});
+
+describe("post unschedule", () => {
+  it("unschedules the post and reports it as a draft", async () => {
+    vi.mocked(client.unschedulePost).mockResolvedValue({ id: "post_1", status: "DRAFT", scheduledAt: null } as never);
+
+    await run(["post", "unschedule", "post_1"]);
+
+    expect(client.unschedulePost).toHaveBeenCalledWith("post_1");
+    expect(stdoutJson()).toMatchObject({ ok: true, command: "post.unschedule", data: { id: "post_1", status: "DRAFT" } });
   });
 });
 
