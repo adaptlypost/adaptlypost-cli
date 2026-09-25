@@ -17,6 +17,7 @@ import {
   updatePost,
 } from "../api/client.js";
 import {
+  CONTENT_TYPES,
   META_POST_TYPES,
   POST_STATUSES,
   TIKTOK_PRIVACY_LEVELS,
@@ -67,6 +68,7 @@ import {
 import {
   buildPostBody,
   buildTargets,
+  inferContentTypeFromReferences,
   mergePostInput,
   normalizeContentType,
   normalizePlatformName,
@@ -155,6 +157,7 @@ interface ContentOptions {
   igType?: string;
   ytTitle?: string;
   pinterestBoard?: string;
+  documentTitle?: string;
 }
 
 async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
@@ -245,6 +248,9 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
   if (options.ytTitle !== undefined) mergeConfig("YOUTUBE", { videoTitle: options.ytTitle });
   if (options.pinterestBoard !== undefined) {
     mergeConfig("PINTEREST", { boardId: options.pinterestBoard });
+  }
+  if (options.documentTitle !== undefined) {
+    mergeConfig("LINKEDIN", { documentTitle: options.documentTitle });
   }
 
   if (Object.keys(configs).length > 0) input.platformConfigs = configs;
@@ -879,6 +885,17 @@ interface BulkRow {
   configs: PostInput["platformConfigs"];
 }
 
+function refuseDocumentRows(rows: BulkRow[]): void {
+  for (const row of rows) {
+    if (row.item.contentType === "DOCUMENT" || row.configs?.LINKEDIN) {
+      throw new CliError(`Row ${row.line}: LinkedIn document posts cannot be bulk scheduled.`, {
+        exitCode: ExitCode.VALIDATION,
+        hint: 'Create each one with "adaptlypost post create --type DOCUMENT"',
+      });
+    }
+  }
+}
+
 function readBulkColumns(headers: string[]): void {
   const unknown = headers.filter(
     (header) =>
@@ -931,13 +948,7 @@ function bulkRowFromRecord(
   const contentTypeRaw = (record.contentType ?? "").trim();
   const contentType: ContentType = contentTypeRaw
     ? normalizeContentType(contentTypeRaw)
-    : mediaRefs.length === 0
-      ? "TEXT"
-      : mediaRefs.length > 1
-        ? "CAROUSEL"
-        : /\.(mp4|mov|m4v|qt)$/i.test(mediaRefs[0] ?? "")
-          ? "VIDEO"
-          : "IMAGE";
+    : inferContentTypeFromReferences(mediaRefs);
 
   const platformTexts: PlatformText[] = [];
   const configs: PostInput["platformConfigs"] = {};
@@ -1075,6 +1086,8 @@ async function runBulk(options: BulkOptions): Promise<void> {
   if (rows.length === 0) {
     throw new CliError("Nothing to schedule.", { exitCode: ExitCode.VALIDATION });
   }
+
+  refuseDocumentRows(rows);
 
   if (!isMachine()) print(`Read ${rows.length} rows from ${sourceLabel}`);
 
@@ -1297,7 +1310,7 @@ const withContentOptions = (command: Command): Command =>
     .option("-t, --text <text>", 'Post text, or "-" to read stdin')
     .option("-f, --file <path>", 'Markdown file with frontmatter, or "-" for stdin')
     .option("-P, --platform <platform>", "Target platform, repeatable", collectPlatform, [])
-    .option("--type <type>", "TEXT, IMAGE, VIDEO or CAROUSEL")
+    .option("--type <type>", `${CONTENT_TYPES.join(", ")}. DOCUMENT is LinkedIn only: one PDF, PPT, PPTX, DOC or DOCX`)
     .option("-m, --media <path|url>", "Media to attach, repeatable", collect, [])
     .option("--alt <text>", "Alt text for the image at the same position as --media, repeatable", collect, [])
     .option("--thumbnail <path|url>", "Custom thumbnail for video posts")
@@ -1311,7 +1324,11 @@ const withContentOptions = (command: Command): Command =>
     .option("--tiktok-privacy <level>", `TikTok privacy level (${TIKTOK_PRIVACY_LEVELS.join(", ")})`)
     .option("--ig-type <type>", `Instagram post type (${META_POST_TYPES.join(", ")})`)
     .option("--yt-title <title>", "YouTube video title")
-    .option("--pinterest-board <id>", "Pinterest board id");
+    .option("--pinterest-board <id>", "Pinterest board id")
+    .option(
+      "--document-title <title>",
+      "LinkedIn document title, max 100 characters. Defaults to the file name; ignored for non-DOCUMENT posts",
+    );
 
 export function registerPostCommands(program: Command): void {
   const post = program.command("post").description("Create, schedule and inspect posts");

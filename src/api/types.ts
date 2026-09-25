@@ -12,7 +12,13 @@ export const PLATFORM_TYPES = [
 ] as const;
 export type PlatformType = (typeof PLATFORM_TYPES)[number];
 
-export const CONTENT_TYPES = ['TEXT', 'IMAGE', 'VIDEO', 'CAROUSEL'] as const;
+export const CONTENT_TYPES = [
+  'TEXT',
+  'IMAGE',
+  'VIDEO',
+  'CAROUSEL',
+  'DOCUMENT',
+] as const;
 export type ContentType = (typeof CONTENT_TYPES)[number];
 
 export const POST_STATUSES = [
@@ -71,6 +77,11 @@ export const UPLOAD_MIME_TYPES = [
   'image/webp',
   'video/mp4',
   'video/quicktime',
+  'application/pdf',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ] as const;
 export type UploadMimeType = (typeof UPLOAD_MIME_TYPES)[number];
 
@@ -275,6 +286,11 @@ export interface YouTubePostConfig {
   playlistId?: string;
 }
 
+export interface LinkedInPostConfig {
+  connectionId: string;
+  documentTitle?: string;
+}
+
 export interface PostTargets {
   pageIds?: string[];
   tiktokConnectionIds?: string[];
@@ -291,6 +307,7 @@ export interface PostTargets {
   instagramConfigs?: InstagramPostConfig[];
   facebookConfigs?: FacebookPostConfig[];
   youtubeConfigs?: YouTubePostConfig[];
+  linkedinConfigs?: LinkedInPostConfig[];
 }
 
 export interface SocialPostPlatform {

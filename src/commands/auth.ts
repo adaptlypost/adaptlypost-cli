@@ -3,6 +3,7 @@ import type { Command } from 'commander';
 import { getMe, listSocialAccounts } from '../api/client.js';
 import type { Me, SocialAccount } from '../api/types.js';
 import {
+  ApiError,
   CliError,
   ExitCode,
   PRODUCT,
@@ -55,6 +56,15 @@ function describeWorkspace(me: Me): string {
 function describeRole(me: Me): string {
   const issued = me.issuerRole && me.issuerRole !== me.role.key ? `, key issued by ${me.issuerRole}` : '';
   return `${me.role.name} (${me.role.key}${issued})`;
+}
+
+async function readMe(): Promise<Me | null> {
+  try {
+    return await getMe();
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
 }
 
 async function readStdin(): Promise<string> {
@@ -209,11 +219,11 @@ export function registerAuthCommands(program: Command): void {
     .description('show which token is in use, its workspace, its role and what it can do')
     .action(async () => {
       const profile = resolveProfile();
-      const me = await getMe();
+      const me = await readMe();
       const { accounts } = await listSocialAccounts();
       const platforms = platformsOf(accounts);
       const rateLimit = getLastRateLimit();
-      const expiresAt = me.expiresAt ? new Date(me.expiresAt) : null;
+      const expiresAt = me?.expiresAt ? new Date(me.expiresAt) : null;
 
       printResult(
         'whoami',
@@ -221,17 +231,19 @@ export function registerAuthCommands(program: Command): void {
           profile: profile.name,
           tokenPrefix: redactToken(profile.token),
           tokenSource: profile.tokenSource,
-          tokenType: me.tokenType,
-          tokenName: me.tokenName,
           apiUrl: profile.apiUrl,
-          workspace: me.workspace,
-          organizationId: me.organizationId,
-          role: me.role,
-          issuerRole: me.issuerRole,
-          permissions: me.permissions,
-          can: me.can,
-          summary: me.summary,
-          expiresAt: me.expiresAt,
+          ...(me && {
+            tokenType: me.tokenType,
+            tokenName: me.tokenName,
+            workspace: me.workspace,
+            organizationId: me.organizationId,
+            role: me.role,
+            issuerRole: me.issuerRole,
+            permissions: me.permissions,
+            can: me.can,
+            summary: me.summary,
+            expiresAt: me.expiresAt,
+          }),
           accounts: accounts.length,
           platforms,
         },
@@ -246,14 +258,18 @@ export function registerAuthCommands(program: Command): void {
           : undefined,
       );
 
-      const tokenLabel = me.tokenName ? `"${me.tokenName}", ` : '';
+      const tokenLabel = me?.tokenName ? `"${me.tokenName}", ` : '';
       printKeyValues([
         ['profile', profile.name],
         ['token', `${redactToken(profile.token)} (${tokenLabel}from ${describeTokenSource(profile.tokenSource)})`],
         ['api', profile.apiUrl],
-        ['workspace', describeWorkspace(me)],
-        ['role', describeRole(me)],
-        ['can', describeAbilities(me.can)],
+        ...(me
+          ? ([
+              ['workspace', describeWorkspace(me)],
+              ['role', describeRole(me)],
+              ['can', describeAbilities(me.can)],
+            ] as Array<[string, string]>)
+          : []),
         [
           'accounts',
           `${accounts.length} connected ${accounts.length === 1 ? 'account' : 'accounts'}, ${platforms.length} ${
@@ -270,7 +286,7 @@ export function registerAuthCommands(program: Command): void {
             ]
           : []),
       ]);
-      if (!me.can.publish) {
+      if (me && !me.can.publish) {
         hint(
           me.can.draft
             ? 'This key can save drafts but cannot schedule or publish. Ask a workspace admin for a key with the editor or admin role if it should.'

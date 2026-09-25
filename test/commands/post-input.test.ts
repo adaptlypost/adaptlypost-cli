@@ -1,3 +1,7 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { ExitCode } from "../../src/core/exit-codes.js";
@@ -6,6 +10,7 @@ import {
   buildPostBody,
   buildTargets,
   inferContentType,
+  inspectLocalMedia,
   mergePostInput,
   parseFrontmatter,
   parsePostInput,
@@ -171,6 +176,27 @@ describe("parsePostInput", () => {
     expect(input.platformConfigs?.TIKTOK).toEqual({ privacyLevel: "SELF_ONLY", title: "Demo" });
   });
 
+  it("maps every document title alias onto the LinkedIn config", () => {
+    for (const key of ["documentTitle", "document-title", "document_title", "linkedinDocumentTitle"]) {
+      const input = parsePostInput(["---", `${key}: Q3 results`, "---", "Body"].join("\n"));
+      expect(input.platformConfigs?.LINKEDIN).toEqual({ documentTitle: "Q3 results" });
+    }
+  });
+
+  it("merges the document title key with a linkedin block, in either order", () => {
+    const before = parsePostInput(
+      ["---", "documentTitle: Deck", "linkedin:", "  text: Long", "  other: 1", "---", "Body"].join("\n"),
+    );
+    const after = parsePostInput(
+      ["---", "linkedin:", "  documentTitle: Block", "type: DOCUMENT", "document-title: Deck", "---", "Body"].join("\n"),
+    );
+
+    expect(before.platformConfigs?.LINKEDIN).toEqual({ documentTitle: "Deck", other: 1 });
+    expect(before.platformTexts?.LINKEDIN).toBe("Long");
+    expect(after.platformConfigs?.LINKEDIN).toEqual({ documentTitle: "Deck" });
+    expect(after.contentType).toBe("DOCUMENT");
+  });
+
   it("refuses an unknown frontmatter key", () => {
     expect(exitCodeOf(() => parsePostInput("---\nnonsense: 1\n---\nBody"))).toBe(
       ExitCode.VALIDATION,
@@ -291,6 +317,69 @@ describe("buildPostBody", () => {
     ]);
   });
 
+  it("infers DOCUMENT from one document file and builds linkedinConfigs", () => {
+    const body = buildPostBody(
+      {
+        text: "Our Q3 report",
+        accounts: ["li_22aa"],
+        platformConfigs: { LINKEDIN: { documentTitle: "Q3 report" } },
+      },
+      { accounts, mediaUrls: ["https://cdn.example.com/q3.pdf"] },
+    );
+
+    expect(body.contentType).toBe("DOCUMENT");
+    expect(body.platforms).toEqual(["LINKEDIN"]);
+    expect(body.linkedinConfigs).toEqual([{ connectionId: "li_22aa", documentTitle: "Q3 report" }]);
+  });
+
+  it("refuses DOCUMENT on any platform but LinkedIn", () => {
+    expect(
+      exitCodeOf(() =>
+        buildPostBody(
+          { text: "hi", accounts: ["li_22aa", "tw_4d1b"], contentType: "DOCUMENT" },
+          { accounts, mediaUrls: ["https://cdn.example.com/q3.pdf"] },
+        ),
+      ),
+    ).toBe(ExitCode.VALIDATION);
+  });
+
+  it("refuses DOCUMENT with two files or with an image", () => {
+    const post = (mediaUrls: string[]): number =>
+      exitCodeOf(() =>
+        buildPostBody({ text: "hi", accounts: ["li_22aa"], contentType: "DOCUMENT" }, { accounts, mediaUrls }),
+      );
+
+    expect(post(["https://cdn/a.pdf", "https://cdn/b.pdf"])).toBe(ExitCode.VALIDATION);
+    expect(post(["https://cdn/a.jpg"])).toBe(ExitCode.VALIDATION);
+    expect(post([])).toBe(ExitCode.VALIDATION);
+  });
+
+  it("refuses a document file on a post that is not DOCUMENT", () => {
+    expect(
+      exitCodeOf(() =>
+        buildPostBody(
+          { text: "hi", accounts: ["li_22aa"], contentType: "IMAGE" },
+          { accounts, mediaUrls: ["https://cdn/a.pptx"] },
+        ),
+      ),
+    ).toBe(ExitCode.VALIDATION);
+  });
+
+  it("refuses a LinkedIn document title over 100 characters", () => {
+    expect(
+      exitCodeOf(() =>
+        buildPostBody(
+          {
+            text: "hi",
+            accounts: ["li_22aa"],
+            platformConfigs: { LINKEDIN: { documentTitle: "x".repeat(101) } },
+          },
+          { accounts, mediaUrls: ["https://cdn/a.pdf"] },
+        ),
+      ),
+    ).toBe(ExitCode.VALIDATION);
+  });
+
   it("refuses TikTok without a privacy level, unless it is a draft", () => {
     expect(
       exitCodeOf(() => buildPostBody({ text: "hi", accounts: ["tt_77aa"] }, { accounts })),
@@ -354,5 +443,41 @@ describe("inferContentType", () => {
     expect(inferContentType(1, ["image/png"])).toBe("IMAGE");
     expect(inferContentType(1, ["video/mp4"])).toBe("VIDEO");
     expect(inferContentType(3, ["image/png"])).toBe("CAROUSEL");
+    expect(inferContentType(1, ["application/pdf"])).toBe("DOCUMENT");
+    expect(
+      inferContentType(1, ["application/vnd.openxmlformats-officedocument.presentationml.presentation"]),
+    ).toBe("DOCUMENT");
+  });
+});
+
+describe("inspectLocalMedia", () => {
+  const dir = mkdtempSync(join(tmpdir(), "adaptlypost-cli-media-"));
+  const file = (name: string, bytes: Buffer): string => {
+    const path = join(dir, name);
+    writeFileSync(path, bytes);
+    return path;
+  };
+  const zip = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(40)]);
+
+  it("sniffs a PDF and gives an extensionless one a .pdf upload name", async () => {
+    const media = await inspectLocalMedia(file("report", Buffer.from("%PDF-1.7\n%...")));
+
+    expect(media.mimeType).toBe("application/pdf");
+    expect(media.fileName).toBe("report.pdf");
+  });
+
+  it("types a ZIP by its .docx extension", async () => {
+    const media = await inspectLocalMedia(file("notes.docx", zip));
+
+    expect(media.mimeType).toBe(
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
+    expect(media.fileName).toBe("notes.docx");
+  });
+
+  it("refuses a ZIP whose name does not say DOCX or PPTX", async () => {
+    await expect(inspectLocalMedia(file("bundle.zip", zip))).rejects.toMatchObject({
+      exitCode: ExitCode.VALIDATION,
+    });
   });
 });

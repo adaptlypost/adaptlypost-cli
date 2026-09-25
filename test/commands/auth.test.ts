@@ -22,7 +22,7 @@ const state = vi.hoisted(() => ({
   globals: {} as Record<string, unknown>,
   profile: {} as ResolvedProfile,
   stored: {} as Record<string, StoredProfile>,
-  me: {} as Me,
+  me: {} as Me | null,
   accounts: [] as SocialAccount[],
   rateLimit: undefined as { limit?: number; remaining?: number; reset?: number } | undefined,
   confirmed: true,
@@ -34,10 +34,16 @@ const state = vi.hoisted(() => ({
   deletedAll: 0,
 }));
 
-vi.mock('../../src/api/client.js', () => ({
-  getMe: async () => state.me,
-  listSocialAccounts: async () => ({ accounts: state.accounts }),
-}));
+vi.mock('../../src/api/client.js', async () => {
+  const { ApiError } = await import('../../src/core/errors.js');
+  return {
+    getMe: async () => {
+      if (state.me === null) throw new ApiError({ status: 404, method: 'GET', path: '/me' });
+      return state.me;
+    },
+    listSocialAccounts: async () => ({ accounts: state.accounts }),
+  };
+});
 
 vi.mock('../../src/core/index.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/core/index.js')>();
@@ -301,6 +307,18 @@ describe('whoami', () => {
     expect(stdout).toContain('workspace  ws_1');
     expect(stdout).toContain('can        read only');
     expect(stderr).toContain('This key is read only');
+  });
+
+  it('falls back to the connected accounts when the API has no /me', async () => {
+    state.me = null;
+    state.accounts = [account('ig_1', 'INSTAGRAM')];
+
+    await run(['whoami']);
+
+    expect(stdout).toContain('adaptly_stor…');
+    expect(stdout).toContain('1 connected account, 1 platform');
+    expect(stdout).not.toContain('role');
+    expect(stderr).not.toContain('Ask a workspace admin');
   });
 
   it('carries the role, the permissions and the rate limit under --json', async () => {

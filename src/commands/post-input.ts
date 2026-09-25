@@ -8,19 +8,26 @@ import {
   PLATFORM_TYPES,
   type ContentType,
   type CreatePostRequest,
-  type FacebookPostConfig,
-  type InstagramPostConfig,
-  type PinterestPostConfig,
   type PlatformText,
   type PlatformType,
   type PostTargets,
   type SocialAccount,
-  type TikTokPostConfig,
   type UpdatePostRequest,
   type UploadMimeType,
-  type YouTubePostConfig,
 } from "../api/types.js";
 import { CliError, ExitCode } from "../core/index.js";
+import {
+  SNIFF_BYTES,
+  guessMimeType,
+  isDocumentMimeType,
+  isImageOrVideoReference,
+  maxBytesFor,
+  sniffMimeType,
+  unsupportedMediaHint,
+  uploadFileName,
+} from "./media-kind.js";
+
+export { MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, sniffMimeType } from "./media-kind.js";
 
 export type FrontmatterValue =
   | string
@@ -74,7 +81,10 @@ export const CONFIG_FIELD: Partial<Record<PlatformType, keyof PostTargets>> = {
   TIKTOK: "tiktokConfigs",
   PINTEREST: "pinterestConfigs",
   YOUTUBE: "youtubeConfigs",
+  LINKEDIN: "linkedinConfigs",
 };
+
+export const MAX_DOCUMENT_TITLE_LENGTH = 100;
 
 const PLATFORM_ALIASES: Record<string, PlatformType> = {
   x: "TWITTER",
@@ -85,7 +95,7 @@ const PLATFORM_ALIASES: Record<string, PlatformType> = {
   tt: "TIKTOK",
 };
 
-const SCALAR_KEYS = new Map<string, keyof PostInput>([
+const SCALAR_KEYS = new Map<string, keyof PostInput | "documentTitle">([
   ["text", "text"],
   ["platforms", "platforms"],
   ["platform", "platforms"],
@@ -114,6 +124,10 @@ const SCALAR_KEYS = new Map<string, keyof PostInput>([
   ["thumbnailtimestampms", "thumbnailMs"],
   ["draft", "draft"],
   ["saveasdraft", "draft"],
+  ["documenttitle", "documentTitle"],
+  ["document-title", "documentTitle"],
+  ["document_title", "documentTitle"],
+  ["linkedindocumenttitle", "documentTitle"],
 ]);
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$/;
@@ -482,6 +496,13 @@ export function parsePostInput(source: string): PostInput {
       input.draft = asBoolean(value, rawKey);
       continue;
     }
+    if (target === "documentTitle") {
+      input.platformConfigs = {
+        ...input.platformConfigs,
+        LINKEDIN: { ...input.platformConfigs?.LINKEDIN, documentTitle: asString(value, rawKey) },
+      };
+      continue;
+    }
 
     const platform = platformKey(rawKey);
 
@@ -508,7 +529,10 @@ export function parsePostInput(source: string): PostInput {
     }
 
     if (Object.keys(config).length > 0) {
-      input.platformConfigs = { ...input.platformConfigs, [platform]: config };
+      input.platformConfigs = {
+        ...input.platformConfigs,
+        [platform]: { ...input.platformConfigs?.[platform], ...config },
+      };
     }
   }
 
@@ -576,42 +600,19 @@ export async function readPostInput(path: string): Promise<PostInput> {
 
 export function inferContentType(mediaCount: number, mimeTypes: string[]): ContentType {
   if (mediaCount === 0) return "TEXT";
+  if (mimeTypes.some(isDocumentMimeType)) return "DOCUMENT";
   if (mediaCount > 1) return "CAROUSEL";
   return mimeTypes[0]?.startsWith("video/") ? "VIDEO" : "IMAGE";
+}
+
+export function inferContentTypeFromReferences(references: string[]): ContentType {
+  return inferContentType(references.length, references.map(guessMimeType));
 }
 
 export function isRemoteMedia(reference: string): boolean {
   return /^https?:\/\//i.test(reference);
 }
 
-const MIME_BY_SIGNATURE: { mime: UploadMimeType; test: (head: Buffer) => boolean }[] = [
-  { mime: "image/jpeg", test: (head) => head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff },
-  {
-    mime: "image/png",
-    test: (head) => head.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
-  },
-  {
-    mime: "image/webp",
-    test: (head) => head.subarray(0, 4).toString("ascii") === "RIFF" && head.subarray(8, 12).toString("ascii") === "WEBP",
-  },
-  {
-    mime: "video/quicktime",
-    test: (head) =>
-      head.subarray(4, 8).toString("ascii") === "ftyp" &&
-      ["qt  ", "qt"].includes(head.subarray(8, 12).toString("ascii").trimEnd()),
-  },
-  {
-    mime: "video/mp4",
-    test: (head) => head.subarray(4, 8).toString("ascii") === "ftyp",
-  },
-];
-
-export function sniffMimeType(head: Buffer): UploadMimeType | undefined {
-  return MIME_BY_SIGNATURE.find((candidate) => candidate.test(head))?.mime;
-}
-
-export const MAX_IMAGE_BYTES = 50 * 1024 * 1024;
-export const MAX_VIDEO_BYTES = 250 * 1024 * 1024;
 const UPLOAD_CHUNK = 20;
 
 export interface LocalMedia {
@@ -642,16 +643,17 @@ export async function inspectLocalMedia(reference: string): Promise<LocalMedia> 
   }
 
   const bytes = await readFile(path);
-  const mimeType = sniffMimeType(bytes.subarray(0, 12));
+  const head = bytes.subarray(0, SNIFF_BYTES);
+  const mimeType = sniffMimeType(head, path);
 
   if (!mimeType) {
     throw new CliError(`${reference} is not a supported media file.`, {
       exitCode: ExitCode.VALIDATION,
-      hint: "Supported: image/jpeg, image/png, image/webp, video/mp4, video/quicktime",
+      hint: unsupportedMediaHint(head),
     });
   }
 
-  const limit = mimeType.startsWith("video/") ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+  const limit = maxBytesFor(mimeType);
 
   if (size > limit) {
     throw new CliError(
@@ -663,7 +665,7 @@ export async function inspectLocalMedia(reference: string): Promise<LocalMedia> 
   return {
     reference,
     path,
-    fileName: basename(path),
+    fileName: uploadFileName(basename(path), mimeType),
     mimeType,
     size,
     hash: createHash("sha256").update(bytes).digest("hex"),
@@ -837,6 +839,18 @@ function buildConfigs(
       });
     }
 
+    const documentTitle = platform === "LINKEDIN" ? config.documentTitle : undefined;
+    if (
+      documentTitle !== undefined &&
+      documentTitle !== null &&
+      String(documentTitle).length > MAX_DOCUMENT_TITLE_LENGTH
+    ) {
+      throw new CliError(
+        `The LinkedIn document title is ${String(documentTitle).length} characters; the limit is ${MAX_DOCUMENT_TITLE_LENGTH}.`,
+        { exitCode: ExitCode.VALIDATION },
+      );
+    }
+
     const connections = routing.connectionsByPlatform.get(platform) ?? [];
 
     if (connections.length === 0) {
@@ -847,13 +861,7 @@ function buildConfigs(
     }
 
     const entries = connections.map((connectionId) =>
-      platform === "FACEBOOK"
-        ? ({ pageId: connectionId, ...config } as unknown as FacebookPostConfig)
-        : ({ connectionId, ...config } as unknown as
-            | TikTokPostConfig
-            | InstagramPostConfig
-            | PinterestPostConfig
-            | YouTubePostConfig),
+      platform === "FACEBOOK" ? { pageId: connectionId, ...config } : { connectionId, ...config },
     );
 
     Object.assign(configs, { [field]: entries });
@@ -886,6 +894,39 @@ function validateRequiredConfigs(body: CreatePostRequest | UpdatePostRequest): v
   }
 }
 
+const DOCUMENT_FILE_MESSAGE = "A document post needs exactly one PDF, PPT, PPTX, DOC or DOCX file in mediaUrls";
+
+/** Catches the API's DOCUMENT 400s before the request is sent. */
+export function validateDocumentPost(
+  body: CreatePostRequest | UpdatePostRequest,
+  checkMedia = true,
+): void {
+  const mediaUrls = body.mediaUrls ?? [];
+  const documents = mediaUrls.filter((url) => isDocumentMimeType(guessMimeType(url)));
+
+  if (body.contentType !== "DOCUMENT") {
+    if (documents.length > 0) {
+      throw new CliError("Document files can only be posted with the DOCUMENT content type.", {
+        exitCode: ExitCode.VALIDATION,
+        hint: "Pass --type DOCUMENT and post to LinkedIn only",
+      });
+    }
+    return;
+  }
+
+  const other = (body.platforms ?? []).find((platform) => platform !== "LINKEDIN");
+  if (other) {
+    throw new CliError(`${other} does not support DOCUMENT posts.`, {
+      exitCode: ExitCode.VALIDATION,
+      hint: "DOCUMENT is LinkedIn only; post the file to LINKEDIN alone",
+    });
+  }
+
+  if (checkMedia && (mediaUrls.length !== 1 || isImageOrVideoReference(mediaUrls[0] ?? ""))) {
+    throw new CliError(`${DOCUMENT_FILE_MESSAGE}.`, { exitCode: ExitCode.VALIDATION });
+  }
+}
+
 export function buildTargets(
   input: PostInput,
   accounts: SocialAccount[],
@@ -912,12 +953,7 @@ export function buildPostBody(
   }
 
   const mediaUrls = options.mediaUrls ?? input.media ?? [];
-  const contentType =
-    input.contentType ??
-    inferContentType(
-      mediaUrls.length,
-      mediaUrls.map((url) => (/\.(mp4|mov|m4v|qt)(\?|$)/i.test(url) ? "video/mp4" : "image/jpeg")),
-    );
+  const contentType = input.contentType ?? inferContentTypeFromReferences(mediaUrls);
 
   const platformTexts: PlatformText[] = Object.entries(input.platformTexts ?? {}).map(
     ([platform, text]) => ({ platform: platform as PlatformType, text }),
@@ -947,6 +983,7 @@ export function buildPostBody(
     });
   }
 
+  validateDocumentPost(body, options.requireContent !== false || mediaUrls.length > 0);
   if (!input.draft) validateRequiredConfigs(body);
 
   return body;

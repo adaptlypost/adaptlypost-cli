@@ -6,7 +6,7 @@ import { Readable } from 'node:stream';
 import type { Command } from 'commander';
 
 import { createUploadUrls } from '../api/client.js';
-import { UPLOAD_MIME_TYPES, type UploadMimeType, type UploadUrl } from '../api/types.js';
+import type { UploadMimeType, UploadUrl } from '../api/types.js';
 import {
   CliError,
   ExitCode,
@@ -23,14 +23,26 @@ import {
   validationError,
   type Spinner,
 } from '../core/index.js';
+import {
+  SNIFF_BYTES,
+  isDocumentMimeType,
+  maxBytesFor,
+  sniffMimeType,
+  unsupportedMediaHint,
+  uploadFileName,
+} from './media-kind.js';
 
-export const MAX_IMAGE_BYTES = 50 * 1024 * 1024;
-export const MAX_VIDEO_BYTES = 250 * 1024 * 1024;
+export {
+  MAX_DOCUMENT_BYTES,
+  MAX_IMAGE_BYTES,
+  MAX_VIDEO_BYTES,
+  maxBytesFor,
+  sniffMimeType,
+} from './media-kind.js';
+
 export const MAX_FILES_PER_REQUEST = 20;
 export const DEFAULT_CONCURRENCY = 4;
 export const MAX_CONCURRENCY = 20;
-
-const SNIFF_BYTES = 12;
 
 export interface PreparedFile {
   path: string;
@@ -51,45 +63,6 @@ export interface UploadedFile {
 export interface UploadOptions {
   concurrency: string | number;
 }
-
-export const sniffMimeType = (head: Buffer): UploadMimeType | null => {
-  if (head.length >= 3 && head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) {
-    return 'image/jpeg';
-  }
-
-  if (
-    head.length >= 8 &&
-    head[0] === 0x89 &&
-    head[1] === 0x50 &&
-    head[2] === 0x4e &&
-    head[3] === 0x47 &&
-    head[4] === 0x0d &&
-    head[5] === 0x0a &&
-    head[6] === 0x1a &&
-    head[7] === 0x0a
-  ) {
-    return 'image/png';
-  }
-
-  if (
-    head.length >= 12 &&
-    head.subarray(0, 4).toString('latin1') === 'RIFF' &&
-    head.subarray(8, 12).toString('latin1') === 'WEBP'
-  ) {
-    return 'image/webp';
-  }
-
-  if (head.length >= 12 && head.subarray(4, 8).toString('latin1') === 'ftyp') {
-    return head.subarray(8, 12).toString('latin1').startsWith('qt')
-      ? 'video/quicktime'
-      : 'video/mp4';
-  }
-
-  return null;
-};
-
-export const maxBytesFor = (mimeType: UploadMimeType): number =>
-  mimeType.startsWith('video/') ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
 
 export const formatBytes = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
@@ -151,13 +124,10 @@ export const prepareFile = async (path: string): Promise<PreparedFile> => {
   if (!stats.isFile()) throw usageError(`${path} is not a file`);
   if (stats.size === 0) throw usageError(`${path} is empty`);
 
-  const mimeType = sniffMimeType(await readHead(absolute));
-  if (mimeType === null) {
-    throw validationError(
-      `${path} is not a supported media file`,
-      null,
-      `AdaptlyPost accepts ${UPLOAD_MIME_TYPES.join(', ')}`,
-    );
+  const head = await readHead(absolute);
+  const mimeType = sniffMimeType(head, absolute);
+  if (mimeType === undefined) {
+    throw validationError(`${path} is not a supported media file`, null, unsupportedMediaHint(head));
   }
 
   const limit = maxBytesFor(mimeType);
@@ -167,7 +137,12 @@ export const prepareFile = async (path: string): Promise<PreparedFile> => {
     );
   }
 
-  return { path: absolute, fileName: basename(absolute), mimeType, size: stats.size };
+  return {
+    path: absolute,
+    fileName: uploadFileName(basename(absolute), mimeType),
+    mimeType,
+    size: stats.size,
+  };
 };
 
 export const prepareFiles = async (paths: readonly string[]): Promise<PreparedFile[]> => {
@@ -226,9 +201,9 @@ const putFile = async (
         'Content-Type': file.mimeType,
         'Content-Length': String(file.size),
       },
-      body: Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>,
+      body: Readable.toWeb(stream),
       duplex: 'half',
-    } as RequestInit & { duplex: 'half' });
+    });
   } catch (error) {
     stream.destroy();
     throw networkError(`Upload of ${file.fileName} failed`, error);
@@ -327,10 +302,13 @@ const runUpload = async (paths: string[], options: UploadOptions): Promise<void>
       totalBytes,
     )} · urls expire in ${expiresIn(uploads[0]?.expiresAt)}`,
   );
+  const document = uploads.find((upload) => isDocumentMimeType(upload.mimeType));
   hint(
-    `use them: adaptlypost post create -t "…" -P TWITTER ${uploads
-      .map((upload) => `-m ${upload.publicUrl}`)
-      .join(' ')}`,
+    document === undefined
+      ? `use them: adaptlypost post create -t "…" -P TWITTER ${uploads
+          .map((upload) => `-m ${upload.publicUrl}`)
+          .join(' ')}`
+      : `use it: adaptlypost post create -t "…" -P LINKEDIN -a <linkedin account> --type DOCUMENT -m ${document.publicUrl}`,
   );
 };
 

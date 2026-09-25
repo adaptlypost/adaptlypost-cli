@@ -140,11 +140,19 @@ Shipping the CLI today. Schedule, publish and check results without
 leaving your terminal.
 ```
 
+**LinkedIn document posts.** `--type DOCUMENT` publishes one PDF, PPT, PPTX, DOC or DOCX file (max 100 MB, 300 pages) as a LinkedIn document post. DOCUMENT is LinkedIn only, and `--media` must hold exactly that one file. A single document file with no `--type` is inferred as DOCUMENT. `--document-title` sets the title LinkedIn shows (max 100 characters, defaults to the uploaded file name, ignored for non-DOCUMENT posts); it is sent as `linkedinConfigs` for every LinkedIn account on the post. In frontmatter use `documentTitle:` (or `document-title:`, `linkedinDocumentTitle:`), or `documentTitle` inside a `linkedin:` block.
+
+```bash
+adaptlypost post create -t "Our Q3 results" -a li_22aa -m ./q3-report.pdf --document-title "Q3 results"
+```
+
+The API reads the document type from the file extension of the stored URL, so the uploaded file name keeps its `.pdf`, `.ppt`, `.pptx`, `.doc` or `.docx` extension; a PDF named without one gets `.pdf` appended. The CLI refuses, before sending, a DOCUMENT post aimed at any other platform ("<platform> does not support DOCUMENT posts"), a DOCUMENT post with two or more files or an image or video ("A document post needs exactly one PDF, PPT, PPTX, DOC or DOCX file in mediaUrls"), and a document file on a post that is not DOCUMENT ("Document files can only be posted with the DOCUMENT content type"), which are the same 400s the API returns.
+
 `-f -` reads the same document from stdin and `-t -` reads plain text, so `adaptlypost ai caption --prompt "announce the launch" | adaptlypost post create -t - -P TWITTER -a tw_4d1b` is one line.
 
-**Upload that actually uploads.** `media upload` mints presigned URLs in chunks of 20 and PUTs the bytes with the exact MIME type the presign was signed for, sniffed from the first 12 bytes rather than the extension. A mismatched content type fails the S3 signature with an opaque error, which is the step everyone gets wrong by hand.
+**Upload that actually uploads.** `media upload` mints presigned URLs in chunks of 20 and PUTs the bytes with the exact MIME type the presign was signed for, sniffed from the first 12 bytes rather than the extension. A mismatched content type fails the S3 signature with an opaque error, which is the step everyone gets wrong by hand. Accepted: `image/jpeg`, `image/png`, `image/webp` (50 MB), `video/mp4`, `video/quicktime` (250 MB), and for LinkedIn document posts `application/pdf`, `application/vnd.ms-powerpoint`, `application/vnd.openxmlformats-officedocument.presentationml.presentation`, `application/msword` and `application/vnd.openxmlformats-officedocument.wordprocessingml.document` (100 MB). A PDF is read from its `%PDF-` signature. A DOC and a PPT share one container format, and so do a DOCX and a PPTX, so for those the bytes are checked and the `.doc`, `.ppt`, `.docx` or `.pptx` extension picks the type; a file without one is refused.
 
-**Bulk schedule from a CSV.** `post bulk --csv september.csv` validates every row before sending anything, uploads local media once per content hash however many rows reference it, chunks into batches of 100, and reports failures with their row number.
+**Bulk schedule from a CSV.** `post bulk --csv september.csv` validates every row before sending anything, uploads local media once per content hash however many rows reference it, chunks into batches of 100, and reports failures with their row number. Columns are `text`, `scheduledAt`, `contentType` (`TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`, inferred from `media` when empty), `media` (`;`-separated), `thumbnail`, `thumbnailMs`, `text_<PLATFORM>` and `config_<PLATFORM>` (a JSON object). Rows with different configs go out as separate requests. LinkedIn document posts cannot be bulk scheduled, so a `DOCUMENT` row or a `config_LINKEDIN` column is refused; create those with `post create`.
 
 **Watch a post land.** Publishing is asynchronous and `queuedPlatforms` is not an outcome. `post watch` polls the results endpoint on a decaying schedule (5 s for a minute, 15 s for five, 60 s after) and prints each platform the moment its state changes.
 
@@ -164,7 +172,7 @@ Grammar is noun then verb, space-separated. `ls` works wherever `list` does, `rm
 
 | Command | Key flags | Notes |
 |---|---|---|
-| `post create` | `-t/--text`, `-f/--file`, `-P/--platform`, `-a/--account`, `-m/--media`, `--alt`, `-s/--at`, `--timezone`, `--draft`, `--watch`, `--dry-run` | `-` on `--text` or `--file` reads stdin. `--alt` is the alt text for the `--media` image at the same position |
+| `post create` | `-t/--text`, `-f/--file`, `-P/--platform`, `-a/--account`, `-m/--media`, `--alt`, `--type`, `-s/--at`, `--timezone`, `--draft`, `--watch`, `--dry-run` | `-` on `--text` or `--file` reads stdin. `--alt` is the alt text for the `--media` image at the same position. `--type` is `TEXT`, `IMAGE`, `VIDEO`, `CAROUSEL` or `DOCUMENT`, inferred from `--media` when omitted |
 | `post list` | `--status`, `--platform`, `--from`, `--to`, `--sort`, `--limit`, `--offset`, `--all` | |
 | `post get <id>` | | Post header plus one row per platform |
 | `post update <id>` | Same as `create` minus `--draft` and `--watch` | `--platform` replaces every target on the post, so it confirms first. Moving a scheduled post more than a minute into the past fails with a 400 |
@@ -175,6 +183,18 @@ Grammar is noun then verb, space-separated. `ls` works wherever `list` does, `rm
 | `post unschedule <id>` | | Turns a scheduled or dated draft post back into an undated draft. 404 for another workspace's post |
 | `post watch <id>` | `--timeout` | Exit 0 all published, 1 any failed, 8 timeout |
 | `post bulk` | `--csv`, `--json`, `--dir`, `-P/--platform`, `-a/--account`, `--timezone`, `--dry-run` | Chunks of 100 |
+
+Per-platform flags on `post create` and `post update`:
+
+| Flag | Sends |
+|---|---|
+| `--text-for <PLATFORM=text>` | `platformTexts` |
+| `--config <PLATFORM=json>` | The platform's `*Configs` entry, one per account of that platform |
+| `--tiktok-privacy <level>` | `tiktokConfigs[].privacyLevel` |
+| `--ig-type <type>` | `instagramConfigs[].postType` |
+| `--yt-title <title>` | `youtubeConfigs[].videoTitle` |
+| `--pinterest-board <id>` | `pinterestConfigs[].boardId` |
+| `--document-title <title>` | `linkedinConfigs[].documentTitle`, the title LinkedIn shows on a DOCUMENT post. Max 100 characters, defaults to the file name, ignored for other content types |
 
 ### media
 

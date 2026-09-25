@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { SocialAccount } from "../../src/api/types.js";
+
 vi.mock("../../src/api/client.js", () => ({
   listPosts: vi.fn(),
   getPost: vi.fn(),
@@ -26,7 +28,7 @@ const { initOutput } = await import("../../src/core/output.js");
 
 const workspace = mkdtempSync(join(tmpdir(), "adaptlypost-cli-post-"));
 
-const accounts = [
+const accounts: SocialAccount[] = [
   {
     id: "tw_4d1b",
     platform: "TWITTER",
@@ -115,10 +117,10 @@ describe("the post command tree", () => {
 describe("post list", () => {
   it("passes the filters through and prints the machine document", async () => {
     vi.mocked(client.listPosts).mockResolvedValue({
-      posts: [{ id: "post_1", status: "SCHEDULED", contentType: "TEXT", timezone: "UTC", platforms: [], createdAt: "", updatedAt: "", userId: "u" }],
+      posts: [{ id: "post_1", status: "SCHEDULED", contentType: "TEXT", timezone: "UTC", mediaUrls: [], platforms: [], createdAt: "", updatedAt: "", userId: "u" }],
       total: 47,
       hasMore: true,
-    } as never);
+    });
 
     await run(["post", "list", "--limit", "5", "--status", "SCHEDULED", "--platform", "TWITTER"]);
 
@@ -149,7 +151,7 @@ describe("post list", () => {
 
 describe("post create", () => {
   beforeEach(() => {
-    vi.mocked(client.listSocialAccounts).mockResolvedValue({ accounts } as never);
+    vi.mocked(client.listSocialAccounts).mockResolvedValue({ accounts });
   });
 
   it("routes accounts into their platform arrays and sends the post", async () => {
@@ -158,7 +160,7 @@ describe("post create", () => {
       queuedPlatforms: ["TWITTER", "LINKEDIN"],
       skippedPlatforms: [],
       isScheduled: false,
-    } as never);
+    });
 
     await run([
       "post",
@@ -216,6 +218,47 @@ describe("post create", () => {
     expect(client.createPost).not.toHaveBeenCalled();
   });
 
+  it("builds a LinkedIn document post from --type DOCUMENT and --document-title", async () => {
+    await run([
+      "post",
+      "create",
+      "-t",
+      "Our Q3 report",
+      "-a",
+      "li_22aa",
+      "--type",
+      "document",
+      "-m",
+      "https://cdn.example.com/q3.pdf",
+      "--document-title",
+      "Q3 report",
+      "--dry-run",
+    ]);
+
+    const body = stdoutJson().data as Record<string, unknown>;
+    expect(body).toMatchObject({
+      platforms: ["LINKEDIN"],
+      contentType: "DOCUMENT",
+      mediaUrls: ["https://cdn.example.com/q3.pdf"],
+      linkedinConnectionIds: ["li_22aa"],
+      linkedinConfigs: [{ connectionId: "li_22aa", documentTitle: "Q3 report" }],
+    });
+    expect(client.createPost).not.toHaveBeenCalled();
+  });
+
+  it("infers DOCUMENT from a single document file", async () => {
+    await run(["post", "create", "-t", "Deck", "-a", "li_22aa", "-m", "https://cdn/deck.pptx", "--dry-run"]);
+
+    expect((stdoutJson().data as Record<string, unknown>).contentType).toBe("DOCUMENT");
+  });
+
+  it("refuses a DOCUMENT post aimed at another platform before sending it", async () => {
+    await expect(
+      run(["post", "create", "-t", "Deck", "-a", "li_22aa", "-a", "tw_4d1b", "-m", "https://cdn/deck.pdf"]),
+    ).rejects.toMatchObject({ exitCode: 5 });
+    expect(client.createPost).not.toHaveBeenCalled();
+  });
+
   it("fails before the write when an account is not in the workspace", async () => {
     await expect(
       run(["post", "create", "-t", "hi", "-P", "TWITTER", "-a", "nope"]),
@@ -236,17 +279,29 @@ describe("post update", () => {
     await expect(run(["post", "update", "post_1"])).rejects.toMatchObject({ exitCode: 2 });
   });
 
+  it("carries --document-title into linkedinConfigs with the LinkedIn account", async () => {
+    vi.mocked(client.listSocialAccounts).mockResolvedValue({ accounts });
+
+    await run(["post", "update", "post_1", "-a", "li_22aa", "--document-title", "Renamed deck", "--dry-run"]);
+
+    expect(stdoutJson().data).toEqual({
+      linkedinConnectionIds: ["li_22aa"],
+      linkedinConfigs: [{ connectionId: "li_22aa", documentTitle: "Renamed deck" }],
+    });
+  });
+
   it("sends only the fields that were given", async () => {
     vi.mocked(client.updatePost).mockResolvedValue({
       id: "post_1",
       status: "SCHEDULED",
       contentType: "TEXT",
       timezone: "UTC",
+      mediaUrls: [],
       platforms: [],
       createdAt: "",
       updatedAt: "",
       userId: "u",
-    } as never);
+    });
 
     await run(["post", "update", "post_1", "-t", "new text"]);
 
@@ -256,7 +311,7 @@ describe("post update", () => {
 
 describe("post delete", () => {
   it("deletes without a prompt under --yes", async () => {
-    vi.mocked(client.deletePost).mockResolvedValue({ deleted: true } as never);
+    vi.mocked(client.deletePost).mockResolvedValue({ deleted: true });
 
     await run(["post", "delete", "post_1", "--yes"]);
 
@@ -272,7 +327,7 @@ describe("post publish", () => {
       queuedPlatforms: [],
       isScheduled: true,
       scheduledAt: "2026-09-20T09:00:00.000Z",
-    } as never);
+    });
 
     await run(["post", "publish", "post_1", "--at", "2026-09-20T09:00:00Z"]);
 
@@ -285,7 +340,17 @@ describe("post publish", () => {
 
 describe("post unschedule", () => {
   it("unschedules the post and reports it as a draft", async () => {
-    vi.mocked(client.unschedulePost).mockResolvedValue({ id: "post_1", status: "DRAFT", scheduledAt: null } as never);
+    vi.mocked(client.unschedulePost).mockResolvedValue({
+      id: "post_1",
+      status: "DRAFT",
+      contentType: "TEXT",
+      timezone: "UTC",
+      mediaUrls: [],
+      platforms: [],
+      createdAt: "",
+      updatedAt: "",
+      userId: "u",
+    });
 
     await run(["post", "unschedule", "post_1"]);
 
@@ -303,12 +368,12 @@ describe("post retry", () => {
         { platformId: "pp_1", platform: "TWITTER", status: "PUBLISHED" },
         { platformId: "pp_2", platform: "LINKEDIN", status: "FAILED" },
       ],
-    } as never);
+    });
     vi.mocked(client.retryFailedPlatforms).mockResolvedValue({
       postId: "post_1",
       queuedPlatforms: ["LINKEDIN"],
       isScheduled: false,
-    } as never);
+    });
 
     await run(["post", "retry", "post_1", "--failed"]);
 
@@ -362,7 +427,35 @@ describe("post bulk", () => {
     const batches = stdoutJson().data as Record<string, unknown>[];
     expect(batches).toHaveLength(1);
     expect(batches[0]).toMatchObject({ platforms: ["TWITTER"], timezone: "UTC" });
-    expect((batches[0].posts as unknown[]).length).toBe(2);
+    expect(batches[0].posts).toHaveLength(2);
+    expect(client.bulkSchedulePosts).not.toHaveBeenCalled();
+  });
+
+  it("refuses DOCUMENT rows and config_LINKEDIN, before sending anything", async () => {
+    for (const rows of [
+      ["text,scheduledAt,contentType,media", "Deck,2026-09-19T09:00:00Z,DOCUMENT,https://cdn/deck.pdf"],
+      ["text,scheduledAt,media", "Report,2026-09-20T09:00:00Z,https://cdn/report.docx"],
+      ["text,scheduledAt,config_LINKEDIN", 'Deck,2026-09-19T09:00:00Z,"{""documentTitle"":""Q3 deck""}"'],
+    ]) {
+      const path = csvPath([...rows, ""].join("\n"));
+
+      await expect(run(["post", "bulk", "--csv", path, "-P", "LINKEDIN"])).rejects.toMatchObject({
+        exitCode: 5,
+      });
+    }
+    expect(client.bulkSchedulePosts).not.toHaveBeenCalled();
+  });
+
+  it("refuses a --dir post with a LinkedIn document title", async () => {
+    const dir = mkdtempSync(join(workspace, "posts-"));
+    writeFileSync(
+      join(dir, "01.md"),
+      ["---", "at: 2026-09-19T09:00:00Z", "type: DOCUMENT", "documentTitle: Launch deck", "---", "Deck", ""].join("\n"),
+    );
+
+    await expect(run(["post", "bulk", "--dir", dir, "-P", "LINKEDIN"])).rejects.toMatchObject({
+      exitCode: 5,
+    });
     expect(client.bulkSchedulePosts).not.toHaveBeenCalled();
   });
 
@@ -395,7 +488,7 @@ describe("post bulk", () => {
         { success: true, postId: "post_1", isScheduled: true },
         { success: false, isScheduled: false, errorMessage: "account disconnected" },
       ],
-    } as never);
+    });
 
     await expect(run(["post", "bulk", "--csv", path, "-P", "TWITTER"])).rejects.toMatchObject({
       exitCode: 1,
@@ -418,14 +511,15 @@ describe("post watch", () => {
       status: "PUBLISHING",
       contentType: "TEXT",
       timezone: "UTC",
+      mediaUrls: [],
       platforms: [
-        { id: "pp_1", platform: "TWITTER", status: "PENDING", mediaUrls: [], createdAt: "", updatedAt: "" },
-        { id: "pp_2", platform: "LINKEDIN", status: "PENDING", mediaUrls: [], createdAt: "", updatedAt: "" },
+        { id: "pp_1", platform: "TWITTER", status: "PENDING", mediaUrls: [], previewUrls: [], createdAt: "", updatedAt: "" },
+        { id: "pp_2", platform: "LINKEDIN", status: "PENDING", mediaUrls: [], previewUrls: [], createdAt: "", updatedAt: "" },
       ],
       createdAt: "",
       updatedAt: "",
       userId: "u",
-    } as never);
+    });
 
     vi.mocked(client.listPostResults).mockResolvedValue({
       postId: "post_1",
@@ -434,7 +528,7 @@ describe("post watch", () => {
         { platformId: "pp_1", platform: "TWITTER", status: "PUBLISHED", platformPostId: "1836" },
         { platformId: "pp_2", platform: "LINKEDIN", status: "FAILED", errorMessage: "token expired" },
       ],
-    } as never);
+    });
 
     await expect(run(["post", "watch", "post_1"])).rejects.toMatchObject({ exitCode: 1 });
 
@@ -447,17 +541,18 @@ describe("post watch", () => {
       status: "PUBLISHING",
       contentType: "TEXT",
       timezone: "UTC",
+      mediaUrls: [],
       platforms: [],
       createdAt: "",
       updatedAt: "",
       userId: "u",
-    } as never);
+    });
 
     vi.mocked(client.listPostResults).mockResolvedValue({
       postId: "post_2",
       status: "COMPLETED",
       results: [{ platformId: "pp_1", platform: "TWITTER", status: "PUBLISHED" }],
-    } as never);
+    });
 
     await run(["post", "watch", "post_2"]);
 
