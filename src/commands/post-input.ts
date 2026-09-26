@@ -70,6 +70,7 @@ export const CONNECTION_FIELD: Record<PlatformType, keyof PostTargets> = {
   TWITTER: "twitterConnectionIds",
   BLUESKY: "blueskyConnectionIds",
   MASTODON: "mastodonConnectionIds",
+  GOOGLE_BUSINESS: "googleBusinessConnectionIds",
   LINKEDIN: "linkedinConnectionIds",
   PINTEREST: "pinterestConnectionIds",
   YOUTUBE: "youtubeConnectionIds",
@@ -82,6 +83,7 @@ export const CONFIG_FIELD: Partial<Record<PlatformType, keyof PostTargets>> = {
   PINTEREST: "pinterestConfigs",
   YOUTUBE: "youtubeConfigs",
   LINKEDIN: "linkedinConfigs",
+  GOOGLE_BUSINESS: "googleBusinessConfigs",
 };
 
 export const MAX_DOCUMENT_TITLE_LENGTH = 100;
@@ -93,6 +95,7 @@ const PLATFORM_ALIASES: Record<string, PlatformType> = {
   li: "LINKEDIN",
   yt: "YOUTUBE",
   tt: "TIKTOK",
+  gbp: "GOOGLE_BUSINESS",
 };
 
 const SCALAR_KEYS = new Map<string, keyof PostInput | "documentTitle">([
@@ -881,6 +884,13 @@ function validateRequiredConfigs(body: CreatePostRequest | UpdatePostRequest): v
         hint: "Add --tiktok-privacy PUBLIC_TO_EVERYONE (or SELF_ONLY, MUTUAL_FOLLOW_FRIENDS, FOLLOWER_OF_CREATOR)",
       });
     }
+  }
+
+  if ((body.googleBusinessConfigs ?? []).some((config) => !config.topicType)) {
+    throw new CliError("A Google Business Profile config needs a topic type.", {
+      exitCode: ExitCode.VALIDATION,
+      hint: "Add --gbp-topic STANDARD (or EVENT, OFFER)",
+    });
   }
 
   if (platforms.includes("PINTEREST")) {

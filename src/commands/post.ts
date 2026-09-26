@@ -18,6 +18,8 @@ import {
 } from "../api/client.js";
 import {
   CONTENT_TYPES,
+  GOOGLE_BUSINESS_CALL_TO_ACTION_TYPES,
+  GOOGLE_BUSINESS_TOPIC_TYPES,
   META_POST_TYPES,
   POST_STATUSES,
   TIKTOK_PRIVACY_LEVELS,
@@ -158,6 +160,61 @@ interface ContentOptions {
   ytTitle?: string;
   pinterestBoard?: string;
   documentTitle?: string;
+  gbpTopic?: string;
+  gbpButton?: string;
+  gbpButtonUrl?: string;
+  gbpEventTitle?: string;
+  gbpEventStart?: string;
+  gbpEventEnd?: string;
+  gbpCoupon?: string;
+  gbpRedeemUrl?: string;
+  gbpTerms?: string;
+}
+
+const GOOGLE_BUSINESS_LOCAL_TIME = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/;
+
+function googleBusinessConfigFromOptions(options: ContentOptions): Record<string, string> {
+  const config: Record<string, string> = {};
+
+  const pick = (
+    raw: string | undefined,
+    allowed: readonly string[],
+    flag: string,
+    field: string,
+  ): void => {
+    if (raw === undefined) return;
+    const value = raw.trim().toUpperCase();
+    if (!allowed.includes(value)) {
+      throw new CliError(`Unknown ${flag} value "${raw}". Expected one of: ${allowed.join(", ")}.`, {
+        exitCode: ExitCode.USAGE,
+      });
+    }
+    config[field] = value;
+  };
+
+  const localTime = (raw: string | undefined, flag: string, field: string): void => {
+    if (raw === undefined) return;
+    const value = raw.trim();
+    if (!GOOGLE_BUSINESS_LOCAL_TIME.test(value)) {
+      throw new CliError(`${flag} must be YYYY-MM-DD or YYYY-MM-DDTHH:mm, got "${raw}".`, {
+        exitCode: ExitCode.USAGE,
+        hint: "Use the business's local time with no timezone, e.g. 2026-10-01T18:00",
+      });
+    }
+    config[field] = value;
+  };
+
+  pick(options.gbpTopic, GOOGLE_BUSINESS_TOPIC_TYPES, "--gbp-topic", "topicType");
+  pick(options.gbpButton, GOOGLE_BUSINESS_CALL_TO_ACTION_TYPES, "--gbp-button", "callToActionType");
+  if (options.gbpButtonUrl !== undefined) config.callToActionUrl = options.gbpButtonUrl;
+  if (options.gbpEventTitle !== undefined) config.eventTitle = options.gbpEventTitle;
+  localTime(options.gbpEventStart, "--gbp-event-start", "eventStart");
+  localTime(options.gbpEventEnd, "--gbp-event-end", "eventEnd");
+  if (options.gbpCoupon !== undefined) config.offerCouponCode = options.gbpCoupon;
+  if (options.gbpRedeemUrl !== undefined) config.offerRedeemUrl = options.gbpRedeemUrl;
+  if (options.gbpTerms !== undefined) config.offerTerms = options.gbpTerms;
+
+  return config;
 }
 
 async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
@@ -252,6 +309,9 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
   if (options.documentTitle !== undefined) {
     mergeConfig("LINKEDIN", { documentTitle: options.documentTitle });
   }
+
+  const googleBusiness = googleBusinessConfigFromOptions(options);
+  if (Object.keys(googleBusiness).length > 0) mergeConfig("GOOGLE_BUSINESS", googleBusiness);
 
   if (Object.keys(configs).length > 0) input.platformConfigs = configs;
 
@@ -900,8 +960,8 @@ function readBulkColumns(headers: string[]): void {
   const unknown = headers.filter(
     (header) =>
       !CORE_COLUMNS.has(header) &&
-      !/^text_[A-Za-z]+$/.test(header) &&
-      !/^config_[A-Za-z]+$/.test(header),
+      !/^text_[A-Za-z_]+$/.test(header) &&
+      !/^config_[A-Za-z_]+$/.test(header),
   );
 
   if (unknown.length > 0) {
@@ -1328,7 +1388,19 @@ const withContentOptions = (command: Command): Command =>
     .option(
       "--document-title <title>",
       "LinkedIn document title, max 100 characters. Defaults to the file name; ignored for non-DOCUMENT posts",
-    );
+    )
+    .option("--gbp-topic <type>", `Google Business Profile post type (${GOOGLE_BUSINESS_TOPIC_TYPES.join(", ")})`)
+    .option(
+      "--gbp-button <type>",
+      `Google Business Profile button (${GOOGLE_BUSINESS_CALL_TO_ACTION_TYPES.join(", ")}). CALL dials the profile's phone number`,
+    )
+    .option("--gbp-button-url <url>", "Google Business Profile button link, required for every button except CALL")
+    .option("--gbp-event-title <title>", "Google Business Profile event or offer title, required for EVENT and OFFER")
+    .option("--gbp-event-start <time>", "Event or offer start in the business's local time, YYYY-MM-DD or YYYY-MM-DDTHH:mm")
+    .option("--gbp-event-end <time>", "Event or offer end in the business's local time, YYYY-MM-DD or YYYY-MM-DDTHH:mm")
+    .option("--gbp-coupon <code>", "Google Business Profile offer coupon code")
+    .option("--gbp-redeem-url <url>", "Google Business Profile offer redemption link")
+    .option("--gbp-terms <text>", "Google Business Profile offer terms");
 
 export function registerPostCommands(program: Command): void {
   const post = program.command("post").description("Create, schedule and inspect posts");

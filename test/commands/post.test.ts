@@ -45,6 +45,14 @@ const accounts: SocialAccount[] = [
     avatarUrl: "",
     status: "active",
   },
+  {
+    id: "gbp_5e2c",
+    platform: "GOOGLE_BUSINESS",
+    displayName: "Acme Bakery",
+    username: "",
+    avatarUrl: "",
+    status: "active",
+  },
 ];
 
 let written: string[] = [];
@@ -215,6 +223,63 @@ describe("post create", () => {
       scheduledAt: "2026-09-20T09:00:00.000Z",
       twitterConnectionIds: ["tw_4d1b"],
     });
+    expect(client.createPost).not.toHaveBeenCalled();
+  });
+
+  it("builds the Google Business Profile config from the --gbp flags", async () => {
+    await run([
+      "post",
+      "create",
+      "-t",
+      "Autumn tasting night",
+      "-a",
+      "gbp_5e2c",
+      "--gbp-topic",
+      "event",
+      "--gbp-event-title",
+      "Autumn tasting night",
+      "--gbp-event-start",
+      "2026-10-01T18:00",
+      "--gbp-event-end",
+      "2026-10-01T21:00",
+      "--gbp-button",
+      "CALL",
+      "--dry-run",
+    ]);
+
+    const body = stdoutJson().data as Record<string, unknown>;
+    expect(body).toMatchObject({
+      platforms: ["GOOGLE_BUSINESS"],
+      googleBusinessConnectionIds: ["gbp_5e2c"],
+      googleBusinessConfigs: [
+        {
+          connectionId: "gbp_5e2c",
+          topicType: "EVENT",
+          eventTitle: "Autumn tasting night",
+          eventStart: "2026-10-01T18:00",
+          eventEnd: "2026-10-01T21:00",
+          callToActionType: "CALL",
+        },
+      ],
+    });
+    expect(client.createPost).not.toHaveBeenCalled();
+  });
+
+  it("refuses a Google Business Profile event time with a timezone", async () => {
+    await expect(
+      run([
+        "post",
+        "create",
+        "-t",
+        "hi",
+        "-a",
+        "gbp_5e2c",
+        "--gbp-topic",
+        "EVENT",
+        "--gbp-event-start",
+        "2026-10-01T18:00:00Z",
+      ]),
+    ).rejects.toMatchObject({ exitCode: 2 });
     expect(client.createPost).not.toHaveBeenCalled();
   });
 
@@ -457,6 +522,31 @@ describe("post bulk", () => {
       exitCode: 5,
     });
     expect(client.bulkSchedulePosts).not.toHaveBeenCalled();
+  });
+
+  it("accepts per-platform columns for platforms with an underscore in their name", async () => {
+    vi.mocked(client.listSocialAccounts).mockResolvedValue({ accounts } as never);
+    const path = csvPath(
+      [
+        "text,scheduledAt,text_GOOGLE_BUSINESS,config_GOOGLE_BUSINESS",
+        'First post,2026-09-19T09:00:00Z,Open late today,"{""topicType"":""STANDARD""}"',
+        "",
+      ].join("\n"),
+    );
+
+    await run(["post", "bulk", "--csv", path, "-a", "gbp_5e2c", "--dry-run"]);
+
+    const batches = stdoutJson().data as Record<string, unknown>[];
+    expect(batches[0]).toMatchObject({
+      platforms: ["GOOGLE_BUSINESS"],
+      googleBusinessConnectionIds: ["gbp_5e2c"],
+      googleBusinessConfigs: [{ connectionId: "gbp_5e2c", topicType: "STANDARD" }],
+      posts: [
+        expect.objectContaining({
+          platformTexts: [{ platform: "GOOGLE_BUSINESS", text: "Open late today" }],
+        }),
+      ],
+    });
   });
 
   it("refuses an unknown column instead of dropping it", async () => {
