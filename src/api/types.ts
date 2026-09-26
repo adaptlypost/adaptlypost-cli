@@ -40,6 +40,34 @@ export const PLATFORM_POST_STATUSES = [
 ] as const;
 export type PlatformPostStatus = (typeof PLATFORM_POST_STATUSES)[number];
 
+export const RECURRENCE_FREQUENCIES = ['DAILY', 'WEEKLY', 'MONTHLY'] as const;
+export type RecurrenceFrequency = (typeof RECURRENCE_FREQUENCIES)[number];
+
+export const WEEKDAYS = [
+  'MONDAY',
+  'TUESDAY',
+  'WEDNESDAY',
+  'THURSDAY',
+  'FRIDAY',
+  'SATURDAY',
+  'SUNDAY',
+] as const;
+export type Weekday = (typeof WEEKDAYS)[number];
+
+export const RECURRING_POST_STATUSES = ['ACTIVE', 'PAUSED', 'ENDED'] as const;
+export type RecurringPostStatus = (typeof RECURRING_POST_STATUSES)[number];
+
+export const RECURRING_POST_PAUSE_REASONS = [
+  'USER',
+  'CONSECUTIVE_FAILURES',
+  'SUBSCRIPTION_INACTIVE',
+  'ACCESS_LOST',
+  'CONNECTION_REMOVED',
+  'INVALID_CONTENT',
+] as const;
+export type RecurringPostPauseReason =
+  (typeof RECURRING_POST_PAUSE_REASONS)[number];
+
 export const POST_SORT_ORDERS = ['NEWEST', 'OLDEST'] as const;
 export type PostSortOrder = (typeof POST_SORT_ORDERS)[number];
 
@@ -373,6 +401,8 @@ export interface SocialPost {
   platforms: SocialPostPlatform[];
   createdAt: string;
   updatedAt: string;
+  recurringPostId?: string | null;
+  occurrenceAt?: string | null;
 }
 
 export interface ListPostsResponse extends Pagination {
@@ -401,7 +431,52 @@ export interface CreatePostRequest extends PostTargets {
   thumbnailTimestampMs?: number;
   scheduledAt?: string;
   saveAsDraft?: boolean;
+  recurrence?: Recurrence;
 }
+
+export interface Recurrence {
+  frequency: RecurrenceFrequency;
+  interval?: number;
+  weekdays?: Weekday[];
+  endsOn?: string;
+  maxOccurrences?: number;
+}
+
+export interface RecurringPost {
+  id: string;
+  userId: string;
+  status: RecurringPostStatus;
+  pauseReason?: RecurringPostPauseReason | null;
+  lastError?: string | null;
+  frequency: RecurrenceFrequency;
+  interval: number;
+  weekdays: Weekday[];
+  startsAt: string;
+  timezone: string;
+  endsOn?: string | null;
+  maxOccurrences?: number | null;
+  nextOccurrenceAt?: string | null;
+  occurrenceCount: number;
+  contentType: ContentType;
+  text?: string | null;
+  mediaUrls: string[];
+  mediaAltTexts?: string[];
+  thumbnailUrl?: string | null;
+  platformTypes: PlatformType[];
+  platforms: SocialPostPlatform[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ListRecurringPostsResponse extends Pagination {
+  recurringPosts: RecurringPost[];
+}
+
+export type ListRecurringPostsQuery = {
+  limit?: number;
+  offset?: number;
+  statuses?: RecurringPostStatus[];
+};
 
 export interface UpdatePostRequest extends PostTargets {
   platforms?: PlatformType[];
@@ -427,6 +502,7 @@ export interface CreatePostResponse {
   skippedPlatforms: SkippedPlatform[];
   isScheduled: boolean;
   scheduledAt?: string;
+  recurringPostId?: string;
 }
 
 export interface PublishResponse {

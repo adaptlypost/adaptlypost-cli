@@ -150,6 +150,27 @@ The API reads the document type from the file extension of the stored URL, so th
 
 `-f -` reads the same document from stdin and `-t -` reads plain text, so `adaptlypost ai caption --prompt "announce the launch" | adaptlypost post create -t - -P TWITTER -a tw_4d1b` is one line.
 
+**Recurring posts.** `post create --repeat DAILY|WEEKLY|MONTHLY` turns the post into a series. `--at` is required and must be in the future. That first post sets the time of day for every post after it, in the zone from `--timezone`. `--every 2` repeats every 2 days, weeks or months (1 to 30). `--on` picks the weekdays of a WEEKLY repeat, one per flag (`--on MONDAY --on THURSDAY`, or `mon`, `thu`); the weekday of `--at` is always included. End the series with `--until 2026-12-31` (the last day a post may go out) or `--count 10` (2 to 365 posts in total), not both. With neither, it repeats until you pause or delete it. The create output prints the `recurring` id next to the first post's id.
+
+```bash
+adaptlypost post create -t "{Hi|Hello}, here is this week's tip" -a tw_4d1b --at "2026-10-05 09:00" --repeat WEEKLY --on mon --on thu --count 12
+```
+
+The CLI refuses, before sending, a repeat without `--at`, a repeat on a draft, a TIKTOK account in the series, `--on` on a DAILY or MONTHLY repeat, and an end date before the first post. X and LinkedIn reject identical text, so give those series spintax like `{Hi|Hello}` and each post comes out different. Only the next post of an active series exists as a scheduled post, created about a day ahead. Deleting that one post skips its date and the series carries on. A slot missed while the series is paused is skipped, never published late.
+
+In frontmatter the keys are `repeat:`, `every:`, `on:`, `until:` and `count:`, or their API names `frequency:`, `interval:`, `weekdays:`, `endsOn:` and `maxOccurrences:`. Write weekdays as a YAML list, `on: [MONDAY, THURSDAY]` or one `- MONDAY` per line. A comma-separated string is refused. `post update` and `post bulk --dir` refuse a file with these keys, because only `post create` can start a series.
+
+```markdown
+---
+accounts: [tw_4d1b]
+at: 2026-10-05T09:00:00Z
+repeat: WEEKLY
+on: [MONDAY, THURSDAY]
+until: 2026-12-31
+---
+{Hi|Hello}, here is this week's tip.
+```
+
 **Upload that actually uploads.** `media upload` mints presigned URLs in chunks of 20 and PUTs the bytes with the exact MIME type the presign was signed for, sniffed from the first 12 bytes rather than the extension. A mismatched content type fails the S3 signature with an opaque error, which is the step everyone gets wrong by hand. Accepted: `image/jpeg`, `image/png`, `image/webp` (50 MB), `video/mp4`, `video/quicktime` (250 MB), and for LinkedIn document posts `application/pdf`, `application/vnd.ms-powerpoint`, `application/vnd.openxmlformats-officedocument.presentationml.presentation`, `application/msword` and `application/vnd.openxmlformats-officedocument.wordprocessingml.document` (100 MB). A PDF is read from its `%PDF-` signature. A DOC and a PPT share one container format, and so do a DOCX and a PPTX, so for those the bytes are checked and the `.doc`, `.ppt`, `.docx` or `.pptx` extension picks the type; a file without one is refused.
 
 **Bulk schedule from a CSV.** `post bulk --csv september.csv` validates every row before sending anything, uploads local media once per content hash however many rows reference it, chunks into batches of 100, and reports failures with their row number. Columns are `text`, `scheduledAt`, `contentType` (`TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`, inferred from `media` when empty), `media` (`;`-separated), `thumbnail`, `thumbnailMs`, `text_<PLATFORM>` and `config_<PLATFORM>` (a JSON object). Rows with different configs go out as separate requests. LinkedIn document posts cannot be bulk scheduled, so a `DOCUMENT` row or a `config_LINKEDIN` column is refused; create those with `post create`.
@@ -172,10 +193,10 @@ Grammar is noun then verb, space-separated. `ls` works wherever `list` does, `rm
 
 | Command | Key flags | Notes |
 |---|---|---|
-| `post create` | `-t/--text`, `-f/--file`, `-P/--platform`, `-a/--account`, `-m/--media`, `--alt`, `--type`, `-s/--at`, `--timezone`, `--draft`, `--watch`, `--dry-run` | `-` on `--text` or `--file` reads stdin. `--alt` is the alt text for the `--media` image at the same position. `--type` is `TEXT`, `IMAGE`, `VIDEO`, `CAROUSEL` or `DOCUMENT`, inferred from `--media` when omitted |
+| `post create` | `-t/--text`, `-f/--file`, `-P/--platform`, `-a/--account`, `-m/--media`, `--alt`, `--type`, `-s/--at`, `--timezone`, `--draft`, `--repeat`, `--every`, `--on` (repeatable), `--until`, `--count`, `--watch`, `--dry-run` | `-` on `--text` or `--file` reads stdin. `--alt` is the alt text for the `--media` image at the same position. `--type` is `TEXT`, `IMAGE`, `VIDEO`, `CAROUSEL` or `DOCUMENT`, inferred from `--media` when omitted. `--repeat` needs `--at` |
 | `post list` | `--status`, `--platform`, `--from`, `--to`, `--sort`, `--limit`, `--offset`, `--all` | |
 | `post get <id>` | | Post header plus one row per platform |
-| `post update <id>` | Same as `create` minus `--draft` and `--watch` | `--platform` replaces every target on the post, so it confirms first. Moving a scheduled post more than a minute into the past fails with a 400 |
+| `post update <id>` | Same as `create` minus `--draft`, `--watch` and the repeat flags | `--platform` replaces every target on the post, so it confirms first. Moving a scheduled post more than a minute into the past fails with a 400 |
 | `post delete <id>` | `--yes` | |
 | `post results <id>` | | The only source of truth for what published |
 | `post retry <id>` | `--platform-id` (repeatable), `-P, --platform` (repeatable), `--failed` | No flags retries every FAILED platform server-side. `--platform BLUESKY` retries every failed entry of that platform. `--failed` resolves the ids locally first |
@@ -195,6 +216,28 @@ Per-platform flags on `post create` and `post update`:
 | `--yt-title <title>` | `youtubeConfigs[].videoTitle` |
 | `--pinterest-board <id>` | `pinterestConfigs[].boardId` |
 | `--document-title <title>` | `linkedinConfigs[].documentTitle`, the title LinkedIn shows on a DOCUMENT post. Max 100 characters, defaults to the file name, ignored for other content types |
+
+Repeat flags, `post create` only:
+
+| Flag | Sends |
+|---|---|
+| `--repeat <frequency>` | `recurrence.frequency`: `DAILY`, `WEEKLY` or `MONTHLY`. Needs `--at` |
+| `--every <n>` | `recurrence.interval`, 1 to 30. Defaults to 1 |
+| `--on <weekday>` | `recurrence.weekdays`, repeatable, WEEKLY only. `MONDAY` to `SUNDAY` or the first three letters |
+| `--until <YYYY-MM-DD>` | `recurrence.endsOn`, the last day a post may go out. Not with `--count` |
+| `--count <n>` | `recurrence.maxOccurrences`, 2 to 365 posts in total. Not with `--until` |
+
+### recurring
+
+| Command | Key flags | Notes |
+|---|---|---|
+| `recurring list` | `--status` (repeatable: `ACTIVE`, `PAUSED`, `ENDED`), `--limit`, `--offset`, `--all` | Status, schedule, next slot and post count per series |
+| `recurring get <id>` | | Schedule, pause reason, last error and targets |
+| `recurring pause <id>` | | Stops creating posts and deletes the upcoming scheduled post |
+| `recurring resume <id>` | | Continues from the next slot after now. Slots missed while paused are skipped |
+| `recurring delete <id>` | `--yes` | Stops the series and deletes its upcoming scheduled post. Published posts stay |
+
+A series pauses itself after 3 failed posts in a row, when the subscription lapses, when its creator loses workspace access, when one of its accounts is disconnected, or when a platform rejects the content. `recurring get` shows which as `paused by`. Editing a series and skipping one date are only in the app. Post objects from `post list` and `post get` carry `recurringPostId` and `occurrenceAt` when they belong to a series.
 
 ### media
 

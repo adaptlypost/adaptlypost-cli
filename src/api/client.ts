@@ -27,11 +27,14 @@ import type {
   ListPostAnalyticsResponse,
   ListPostsQuery,
   ListPostsResponse,
+  ListRecurringPostsQuery,
+  ListRecurringPostsResponse,
   Me,
   PlatformBreakdownResponse,
   PostResultsResponse,
   PublishDraftRequest,
   PublishResponse,
+  RecurringPost,
   RefineCaptionRequest,
   RetryFailedPlatformsRequest,
   RevokeConnectLinkResponse,
@@ -152,6 +155,39 @@ export const bulkSchedulePosts = (
     method: 'POST',
     path: '/social-posts/bulk',
     body: bulkSchedulePostsRequest,
+  });
+
+export const listRecurringPosts = (
+  listRecurringPostsQuery: ListRecurringPostsQuery = {},
+): Promise<ListRecurringPostsResponse> =>
+  request<ListRecurringPostsResponse>({
+    method: 'GET',
+    path: '/recurring-posts',
+    query: listRecurringPostsQuery,
+  });
+
+export const getRecurringPost = (recurringPostId: string): Promise<RecurringPost> =>
+  request<RecurringPost>({
+    method: 'GET',
+    path: `/recurring-posts/${segment(recurringPostId)}`,
+  });
+
+export const pauseRecurringPost = (recurringPostId: string): Promise<RecurringPost> =>
+  request<RecurringPost>({
+    method: 'POST',
+    path: `/recurring-posts/${segment(recurringPostId)}/pause`,
+  });
+
+export const resumeRecurringPost = (recurringPostId: string): Promise<RecurringPost> =>
+  request<RecurringPost>({
+    method: 'POST',
+    path: `/recurring-posts/${segment(recurringPostId)}/resume`,
+  });
+
+export const deleteRecurringPost = (recurringPostId: string): Promise<DeletedResponse> =>
+  request<DeletedResponse>({
+    method: 'DELETE',
+    path: `/recurring-posts/${segment(recurringPostId)}`,
   });
 
 export const createConnectLink = (): Promise<ConnectLink> =>

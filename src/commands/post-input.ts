@@ -6,16 +6,21 @@ import { createUploadUrls } from "../api/client.js";
 import {
   CONTENT_TYPES,
   PLATFORM_TYPES,
+  RECURRENCE_FREQUENCIES,
+  WEEKDAYS,
   type ContentType,
   type CreatePostRequest,
   type PlatformText,
   type PlatformType,
   type PostTargets,
+  type Recurrence,
+  type RecurrenceFrequency,
   type SocialAccount,
   type UpdatePostRequest,
   type UploadMimeType,
+  type Weekday,
 } from "../api/types.js";
-import { CliError, ExitCode } from "../core/index.js";
+import { CliError, ExitCode, formatDate, type ExitCodeValue } from "../core/index.js";
 import {
   SNIFF_BYTES,
   guessMimeType,
@@ -46,6 +51,14 @@ export interface Frontmatter {
   body: string;
 }
 
+export interface RecurrenceInput {
+  frequency?: RecurrenceFrequency;
+  interval?: number;
+  weekdays?: Weekday[];
+  endsOn?: string;
+  maxOccurrences?: number;
+}
+
 export interface PostInput {
   text?: string;
   platforms?: PlatformType[];
@@ -60,6 +73,7 @@ export interface PostInput {
   draft?: boolean;
   platformTexts?: Partial<Record<PlatformType, string>>;
   platformConfigs?: Partial<Record<PlatformType, Record<string, FrontmatterValue>>>;
+  recurrence?: RecurrenceInput;
 }
 
 export const CONNECTION_FIELD: Record<PlatformType, keyof PostTargets> = {
@@ -85,6 +99,9 @@ export const CONFIG_FIELD: Partial<Record<PlatformType, keyof PostTargets>> = {
 };
 
 export const MAX_DOCUMENT_TITLE_LENGTH = 100;
+export const RECURRENCE_MAX_INTERVAL = 30;
+export const RECURRENCE_MIN_OCCURRENCES = 2;
+export const RECURRENCE_MAX_OCCURRENCES = 365;
 
 const PLATFORM_ALIASES: Record<string, PlatformType> = {
   x: "TWITTER",
@@ -95,7 +112,7 @@ const PLATFORM_ALIASES: Record<string, PlatformType> = {
   tt: "TIKTOK",
 };
 
-const SCALAR_KEYS = new Map<string, keyof PostInput | "documentTitle">([
+const SCALAR_KEYS = new Map<string, keyof PostInput | keyof RecurrenceInput | "documentTitle">([
   ["text", "text"],
   ["platforms", "platforms"],
   ["platform", "platforms"],
@@ -128,8 +145,19 @@ const SCALAR_KEYS = new Map<string, keyof PostInput | "documentTitle">([
   ["document-title", "documentTitle"],
   ["document_title", "documentTitle"],
   ["linkedindocumenttitle", "documentTitle"],
+  ["repeat", "frequency"],
+  ["frequency", "frequency"],
+  ["every", "interval"],
+  ["interval", "interval"],
+  ["on", "weekdays"],
+  ["weekdays", "weekdays"],
+  ["until", "endsOn"],
+  ["endson", "endsOn"],
+  ["count", "maxOccurrences"],
+  ["maxoccurrences", "maxOccurrences"],
 ]);
 
+const CALENDAR_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$/;
 const NUMBER = /^-?\d+(\.\d+)?$/;
 const KEY_LINE = /^([A-Za-z0-9_.-]+)\s*:\s*(.*)$/;
@@ -160,6 +188,58 @@ export function normalizeContentType(value: string): ContentType {
   }
 
   return contentType;
+}
+
+export function normalizeFrequency(value: string): RecurrenceFrequency {
+  const frequency = value.trim().toUpperCase() as RecurrenceFrequency;
+
+  if (!(RECURRENCE_FREQUENCIES as readonly string[]).includes(frequency)) {
+    throw new CliError(
+      `Unknown repeat frequency "${value}". Expected one of: ${RECURRENCE_FREQUENCIES.join(", ")}.`,
+      { exitCode: ExitCode.USAGE },
+    );
+  }
+
+  return frequency;
+}
+
+export function normalizeWeekday(value: string): Weekday {
+  const raw = value.trim().toUpperCase();
+  const weekday = WEEKDAYS.find((day) => day === raw || (raw.length === 3 && day.startsWith(raw)));
+
+  if (!weekday) {
+    throw new CliError(
+      `Unknown weekday "${value}". Expected one of: ${WEEKDAYS.join(", ")}, or their first three letters.`,
+      { exitCode: ExitCode.USAGE },
+    );
+  }
+
+  return weekday;
+}
+
+export function assertWholeNumberInRange(
+  value: number,
+  label: string,
+  min: number,
+  max: number,
+  exitCode: ExitCodeValue,
+): number {
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw new CliError(`${label} must be a whole number from ${min} to ${max}.`, { exitCode });
+  }
+  return value;
+}
+
+export function assertCalendarDate(value: string, label: string, exitCode: ExitCodeValue): string {
+  const match = CALENDAR_DATE.exec(value.trim());
+  const [, year, month, day] = match ?? [];
+  const date = match ? new Date(Date.UTC(Number(year), Number(month) - 1, Number(day))) : undefined;
+
+  if (!date || date.getUTCMonth() !== Number(month) - 1 || date.getUTCDate() !== Number(day)) {
+    throw new CliError(`${label} must be a date written as YYYY-MM-DD, got "${value}".`, { exitCode });
+  }
+
+  return value.trim();
 }
 
 const indentOf = (line: string): number => line.length - line.trimStart().length;
@@ -432,6 +512,20 @@ const asMap = (value: FrontmatterValue, key: string): FrontmatterMap => {
   });
 };
 
+const asWeekdays = (value: FrontmatterValue, key: string): Weekday[] => {
+  const items = Array.isArray(value) ? value.map((item) => asString(item, key)) : [asString(value, key)];
+
+  return items.map((item) => {
+    if (item.includes(",")) {
+      throw new CliError(`Frontmatter key "${key}" takes one weekday per list item, got "${item}".`, {
+        exitCode: ExitCode.VALIDATION,
+        hint: `Write a YAML list: ${key}: [MONDAY, THURSDAY]`,
+      });
+    }
+    return normalizeWeekday(item);
+  });
+};
+
 function platformKey(key: string): PlatformType | undefined {
   const lower = key.toLowerCase();
   const alias = PLATFORM_ALIASES[lower];
@@ -494,6 +588,47 @@ export function parsePostInput(source: string): PostInput {
     }
     if (target === "draft") {
       input.draft = asBoolean(value, rawKey);
+      continue;
+    }
+    if (target === "frequency") {
+      input.recurrence = { ...input.recurrence, frequency: normalizeFrequency(asString(value, rawKey)) };
+      continue;
+    }
+    if (target === "interval") {
+      input.recurrence = {
+        ...input.recurrence,
+        interval: assertWholeNumberInRange(
+          asNumber(value, rawKey),
+          `Frontmatter key "${rawKey}"`,
+          1,
+          RECURRENCE_MAX_INTERVAL,
+          ExitCode.VALIDATION,
+        ),
+      };
+      continue;
+    }
+    if (target === "weekdays") {
+      input.recurrence = { ...input.recurrence, weekdays: asWeekdays(value, rawKey) };
+      continue;
+    }
+    if (target === "endsOn") {
+      input.recurrence = {
+        ...input.recurrence,
+        endsOn: assertCalendarDate(asString(value, rawKey), `Frontmatter key "${rawKey}"`, ExitCode.VALIDATION),
+      };
+      continue;
+    }
+    if (target === "maxOccurrences") {
+      input.recurrence = {
+        ...input.recurrence,
+        maxOccurrences: assertWholeNumberInRange(
+          asNumber(value, rawKey),
+          `Frontmatter key "${rawKey}"`,
+          RECURRENCE_MIN_OCCURRENCES,
+          RECURRENCE_MAX_OCCURRENCES,
+          ExitCode.VALIDATION,
+        ),
+      };
       continue;
     }
     if (target === "documentTitle") {
@@ -560,6 +695,16 @@ export function mergePostInput(base: PostInput, override: PostInput): PostInput 
         ...config,
       };
     }
+  }
+
+  if (base.recurrence || override.recurrence) {
+    const overridesEnd =
+      override.recurrence?.endsOn !== undefined || override.recurrence?.maxOccurrences !== undefined;
+    merged.recurrence = {
+      ...base.recurrence,
+      ...(overridesEnd ? { endsOn: undefined, maxOccurrences: undefined } : {}),
+      ...override.recurrence,
+    };
   }
 
   return merged;
@@ -927,6 +1072,67 @@ export function validateDocumentPost(
   }
 }
 
+function buildRecurrence(input: PostInput, body: CreatePostRequest): Recurrence | undefined {
+  const recurrence = input.recurrence;
+  if (!recurrence || Object.values(recurrence).every((value) => value === undefined)) return undefined;
+
+  if (!recurrence.frequency) {
+    throw new CliError("Choose how often the post repeats.", {
+      exitCode: ExitCode.USAGE,
+      hint: "Pass --repeat DAILY, WEEKLY or MONTHLY, or set repeat: in the frontmatter",
+    });
+  }
+
+  if (body.saveAsDraft) {
+    throw new CliError("A recurring post cannot be saved as a draft. Schedule it instead.", {
+      exitCode: ExitCode.VALIDATION,
+    });
+  }
+
+  if (!body.scheduledAt) {
+    throw new CliError("Pick a future date and time for the first post of a recurring series.", {
+      exitCode: ExitCode.USAGE,
+      hint: 'Pass --at, for example --at "tomorrow 09:00". The first post sets the time of day',
+    });
+  }
+
+  if (recurrence.endsOn !== undefined && recurrence.maxOccurrences !== undefined) {
+    throw new CliError("Choose either an end date or a number of posts, not both.", {
+      exitCode: ExitCode.VALIDATION,
+    });
+  }
+
+  if (recurrence.weekdays?.length && recurrence.frequency !== "WEEKLY") {
+    throw new CliError("Weekdays only apply to a weekly repeat.", {
+      exitCode: ExitCode.VALIDATION,
+      hint: "Pass --repeat WEEKLY, or drop --on",
+    });
+  }
+
+  if (body.platforms.includes("TIKTOK")) {
+    throw new CliError("TIKTOK posts cannot repeat. Remove the account or turn off repeat.", {
+      exitCode: ExitCode.VALIDATION,
+    });
+  }
+
+  if (
+    recurrence.endsOn !== undefined &&
+    recurrence.endsOn < formatDate(new Date(body.scheduledAt), body.timezone)
+  ) {
+    throw new CliError("The end date must be on or after the first post.", {
+      exitCode: ExitCode.VALIDATION,
+    });
+  }
+
+  const built: Recurrence = { frequency: recurrence.frequency };
+  if (recurrence.interval !== undefined) built.interval = recurrence.interval;
+  if (recurrence.weekdays?.length) built.weekdays = [...new Set(recurrence.weekdays)];
+  if (recurrence.endsOn !== undefined) built.endsOn = recurrence.endsOn;
+  if (recurrence.maxOccurrences !== undefined) built.maxOccurrences = recurrence.maxOccurrences;
+
+  return built;
+}
+
 export function buildTargets(
   input: PostInput,
   accounts: SocialAccount[],
@@ -984,6 +1190,10 @@ export function buildPostBody(
   }
 
   validateDocumentPost(body, options.requireContent !== false || mediaUrls.length > 0);
+
+  const recurrence = buildRecurrence(input, body);
+  if (recurrence) body.recurrence = recurrence;
+
   if (!input.draft) validateRequiredConfigs(body);
 
   return body;

@@ -259,6 +259,102 @@ describe("post create", () => {
     expect(client.createPost).not.toHaveBeenCalled();
   });
 
+  it("sends a recurrence built from --repeat, --every, --on and --until", async () => {
+    await run([
+      "post",
+      "create",
+      "-t",
+      "Weekly tip",
+      "-a",
+      "tw_4d1b",
+      "--at",
+      "2027-01-04T09:00:00Z",
+      "--repeat",
+      "weekly",
+      "--every",
+      "2",
+      "--on",
+      "mon",
+      "--on",
+      "THURSDAY",
+      "--until",
+      "2027-06-30",
+      "--dry-run",
+    ]);
+
+    expect((stdoutJson().data as Record<string, unknown>).recurrence).toEqual({
+      frequency: "WEEKLY",
+      interval: 2,
+      weekdays: ["MONDAY", "THURSDAY"],
+      endsOn: "2027-06-30",
+    });
+  });
+
+  it("returns the recurringPostId the API sends back", async () => {
+    vi.mocked(client.createPost).mockResolvedValue({
+      postId: "post_1",
+      queuedPlatforms: ["TWITTER"],
+      skippedPlatforms: [],
+      isScheduled: true,
+      scheduledAt: "2027-01-04T09:00:00.000Z",
+      recurringPostId: "rp_1",
+    });
+
+    await run(["post", "create", "-t", "Daily", "-a", "tw_4d1b", "--at", "2027-01-04T09:00:00Z", "--repeat", "DAILY", "--count", "10"]);
+
+    expect(client.createPost).toHaveBeenCalledWith(
+      expect.objectContaining({ recurrence: { frequency: "DAILY", maxOccurrences: 10 } }),
+    );
+    expect(stdoutJson()).toMatchObject({ command: "post.create", data: { recurringPostId: "rp_1" } });
+  });
+
+  it("reads the repeat keys from the frontmatter and lets --count replace until", async () => {
+    const file = join(workspace, "weekly.md");
+    writeFileSync(
+      file,
+      ["---", "accounts: [tw_4d1b]", "at: 2027-01-04T09:00:00Z", "repeat: WEEKLY", "until: 2027-06-30", "---", "Tip", ""].join("\n"),
+    );
+
+    await run(["post", "create", "--file", file, "--count", "5", "--dry-run"]);
+
+    expect((stdoutJson().data as Record<string, unknown>).recurrence).toEqual({
+      frequency: "WEEKLY",
+      maxOccurrences: 5,
+    });
+  });
+
+  it("refuses bad repeat flags before sending anything", async () => {
+    const base = ["post", "create", "-t", "hi", "-a", "tw_4d1b", "--at", "2027-01-04T09:00:00Z"];
+
+    for (const flags of [
+      ["--repeat", "DAILY", "--until", "2027-02-01", "--count", "5"],
+      ["--repeat", "DAILY", "--every", "0"],
+      ["--repeat", "DAILY", "--count", "366"],
+      ["--repeat", "WEEKLY", "--on", "mon,thu"],
+      ["--repeat", "WEEKLY", "--on", "someday"],
+      ["--repeat", "HOURLY"],
+      ["--repeat", "DAILY", "--until", "31/12/2027"],
+      ["--every", "2"],
+    ]) {
+      await expect(run([...base, ...flags])).rejects.toMatchObject({ exitCode: 2 });
+    }
+    expect(client.createPost).not.toHaveBeenCalled();
+  });
+
+  it("refuses --repeat without --at", async () => {
+    await expect(
+      run(["post", "create", "-t", "hi", "-a", "tw_4d1b", "--repeat", "DAILY"]),
+    ).rejects.toMatchObject({ exitCode: 2 });
+    expect(client.createPost).not.toHaveBeenCalled();
+  });
+
+  it("refuses --repeat with --draft", async () => {
+    await expect(
+      run(["post", "create", "-t", "hi", "-a", "tw_4d1b", "--at", "2027-01-04T09:00:00Z", "--repeat", "DAILY", "--draft"]),
+    ).rejects.toMatchObject({ exitCode: 5 });
+    expect(client.createPost).not.toHaveBeenCalled();
+  });
+
   it("fails before the write when an account is not in the workspace", async () => {
     await expect(
       run(["post", "create", "-t", "hi", "-P", "TWITTER", "-a", "nope"]),
@@ -272,6 +368,20 @@ describe("post update", () => {
     await expect(
       run(["post", "update", "post_1", "--media", "hero.jpg"]),
     ).rejects.toMatchObject({ exitCode: 2 });
+    expect(client.updatePost).not.toHaveBeenCalled();
+  });
+
+  it("has no repeat flags", async () => {
+    await expect(run(["post", "update", "post_1", "--repeat", "DAILY"])).rejects.toMatchObject({
+      code: "commander.unknownOption",
+    });
+  });
+
+  it("refuses a file that carries repeat keys", async () => {
+    const file = join(workspace, "update-repeat.md");
+    writeFileSync(file, ["---", "repeat: DAILY", "---", "New text", ""].join("\n"));
+
+    await expect(run(["post", "update", "post_1", "--file", file])).rejects.toMatchObject({ exitCode: 2 });
     expect(client.updatePost).not.toHaveBeenCalled();
   });
 
@@ -454,6 +564,19 @@ describe("post bulk", () => {
     );
 
     await expect(run(["post", "bulk", "--dir", dir, "-P", "LINKEDIN"])).rejects.toMatchObject({
+      exitCode: 5,
+    });
+    expect(client.bulkSchedulePosts).not.toHaveBeenCalled();
+  });
+
+  it("refuses a --dir post with repeat keys", async () => {
+    const dir = mkdtempSync(join(workspace, "posts-"));
+    writeFileSync(
+      join(dir, "01.md"),
+      ["---", "at: 2027-01-04T09:00:00Z", "repeat: WEEKLY", "---", "Tip", ""].join("\n"),
+    );
+
+    await expect(run(["post", "bulk", "--dir", dir, "-P", "TWITTER"])).rejects.toMatchObject({
       exitCode: 5,
     });
     expect(client.bulkSchedulePosts).not.toHaveBeenCalled();

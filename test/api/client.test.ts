@@ -112,6 +112,35 @@ describe('endpoint mapping', () => {
       { method: 'POST', path: '/social-posts/post_9c3e1f/unschedule' },
     ],
     [
+      'listRecurringPosts',
+      () => client.listRecurringPosts({ limit: 5, statuses: ['ACTIVE', 'PAUSED'] }),
+      {
+        method: 'GET',
+        path: '/recurring-posts',
+        query: { limit: 5, statuses: ['ACTIVE', 'PAUSED'] },
+      },
+    ],
+    [
+      'getRecurringPost',
+      () => client.getRecurringPost('rp_4a2c'),
+      { method: 'GET', path: '/recurring-posts/rp_4a2c' },
+    ],
+    [
+      'pauseRecurringPost',
+      () => client.pauseRecurringPost('rp_4a2c'),
+      { method: 'POST', path: '/recurring-posts/rp_4a2c/pause' },
+    ],
+    [
+      'resumeRecurringPost',
+      () => client.resumeRecurringPost('rp_4a2c'),
+      { method: 'POST', path: '/recurring-posts/rp_4a2c/resume' },
+    ],
+    [
+      'deleteRecurringPost',
+      () => client.deleteRecurringPost('rp_4a2c'),
+      { method: 'DELETE', path: '/recurring-posts/rp_4a2c' },
+    ],
+    [
       'listPostResults',
       () => client.listPostResults('post_9c3e1f'),
       { method: 'GET', path: '/social-posts/post_9c3e1f/results' },

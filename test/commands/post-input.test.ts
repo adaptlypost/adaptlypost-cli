@@ -197,6 +197,56 @@ describe("parsePostInput", () => {
     expect(after.contentType).toBe("DOCUMENT");
   });
 
+  it("maps the repeat keys onto the recurrence", () => {
+    const input = parsePostInput(
+      ["---", "repeat: weekly", "every: 2", "on: [mon, THURSDAY]", "until: 2026-12-31", "---", "Body"].join("\n"),
+    );
+
+    expect(input.recurrence).toEqual({
+      frequency: "WEEKLY",
+      interval: 2,
+      weekdays: ["MONDAY", "THURSDAY"],
+      endsOn: "2026-12-31",
+    });
+  });
+
+  it("accepts the API names of the repeat keys and a dash list of weekdays", () => {
+    const input = parsePostInput(
+      [
+        "---",
+        "frequency: WEEKLY",
+        "interval: 1",
+        "weekdays:",
+        "  - TUESDAY",
+        "  - fri",
+        "maxOccurrences: 10",
+        "---",
+        "Body",
+      ].join("\n"),
+    );
+
+    expect(input.recurrence).toEqual({
+      frequency: "WEEKLY",
+      interval: 1,
+      weekdays: ["TUESDAY", "FRIDAY"],
+      maxOccurrences: 10,
+    });
+  });
+
+  it("refuses weekdays written as one comma-separated string", () => {
+    expect(exitCodeOf(() => parsePostInput("---\non: MONDAY, THURSDAY\n---\nBody"))).toBe(
+      ExitCode.VALIDATION,
+    );
+  });
+
+  it("refuses repeat values outside what the API takes", () => {
+    expect(exitCodeOf(() => parsePostInput("---\nrepeat: hourly\n---\nBody"))).toBe(ExitCode.USAGE);
+    expect(exitCodeOf(() => parsePostInput("---\nevery: 31\n---\nBody"))).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => parsePostInput("---\ncount: 1\n---\nBody"))).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => parsePostInput("---\nuntil: 2026-02-30\n---\nBody"))).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => parsePostInput("---\nuntil: next week\n---\nBody"))).toBe(ExitCode.VALIDATION);
+  });
+
   it("refuses an unknown frontmatter key", () => {
     expect(exitCodeOf(() => parsePostInput("---\nnonsense: 1\n---\nBody"))).toBe(
       ExitCode.VALIDATION,
@@ -230,6 +280,21 @@ describe("mergePostInput", () => {
     expect(merged.platforms).toEqual(["TWITTER"]);
     expect(merged.platformTexts).toEqual({ TWITTER: "c", LINKEDIN: "b" });
     expect(merged.platformConfigs?.TIKTOK).toEqual({ privacyLevel: "SELF_ONLY", title: "Demo" });
+  });
+
+  it("merges the recurrence field by field and lets an override end replace the base end", () => {
+    const merged = mergePostInput(
+      { recurrence: { frequency: "WEEKLY", weekdays: ["MONDAY"], endsOn: "2026-12-31" } },
+      { recurrence: { interval: 2, maxOccurrences: 8 } },
+    );
+
+    expect(merged.recurrence).toMatchObject({
+      frequency: "WEEKLY",
+      interval: 2,
+      weekdays: ["MONDAY"],
+      maxOccurrences: 8,
+    });
+    expect(merged.recurrence?.endsOn).toBeUndefined();
   });
 });
 
@@ -398,6 +463,75 @@ describe("buildPostBody", () => {
 
   it("refuses a post with no platform at all", () => {
     expect(exitCodeOf(() => buildPostBody({ text: "hi" }, { accounts }))).toBe(ExitCode.USAGE);
+  });
+});
+
+describe("buildPostBody recurrence", () => {
+  const scheduled = {
+    text: "hi",
+    accounts: ["tw_4d1b"],
+    at: "2026-10-05T09:00:00.000Z",
+    timezone: "Europe/Berlin",
+  };
+
+  it("sends the recurrence with only the fields that were set", () => {
+    const body = buildPostBody(
+      { ...scheduled, recurrence: { frequency: "WEEKLY", weekdays: ["MONDAY", "THURSDAY", "MONDAY"], endsOn: "2026-12-31" } },
+      { accounts },
+    );
+
+    expect(body.recurrence).toEqual({
+      frequency: "WEEKLY",
+      weekdays: ["MONDAY", "THURSDAY"],
+      endsOn: "2026-12-31",
+    });
+    expect(body.scheduledAt).toBe("2026-10-05T09:00:00.000Z");
+  });
+
+  it("leaves recurrence out when none was asked for", () => {
+    expect(buildPostBody(scheduled, { accounts })).not.toHaveProperty("recurrence");
+  });
+
+  it("refuses repeat fields without a frequency", () => {
+    expect(
+      exitCodeOf(() => buildPostBody({ ...scheduled, recurrence: { interval: 2 } }, { accounts })),
+    ).toBe(ExitCode.USAGE);
+  });
+
+  it("refuses a recurrence without a first date", () => {
+    expect(
+      exitCodeOf(() =>
+        buildPostBody({ ...scheduled, at: undefined, recurrence: { frequency: "DAILY" } }, { accounts }),
+      ),
+    ).toBe(ExitCode.USAGE);
+  });
+
+  it("refuses the combinations the API rejects", () => {
+    const cases = [
+      { ...scheduled, draft: true, recurrence: { frequency: "DAILY" as const } },
+      { ...scheduled, recurrence: { frequency: "DAILY" as const, endsOn: "2026-12-31", maxOccurrences: 5 } },
+      { ...scheduled, recurrence: { frequency: "DAILY" as const, weekdays: ["MONDAY" as const] } },
+      { ...scheduled, recurrence: { frequency: "DAILY" as const, endsOn: "2026-10-04" } },
+      {
+        ...scheduled,
+        accounts: ["tt_77aa"],
+        platformConfigs: { TIKTOK: { privacyLevel: "SELF_ONLY" } },
+        recurrence: { frequency: "DAILY" as const },
+      },
+    ];
+
+    for (const input of cases) {
+      expect(exitCodeOf(() => buildPostBody(input, { accounts }))).toBe(ExitCode.VALIDATION);
+    }
+  });
+
+  it("allows an end date on the day of the first post in the post's timezone", () => {
+    const body = buildPostBody(
+      { ...scheduled, at: "2026-10-04T23:30:00.000Z", recurrence: { frequency: "DAILY", endsOn: "2026-10-05" } },
+      { accounts },
+    );
+
+    expect(body.recurrence?.endsOn).toBe("2026-10-05");
   });
 });
 

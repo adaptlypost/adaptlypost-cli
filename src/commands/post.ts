@@ -20,6 +20,7 @@ import {
   CONTENT_TYPES,
   META_POST_TYPES,
   POST_STATUSES,
+  RECURRENCE_FREQUENCIES,
   TIKTOK_PRIVACY_LEVELS,
   type BulkPostInput,
   type BulkSchedulePostsRequest,
@@ -33,6 +34,7 @@ import {
   type SocialAccount,
   type SocialPost,
   type UpdatePostRequest,
+  type Weekday,
 } from "../api/types.js";
 import {
   CliError,
@@ -66,18 +68,26 @@ import {
   type Cursor,
 } from "../core/index.js";
 import {
+  RECURRENCE_MAX_INTERVAL,
+  RECURRENCE_MAX_OCCURRENCES,
+  RECURRENCE_MIN_OCCURRENCES,
+  assertCalendarDate,
+  assertWholeNumberInRange,
   buildPostBody,
   buildTargets,
   inferContentTypeFromReferences,
   mergePostInput,
   normalizeContentType,
+  normalizeFrequency,
   normalizePlatformName,
+  normalizeWeekday,
   parsePostInput,
   readSource,
   readStdin,
   uploadLocalMedia,
   type PostInput,
 } from "./post-input.js";
+import { describeRecurrence } from "./recurring.js";
 
 const TERMINAL_PLATFORM_STATUSES = new Set(["PUBLISHED", "FAILED"]);
 const TERMINAL_POST_STATUSES = new Set<PostStatus>(["COMPLETED", "PARTIAL_FAILURE", "FAILED"]);
@@ -90,6 +100,16 @@ const collectPlatform = (value: string, previous: PlatformType[]): PlatformType[
   ...previous,
   normalizePlatformName(value),
 ];
+
+const collectWeekday = (value: string, previous: Weekday[]): Weekday[] => {
+  if (value.includes(",")) {
+    throw new CliError(`--on takes one weekday, got "${value}".`, {
+      exitCode: ExitCode.USAGE,
+      hint: "Repeat the flag: --on MONDAY --on THURSDAY",
+    });
+  }
+  return [...previous, normalizeWeekday(value)];
+};
 
 const parsePair = (value: string, flag: string): [string, string] => {
   const index = value.indexOf("=");
@@ -158,6 +178,45 @@ interface ContentOptions {
   ytTitle?: string;
   pinterestBoard?: string;
   documentTitle?: string;
+  repeat?: string;
+  every?: string;
+  on?: Weekday[];
+  until?: string;
+  count?: string;
+}
+
+function recurrenceFromOptions(options: ContentOptions): PostInput["recurrence"] {
+  if (options.until !== undefined && options.count !== undefined) {
+    throw new CliError("Pass --until or --count, not both.", { exitCode: ExitCode.USAGE });
+  }
+
+  const recurrence: NonNullable<PostInput["recurrence"]> = {};
+
+  if (options.repeat !== undefined) recurrence.frequency = normalizeFrequency(options.repeat);
+  if (options.every !== undefined) {
+    recurrence.interval = assertWholeNumberInRange(
+      Number(options.every),
+      "--every",
+      1,
+      RECURRENCE_MAX_INTERVAL,
+      ExitCode.USAGE,
+    );
+  }
+  if (options.on !== undefined && options.on.length > 0) recurrence.weekdays = options.on;
+  if (options.until !== undefined) {
+    recurrence.endsOn = assertCalendarDate(options.until, "--until", ExitCode.USAGE);
+  }
+  if (options.count !== undefined) {
+    recurrence.maxOccurrences = assertWholeNumberInRange(
+      Number(options.count),
+      "--count",
+      RECURRENCE_MIN_OCCURRENCES,
+      RECURRENCE_MAX_OCCURRENCES,
+      ExitCode.USAGE,
+    );
+  }
+
+  return Object.keys(recurrence).length > 0 ? recurrence : undefined;
 }
 
 async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
@@ -254,6 +313,9 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
   }
 
   if (Object.keys(configs).length > 0) input.platformConfigs = configs;
+
+  const recurrence = recurrenceFromOptions(options);
+  if (recurrence) input.recurrence = recurrence;
 
   return input;
 }
@@ -419,6 +481,7 @@ async function runView(id: string, options: GlobalOptions): Promise<void> {
         : "not scheduled",
     ],
     ["text", oneLine(post.text)],
+    ...(post.recurringPostId ? [["recurring", formatId(post.recurringPostId)] as [string, string]] : []),
   ]);
 
   const targets = post.platforms ?? [];
@@ -484,6 +547,11 @@ async function runCreate(options: CreateOptions): Promise<void> {
       entries.push(["publishing", "now"]);
     }
 
+    if (created.recurringPostId && body.recurrence) {
+      entries.push(["repeats", describeRecurrence(body.recurrence)]);
+      entries.push(["recurring", formatId(created.recurringPostId)]);
+    }
+
     if (created.queuedPlatforms.length > 0) {
       entries.push(["queued", created.queuedPlatforms.join(", ")]);
     }
@@ -527,6 +595,14 @@ async function runUpdate(id: string, options: UpdateOptions): Promise<void> {
   }
 
   const input = await resolveInput({ ...options, draft: false }, false);
+
+  if (input.recurrence) {
+    throw new CliError("A post can only be made recurring when it is created.", {
+      exitCode: ExitCode.USAGE,
+      hint: "Drop the repeat keys from the file. Manage a series with: adaptlypost recurring",
+    });
+  }
+
   const accounts = (input.accounts ?? []).length > 0 ? await loadAccounts(quiet) : [];
   const mediaUrls = options.media.length > 0 ? await resolveMedia(input, quiet) : [];
 
@@ -1010,6 +1086,13 @@ async function rowsFromDirectory(path: string, timezone: string): Promise<BulkRo
   for (const [index, name] of entries.entries()) {
     const input = parsePostInput(await readSource(join(path, name)));
 
+    if (input.recurrence) {
+      throw new CliError(`${name}: recurring posts cannot be bulk scheduled.`, {
+        exitCode: ExitCode.VALIDATION,
+        hint: 'Create each one with "adaptlypost post create --repeat"',
+      });
+    }
+
     if (input.at === undefined) {
       throw new CliError(`${name} has no "at" in its frontmatter.`, {
         exitCode: ExitCode.VALIDATION,
@@ -1360,6 +1443,11 @@ export function registerPostCommands(program: Command): void {
   withContentOptions(post.command("create"))
     .description("Create a post from flags, a markdown file or stdin")
     .option("--draft", "Save as a draft instead of scheduling")
+    .option("--repeat <frequency>", `Repeat the post: ${RECURRENCE_FREQUENCIES.join(", ")}. Needs --at, which sets the first post and its time of day`)
+    .option("--every <n>", `Repeat every n days, weeks or months, 1 to ${RECURRENCE_MAX_INTERVAL}. Defaults to 1`)
+    .option("--on <weekday>", "Weekday for a WEEKLY repeat, repeatable. The weekday of --at is always included", collectWeekday, [])
+    .option("--until <YYYY-MM-DD>", "Last day a post of the series may go out. Cannot be combined with --count")
+    .option("--count <n>", `Total posts in the series, ${RECURRENCE_MIN_OCCURRENCES} to ${RECURRENCE_MAX_OCCURRENCES}. Cannot be combined with --until`)
     .option("--watch", "Follow the post until every platform is done")
     .option("--timeout <duration>", "How long --watch waits", "30m")
     .option("--dry-run", "Print the request body and exit")

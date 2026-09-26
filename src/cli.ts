@@ -94,6 +94,10 @@ const MODULES: Array<{ names: string[]; load: () => Promise<Registrar> }> = [
     load: async () => (await import('./commands/post.js')).registerPostCommands,
   },
   {
+    names: ['recurring'],
+    load: async () => (await import('./commands/recurring.js')).registerRecurringCommands,
+  },
+  {
     names: ['accounts', 'account'],
     load: async () => (await import('./commands/account.js')).registerAccountCommands,
   },
