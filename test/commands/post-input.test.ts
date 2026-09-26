@@ -52,6 +52,14 @@ const accounts: SocialAccount[] = [
     avatarUrl: "",
     status: "active",
   },
+  {
+    id: "gbp_5e2c",
+    platform: "GOOGLE_BUSINESS",
+    displayName: "Acme Bakery",
+    username: "",
+    avatarUrl: "",
+    status: "active",
+  },
 ];
 
 const exitCodeOf = (run: () => unknown): number => {
@@ -174,6 +182,17 @@ describe("parsePostInput", () => {
     );
 
     expect(input.platformConfigs?.TIKTOK).toEqual({ privacyLevel: "SELF_ONLY", title: "Demo" });
+  });
+
+  it("reads a Google Business Profile block by its gbp alias", () => {
+    const input = parsePostInput(
+      ["---", "gbp:", "  topicType: EVENT", "  eventStart: 2026-10-01T18:00", "---", "Body"].join("\n"),
+    );
+
+    expect(input.platformConfigs?.GOOGLE_BUSINESS).toEqual({
+      topicType: "EVENT",
+      eventStart: "2026-10-01T18:00",
+    });
   });
 
   it("maps every document title alias onto the LinkedIn config", () => {
@@ -315,6 +334,47 @@ describe("buildPostBody", () => {
     expect(body.tiktokConfigs).toEqual([
       { connectionId: "tt_77aa", privacyLevel: "SELF_ONLY" },
     ]);
+  });
+
+  it("routes a Google Business Profile location and its config", () => {
+    const body = buildPostBody(
+      {
+        text: "Autumn tasting night",
+        accounts: ["gbp_5e2c"],
+        platformConfigs: {
+          GOOGLE_BUSINESS: { topicType: "OFFER", offerCouponCode: "AUTUMN10" },
+        },
+      },
+      { accounts },
+    );
+
+    expect(body.platforms).toEqual(["GOOGLE_BUSINESS"]);
+    expect(body.googleBusinessConnectionIds).toEqual(["gbp_5e2c"]);
+    expect(body.googleBusinessConfigs).toEqual([
+      { connectionId: "gbp_5e2c", topicType: "OFFER", offerCouponCode: "AUTUMN10" },
+    ]);
+  });
+
+  it("posts a Google Business Profile location without a config", () => {
+    const body = buildPostBody({ text: "Open late today", accounts: ["gbp_5e2c"] }, { accounts });
+
+    expect(body.googleBusinessConnectionIds).toEqual(["gbp_5e2c"]);
+    expect(body.googleBusinessConfigs).toBeUndefined();
+  });
+
+  it("refuses a Google Business Profile config without a topic type", () => {
+    expect(
+      exitCodeOf(() =>
+        buildPostBody(
+          {
+            text: "hi",
+            accounts: ["gbp_5e2c"],
+            platformConfigs: { GOOGLE_BUSINESS: { callToActionType: "CALL" } },
+          },
+          { accounts },
+        ),
+      ),
+    ).toBe(ExitCode.VALIDATION);
   });
 
   it("infers DOCUMENT from one document file and builds linkedinConfigs", () => {
