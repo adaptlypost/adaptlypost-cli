@@ -59,7 +59,7 @@ $ adaptlypost whoami
   profile    default
   token      adaptly_4f2a… ("CI deploy", from credentials file)
   api        https://post.adaptlypost.com/post/api/v1
-  workspace  Acme (ws_9c3e1f)
+  workspace  ws_9c3e1f
   role       Contributor (contributor, key issued by admin)
   can        draft
   accounts   7 connected accounts, 4 platforms
@@ -82,7 +82,7 @@ Every API key is issued under a workspace role, chosen when the key is created, 
 | Contributor | Create and edit its own drafts, upload media, use AI. Cannot schedule, publish, retry, bulk schedule, or touch teammates' posts |
 | Viewer | Read posts, accounts and analytics |
 
-When a key's role does not cover a command, the API answers 403 with `code: permission_denied` and the CLI exits 10 with a hint that names the role and the missing permission. Retrying, or switching to another key of the same role, does not help; ask a workspace admin for a key issued under a higher role. `adaptlypost whoami` shows the role in hand before you try.
+When a key's role does not cover a command, the API answers 403 with `code: permission_denied` and the CLI exits 10 with a hint that names the role and the missing permission. When the key's creator has been demoted below the key, the hint names both roles, because the key acts with the creator's. Retrying, or switching to another key of the same role, does not help; ask a workspace admin for a key issued under a higher role. `adaptlypost whoami` shows the role in hand before you try.
 
 A key stops working when the member who created it loses access to the workspace: the API answers 401 with `code: token_issuer_lost_access` and the CLI exits 3. Ask a workspace admin for a new key. A demoted creator shrinks the key to the creator's new permissions.
 
@@ -97,7 +97,7 @@ $ adaptlypost login
 
   ✓ Token valid
     profile    default
-    workspace  Default Workspace
+    api        https://post.adaptlypost.com/post/api/v1
     accounts   7 connected
     stored in  ~/.config/adaptlypost/credentials.json (0600)
 ```
@@ -148,7 +148,11 @@ adaptlypost post create -t "Our Q3 results" -a li_22aa -m ./q3-report.pdf --docu
 
 The API reads the document type from the file extension of the stored URL, so the uploaded file name keeps its `.pdf`, `.ppt`, `.pptx`, `.doc` or `.docx` extension; a PDF named without one gets `.pdf` appended. The CLI refuses, before sending, a DOCUMENT post aimed at any other platform ("<platform> does not support DOCUMENT posts"), a DOCUMENT post with two or more files or an image or video ("A document post needs exactly one PDF, PPT, PPTX, DOC or DOCX file in mediaUrls"), and a document file on a post that is not DOCUMENT ("Document files can only be posted with the DOCUMENT content type"), which are the same 400s the API returns.
 
-`-f -` reads the same document from stdin and `-t -` reads plain text, so `adaptlypost ai caption --prompt "announce the launch" | adaptlypost post create -t - -P TWITTER -a tw_4d1b` is one line.
+`-f -` reads the same document from stdin and `-t -` reads plain text. `ai caption` writes the caption alone to stdout, so writing and scheduling a post is one line:
+
+```bash
+adaptlypost ai caption --prompt "announce the launch" --platform TWITTER | adaptlypost post create -t - -a tw_4d1b --at "+2h"
+```
 
 **Recurring posts.** `post create --repeat DAILY|WEEKLY|MONTHLY` turns the post into a series. `--at` is required and must be in the future. That first post sets the time of day for every post after it, in the zone from `--timezone`. `--every 2` repeats every 2 days, weeks or months (1 to 30). `--on` picks the weekdays of a WEEKLY repeat, one per flag (`--on MONDAY --on THURSDAY`, or `mon`, `thu`); the weekday of `--at` is always included. End the series with `--until 2026-12-31` (the last day a post may go out) or `--count 10` (2 to 365 posts in total), not both. With neither, it repeats until you pause or delete it. The create output prints the `recurring` id next to the first post's id.
 
@@ -173,7 +177,7 @@ until: 2026-12-31
 
 **Upload that actually uploads.** `media upload` mints presigned URLs in chunks of 20 and PUTs the bytes with the exact MIME type the presign was signed for, sniffed from the first 12 bytes rather than the extension. A mismatched content type fails the S3 signature with an opaque error, which is the step everyone gets wrong by hand. Accepted: `image/jpeg`, `image/png`, `image/webp` (50 MB), `video/mp4`, `video/quicktime` (250 MB), and for LinkedIn document posts `application/pdf`, `application/vnd.ms-powerpoint`, `application/vnd.openxmlformats-officedocument.presentationml.presentation`, `application/msword` and `application/vnd.openxmlformats-officedocument.wordprocessingml.document` (100 MB). A PDF is read from its `%PDF-` signature. A DOC and a PPT share one container format, and so do a DOCX and a PPTX, so for those the bytes are checked and the `.doc`, `.ppt`, `.docx` or `.pptx` extension picks the type; a file without one is refused.
 
-**Bulk schedule from a CSV.** `post bulk --csv september.csv` validates every row before sending anything, uploads local media once per content hash however many rows reference it, chunks into batches of 100, and reports failures with their row number. Columns are `text`, `scheduledAt`, `contentType` (`TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`, inferred from `media` when empty), `media` (`;`-separated), `thumbnail`, `thumbnailMs`, `text_<PLATFORM>` and `config_<PLATFORM>` (a JSON object). Rows with different configs go out as separate requests. LinkedIn document posts cannot be bulk scheduled, so a `DOCUMENT` row or a `config_LINKEDIN` column is refused; create those with `post create`.
+**Bulk schedule from a CSV.** `post bulk --csv september.csv` validates every row before sending anything, uploads local media once per content hash however many rows reference it, chunks into batches of 100, and reports failures with their row number. Columns are `text`, `scheduledAt`, `contentType` (`TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`, inferred from `media` when empty), `media` (`;`-separated), `alt` (`;`-separated alt text, one per `media` entry in the same order), `thumbnail`, `thumbnailMs`, `text_<PLATFORM>` and `config_<PLATFORM>` (a JSON object). Rows with different configs go out as separate requests. LinkedIn document posts cannot be bulk scheduled, so a `DOCUMENT` row or a `config_LINKEDIN` column is refused; create those with `post create`.
 
 **Watch a post land.** Publishing is asynchronous and `queuedPlatforms` is not an outcome. `post watch` polls the results endpoint on a decaying schedule (5 s for a minute, 15 s for five, 60 s after) and prints each platform the moment its state changes.
 
@@ -196,21 +200,21 @@ Grammar is noun then verb, space-separated. `ls` works wherever `list` does, `rm
 | `post create` | `-t/--text`, `-f/--file`, `-P/--platform`, `-a/--account`, `-m/--media`, `--alt`, `--type`, `-s/--at`, `--timezone`, `--draft`, `--repeat`, `--every`, `--on` (repeatable), `--until`, `--count`, `--watch`, `--dry-run` | `-` on `--text` or `--file` reads stdin. `--alt` is the alt text for the `--media` image at the same position. `--type` is `TEXT`, `IMAGE`, `VIDEO`, `CAROUSEL` or `DOCUMENT`, inferred from `--media` when omitted. `--repeat` needs `--at` |
 | `post list` | `--status`, `--platform`, `--from`, `--to`, `--sort`, `--limit`, `--offset`, `--all` | |
 | `post get <id>` | | Post header plus one row per platform |
-| `post update <id>` | Same as `create` minus `--draft`, `--watch` and the repeat flags | `--platform` replaces every target on the post, so it confirms first. Moving a scheduled post more than a minute into the past fails with a 400 |
+| `post update <id>` | Same as `create` minus `--draft`, `--watch` and the repeat flags | `--platform` replaces every target on the post, so it confirms first. The API saves alt text only when the targets are sent too, so `--alt` (or `alt:` in `--file`) without `--platform` reads the post first and sends its current targets back unchanged. Moving a scheduled post more than a minute into the past fails with a 400 |
 | `post delete <id>` | `--yes` | |
 | `post results <id>` | | The only source of truth for what published |
 | `post retry <id>` | `--platform-id` (repeatable), `-P, --platform` (repeatable), `--failed` | No flags retries every FAILED platform server-side. `--platform BLUESKY` retries every failed entry of that platform. `--failed` resolves the ids locally first |
 | `post publish <id>` | `--at`, `--timezone` | Drafts only |
 | `post unschedule <id>` | | Turns a scheduled or dated draft post back into an undated draft. 404 for another workspace's post |
 | `post watch <id>` | `--timeout` | Exit 0 all published, 1 any failed, 8 timeout |
-| `post bulk` | `--csv`, `--json`, `--dir`, `-P/--platform`, `-a/--account`, `--timezone`, `--dry-run` | Chunks of 100 |
+| `post bulk` | `--csv`, `--json-file`, `--dir`, `-P/--platform`, `-a/--account`, `--timezone`, `--dry-run` | Chunks of 100. A `--dir` post without `type:` gets its content type from its `media:`, the same way `post create` does |
 
 Per-platform flags on `post create` and `post update`:
 
 | Flag | Sends |
 |---|---|
 | `--text-for <PLATFORM=text>` | `platformTexts` |
-| `--config <PLATFORM=json>` | The platform's `*Configs` entry, one per account of that platform |
+| `--config <PLATFORM=json>` | The platform's `*Configs` entry, one per account of that platform. Keys are checked against what the API reads, so a misspelt key exits 5 and names the closest real one instead of being dropped |
 | `--tiktok-privacy <level>` | `tiktokConfigs[].privacyLevel` |
 | `--ig-type <type>` | `instagramConfigs[].postType` |
 | `--ig-trial <graduation>` | `instagramConfigs[].trialGraduation`: `MANUAL` (you share it to followers from the Instagram app) or `SS_PERFORMANCE` (Instagram shares it if it performs well). Video reels only; a story, image or carousel is rejected |
@@ -247,23 +251,34 @@ A series pauses itself after 3 failed posts in a row, when the subscription laps
 | `media upload <files...>` | `--concurrency` | Mints the URLs and PUTs the bytes |
 | `media urls <files...>` | | Mints the URLs only, for your own uploader |
 
+Per-platform config keys, for `--config`, frontmatter platform blocks and `config_<PLATFORM>` columns. The account id is filled in for you:
+
+| Platform | Keys |
+|---|---|
+| `FACEBOOK` | `postType`, `videoTitle` |
+| `INSTAGRAM` | `postType`, `trialGraduation` |
+| `TIKTOK` | `privacyLevel`, `title`, `caption`, `allowComments`, `allowDuet`, `allowStitch`, `sendAsDraft`, `aiGenerated`, `brandedContent`, `brandedContentOwnBrand`, `autoAddMusic` |
+| `PINTEREST` | `boardId`, `title`, `link` |
+| `YOUTUBE` | `postType`, `videoTitle`, `tags`, `privacyStatus`, `license`, `notifySubscribers`, `allowEmbedding`, `madeForKids`, `categoryId`, `playlistId` |
+| `LINKEDIN` | `documentTitle` |
+
 ### connect
 
 | Command | Key flags | Notes |
 |---|---|---|
-| `connect create` | | A link a client can use to connect their own accounts |
-| `connect revoke <token>` | | |
+| `connect create` | | A link a client opens to connect their own accounts to this workspace. Prints the url, the token and when it expires |
+| `connect revoke <token>` | `--yes` | Confirms first. The link stops working at once |
 
 ### webhook
 
 | Command | Key flags | Notes |
 |---|---|---|
-| `webhook create` | `--url` | The only place the signing secret is ever returned |
-| `webhook list` | | |
+| `webhook create` | `--url` | The only place the signing secret is ever returned, so store it then |
+| `webhook list` | | Status is `active`, `inactive` or `disabled`. The API disables a webhook whose deliveries keep failing |
 | `webhook get <id>` | | |
 | `webhook update <id>` | `--url`, `--active`, `--inactive` | Events are not editable |
-| `webhook delete <id>` | `--yes` | |
-| `webhook test <id>` | | Sends a test delivery |
+| `webhook delete <id>` | `--yes` | Confirms first |
+| `webhook test <id>` | | Sends a test delivery. Exits 1 when the endpoint does not answer 2xx |
 
 ### analytics
 
@@ -273,8 +288,8 @@ A series pauses itself after 3 failed posts in a row, when the subscription laps
 | `analytics timeseries` | `--from`, `--to`, `--granularity`, `--platform` | Table plus a views sparkline |
 | `analytics breakdown` | `--from`, `--to` | `--platform` is a usage error here; the API ignores it |
 | `analytics posts` | `--sort-by`, `--page`, `--limit`, `--all`, `--platform` | |
-| `analytics top` | `--sort-by`, `--limit` | |
-| `analytics discovered` | `--limit` | |
+| `analytics top` | `--from`, `--to`, `--platform`, `--sort-by`, `--limit` | The best posts in the window by one metric. Sorts by `VIEWS` and returns 10 unless told otherwise, 50 at most |
+| `analytics discovered` | `--from`, `--to`, `--platform`, `--limit` | Posts found on the connected accounts that were not published through AdaptlyPost. 200 by default, 1000 at most |
 | `analytics sync-status` | | Per-account sync and discovery state |
 | `analytics sync` | `--wait` | One run per workspace per ten minutes |
 
@@ -282,11 +297,11 @@ A series pauses itself after 3 failed posts in a row, when the subscription laps
 
 | Command | Key flags | Notes |
 |---|---|---|
-| `ai caption` | `--prompt`, `--platform`, `--refine`, `--partial` | Caption text goes to stdout alone so it pipes into `post create -t -` |
-| `ai image` | `--prompt`, `--aspect`, `--model`, `--quality`, `--reference`, `--wait`, `-o/--output` | |
-| `ai image get <jobId>` | `--wait`, `-o/--output` | |
+| `ai caption` | `--prompt`, `--platform`, `--refine`, `--partial` | Caption text goes to stdout alone, even when piped, so it feeds `post create -t -`. Pass `--json` for the JSON document. `--refine <text>` rewrites that caption following `--prompt`, and `--partial` continues a partly written one. `-` on `--prompt` or `--refine` reads stdin |
+| `ai image` | `--prompt`, `--aspect`, `--model`, `--quality`, `--reference` (repeatable, up to 5), `--session`, `--wait`, `--timeout`, `-o/--output` | Prints the job id and returns. `--wait` polls until the image is ready; `-o` also downloads it to a file or directory and implies `--wait`. Local `--reference` images are uploaded first |
+| `ai image get <jobId>` | `--wait`, `--timeout`, `-o/--output` | Reads a job, and with `--wait` or `-o` waits for it |
 
-Insufficient credits come back as exit 9, not a generic failure.
+Insufficient credits come back as exit 9, not a generic failure. A failed image exits 1 with the reason, and its credits are refunded. `--wait` gives up with exit 8 after `--timeout`, which defaults to 3 minutes.
 
 ### Everywhere else
 
@@ -363,6 +378,8 @@ In human mode every spinner, prompt, hint, warning and notice goes to stderr, so
 
 Add `--json` to a list command and the available field names are printed to stderr, so `adaptlypost post list --json 2>&1 >/dev/null` documents the shape.
 
+`ai caption` is the one exception to the pipe rule. It writes the bare caption when piped, so it can feed another command, and prints the JSON document only under `--json` or `ADAPTLYPOST_JSON=1`.
+
 ## Exit codes
 
 | Code | Meaning |
@@ -370,17 +387,17 @@ Add `--json` to a list command and the available field names are printed to stde
 | 0 | Success |
 | 1 | Generic failure, including 5xx |
 | 2 | Usage error: bad flag, missing argument, unknown enum, prompt needed under `--no-input` |
-| 3 | Auth failure: 401, missing or malformed token, or a key whose creator lost access (`token_issuer_lost_access`) |
+| 3 | Auth failure: 401, missing or malformed token, a key whose creator lost access (`token_issuer_lost_access`), or an OAuth login with no AdaptlyPost account (`oauth_account_not_found`) |
 | 4 | Not found: 404 |
 | 5 | Validation or other 400 |
 | 6 | Conflict: 409 |
 | 7 | Rate limited: 429 after retries |
 | 8 | Network failure or timeout |
 | 9 | Quota or plan limit: 402, insufficient credits, 403 `subscription_required` |
-| 10 | Permission denied: 403, the key is valid but its role cannot do this (`permission_denied`) |
+| 10 | Permission denied: 403, the key is valid but its role cannot do this (`permission_denied`), or `workspaceId` names a workspace the key cannot act in (`workspace_access_denied`) |
 | 130 | Interrupted with Ctrl-C |
 
-Exit 3 means get a working key. Exit 10 means the key works and a workspace admin has to issue one under a higher role; nothing you retry from this machine changes it. In machine mode the `error.code` field carries the API's code (`permission_denied`, `subscription_required`, `token_issuer_lost_access`) verbatim.
+Exit 3 means get a working key. Exit 10 means the key works and a workspace admin has to issue one under a higher role; nothing you retry from this machine changes it. In machine mode the `error.code` field carries the API's code (`permission_denied`, `subscription_required`, `token_issuer_lost_access`, `workspace_access_denied`, `oauth_account_not_found`) verbatim.
 
 ## Configuration and profiles
 
@@ -410,6 +427,7 @@ Base URL resolution, highest first: `--api-url`, `ADAPTLYPOST_API_URL`, the prof
 | `timezone` | Default for `--timezone` |
 | `defaultPlatforms` | Default for `--platform` |
 | `language` | Default `x-language` header |
+| `workspaceId` | Sent as the `X-Workspace-Id` header on every request. An API key belongs to one workspace, so this guards against using a key from the wrong one. The API then answers 403 `workspace_access_denied` and the CLI exits 10 |
 | `updateCheck` | Set false to turn off the daily version check |
 
 ```bash
@@ -429,6 +447,7 @@ Run `adaptlypost doctor` when something is off. It checks the Node version, both
 | `ADAPTLYPOST_API_KEY` | Same thing, accepted for compatibility with the MCP server and skills |
 | `ADAPTLYPOST_API_URL` | Base URL. Defaults to `https://post.adaptlypost.com/post/api/v1` |
 | `ADAPTLYPOST_PROFILE` | Profile name |
+| `ADAPTLYPOST_WORKSPACE_ID` | Overrides the `workspaceId` config key |
 | `ADAPTLYPOST_DEBUG` | Set to `1` for the request log on stderr |
 | `ADAPTLYPOST_JSON` | Set to `1` to force machine output |
 | `ADAPTLYPOST_FORCE_TTY` | Set to `1` to keep human output when piped |

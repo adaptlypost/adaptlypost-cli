@@ -34,6 +34,7 @@ import {
   type PostTargets,
   type SocialAccount,
   type SocialPost,
+  type SocialPostPlatform,
   type UpdatePostRequest,
   type Weekday,
 } from "../api/types.js";
@@ -71,8 +72,11 @@ import {
 import {
   RECURRENCE_MAX_INTERVAL,
   RECURRENCE_MAX_OCCURRENCES,
+  CONFIG_FIELD,
+  CONNECTION_FIELD,
   RECURRENCE_MIN_OCCURRENCES,
   assertCalendarDate,
+  assertConfigKeys,
   assertWholeNumberInRange,
   buildPostBody,
   buildTargets,
@@ -348,6 +352,10 @@ async function resolveInput(
     }
   }
 
+  for (const [platform, config] of Object.entries(merged.platformConfigs ?? {})) {
+    assertConfigKeys(platform as PlatformType, config);
+  }
+
   merged.timezone = resolveTimezone(merged.timezone);
 
   if (merged.at !== undefined) {
@@ -586,6 +594,96 @@ interface UpdateOptions extends ContentOptions, GlobalOptions {
   dryRun?: boolean;
 }
 
+type ConfigEntry = Record<string, unknown>;
+
+const definedOnly = (entry: ConfigEntry): ConfigEntry =>
+  Object.fromEntries(Object.entries(entry).filter(([, value]) => value !== undefined && value !== null));
+
+function storedConfig(target: SocialPostPlatform): ConfigEntry | undefined {
+  switch (target.platform) {
+    case "FACEBOOK":
+      return definedOnly({ postType: target.facebookPostType, videoTitle: target.facebookVideoTitle });
+    case "INSTAGRAM":
+      return definedOnly({ postType: target.instagramPostType, trialGraduation: target.instagramTrialGraduation });
+    case "TIKTOK":
+      return target.tiktokPrivacyLevel === undefined
+        ? undefined
+        : definedOnly({
+            privacyLevel: target.tiktokPrivacyLevel,
+            title: target.tiktokTitle,
+            caption: target.tiktokCaption,
+            allowComments: target.tiktokAllowComments,
+            allowDuet: target.tiktokAllowDuet,
+            allowStitch: target.tiktokAllowStitch,
+            sendAsDraft: target.tiktokSendAsDraft,
+            aiGenerated: target.tiktokAiGenerated,
+            brandedContent: target.tiktokBrandedContent,
+            brandedContentOwnBrand: target.tiktokBrandedOwnBrand,
+            autoAddMusic: target.tiktokAutoAddMusic,
+          });
+    case "PINTEREST":
+      return target.pinterestBoardId === undefined
+        ? undefined
+        : definedOnly({ boardId: target.pinterestBoardId, title: target.pinterestTitle, link: target.pinterestLink });
+    case "YOUTUBE":
+      return definedOnly({
+        postType: target.youtubePostType,
+        videoTitle: target.youtubeVideoTitle,
+        tags: target.youtubeTags,
+        privacyStatus: target.youtubePrivacyStatus,
+        license: target.youtubeLicense,
+        notifySubscribers: target.youtubeNotifySubscribers,
+        allowEmbedding: target.youtubeAllowEmbedding,
+        madeForKids: target.youtubeMadeForKids,
+        categoryId: target.youtubeCategoryId,
+        playlistId: target.youtubePlaylistId,
+      });
+    case "LINKEDIN":
+      return definedOnly({ documentTitle: target.linkedinDocumentTitle });
+    default:
+      return undefined;
+  }
+}
+
+/** Rebuilds the targets of a stored post, because the API only applies alt text when targets are resent. */
+export function targetsFromPost(post: SocialPost): {
+  platforms: PlatformType[];
+  targets: PostTargets;
+  platformTexts: PlatformText[];
+} {
+  const targets: Record<string, unknown[]> = {};
+  const platformTexts = new Map<PlatformType, string>();
+
+  const push = (field: string, value: unknown): void => {
+    targets[field] = [...(targets[field] ?? []), value];
+  };
+
+  for (const target of post.platforms ?? []) {
+    const id = target.platform === "FACEBOOK" ? target.pageId : target.connectionId;
+    if (id === undefined) continue;
+
+    push(CONNECTION_FIELD[target.platform], id);
+
+    const field = CONFIG_FIELD[target.platform];
+    const config = storedConfig(target);
+    if (field && config && Object.keys(config).length > 0) {
+      push(field, target.platform === "FACEBOOK" ? { pageId: id, ...config } : { connectionId: id, ...config });
+    }
+
+    if (target.text && !platformTexts.has(target.platform)) platformTexts.set(target.platform, target.text);
+  }
+
+  const platforms = [...new Set((post.platforms ?? []).map((target) => target.platform))].filter(
+    (platform) => (targets[CONNECTION_FIELD[platform]] ?? []).length > 0,
+  );
+
+  return {
+    platforms,
+    targets: targets as PostTargets,
+    platformTexts: [...platformTexts].map(([platform, text]) => ({ platform, text })),
+  };
+}
+
 async function runUpdate(id: string, options: UpdateOptions): Promise<void> {
   const quiet = Boolean(options.quiet) || isQuiet();
   const targetsChanged = options.platform.length > 0 || options.account.length > 0 || options.page.length > 0;
@@ -647,13 +745,38 @@ async function runUpdate(id: string, options: UpdateOptions): Promise<void> {
     Object.assign(body, carried);
     if (options.platform.length > 0) body.platforms = platforms;
     if (mediaUrls.length > 0) body.mediaUrls = mediaUrls;
-    if (full.mediaAltTexts) body.mediaAltTexts = full.mediaAltTexts;
+  }
+
+  if (input.alt?.length) {
+    body.mediaAltTexts = input.alt;
+
+    if (body.platforms === undefined) {
+      if (targetsChanged) {
+        throw new CliError("Alt text is only saved together with the full target set.", {
+          exitCode: ExitCode.USAGE,
+          hint: "Add --platform for every platform of the post, or drop --account to keep the current targets",
+        });
+      }
+      const current = await getPost(id);
+      const kept = targetsFromPost(current);
+      if (kept.platforms.length === 0) {
+        throw new CliError("This post has no targets to attach alt text to.", {
+          exitCode: ExitCode.VALIDATION,
+          hint: "Pass --platform and --account with --alt",
+        });
+      }
+      Object.assign(body, kept.targets);
+      body.platforms = kept.platforms;
+      if (kept.platformTexts.length > 0 && body.platformTexts === undefined) {
+        body.platformTexts = kept.platformTexts;
+      }
+    }
   }
 
   if (Object.keys(body).length === 0) {
     throw new CliError("Nothing to update.", {
       exitCode: ExitCode.USAGE,
-      hint: "Pass at least one of --text, --file, --at, --timezone, --type, --thumbnail or --platform",
+      hint: "Pass at least one of --text, --file, --at, --timezone, --type, --thumbnail, --alt or --platform",
     });
   }
 
@@ -965,7 +1088,13 @@ async function runWatch(id: string, options: WatchOptions): Promise<void> {
   }
 }
 
-const CORE_COLUMNS = new Set(["text", "scheduledAt", "contentType", "media", "thumbnail", "thumbnailMs"]);
+const CORE_COLUMNS = new Set(["text", "scheduledAt", "contentType", "media", "alt", "thumbnail", "thumbnailMs"]);
+
+const splitList = (value: string | undefined): string[] =>
+  (value ?? "")
+    .split(";")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "");
 
 interface BulkRow {
   line: number;
@@ -1007,10 +1136,15 @@ function bulkRowFromRecord(
   timezone: string,
 ): BulkRow {
   const text = (record.text ?? "").trim();
-  const mediaRefs = (record.media ?? "")
-    .split(";")
-    .map((value) => value.trim())
-    .filter((value) => value !== "");
+  const mediaRefs = splitList(record.media);
+  const alt = splitList(record.alt);
+
+  if (alt.length > 0 && alt.length > mediaRefs.length) {
+    throw new CliError(`Row ${line}: ${alt.length} alt texts for ${mediaRefs.length} media file(s).`, {
+      exitCode: ExitCode.VALIDATION,
+      hint: "Give one alt text per media file, in the same order, separated by ;",
+    });
+  }
 
   if (text === "" && mediaRefs.length === 0) {
     throw new CliError(`Row ${line}: text or media is required.`, {
@@ -1066,12 +1200,14 @@ function bulkRowFromRecord(
           exitCode: ExitCode.VALIDATION,
         });
       }
+      assertConfigKeys(platform, parsed, `Row ${line}: `);
       configs[platform] = parsed as Record<string, never>;
     }
   }
 
   const item: BulkPostInput = { contentType, scheduledAt };
   if (text !== "") item.text = text;
+  if (alt.length > 0) item.mediaAltTexts = alt;
   if (platformTexts.length > 0) item.platformTexts = platformTexts;
   if ((record.thumbnail ?? "").trim() !== "") item.thumbnailUrl = record.thumbnail.trim();
   if ((record.thumbnailMs ?? "").trim() !== "") {
@@ -1112,8 +1248,12 @@ async function rowsFromDirectory(path: string, timezone: string): Promise<BulkRo
       });
     }
 
+    for (const [platform, config] of Object.entries(input.platformConfigs ?? {})) {
+      assertConfigKeys(platform as PlatformType, config, `${name}: `);
+    }
+
     const item: BulkPostInput = {
-      contentType: input.contentType ?? (input.media?.length ? "IMAGE" : "TEXT"),
+      contentType: input.contentType ?? inferContentTypeFromReferences(input.media ?? []),
       scheduledAt: toIso(parseWhen(input.at, { timezone: input.timezone ?? timezone })),
     };
 

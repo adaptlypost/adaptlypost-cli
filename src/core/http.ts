@@ -244,6 +244,7 @@ export async function request<T>(options: RequestOptions): Promise<T> {
     accept: 'application/json',
     'user-agent': userAgent(PRODUCT.id),
     ...(language ? { 'x-language': language } : {}),
+    ...(profile.workspaceId ? { 'x-workspace-id': profile.workspaceId } : {}),
     ...options.headers,
   };
   const hasBody = options.body !== undefined && options.method !== 'GET';

@@ -100,6 +100,33 @@ describe('request', () => {
     expect(init.body).toBeUndefined();
   });
 
+  it('sends X-Workspace-Id only when the profile names a workspace', async () => {
+    fetchMock.mockImplementation(async () => jsonResponse({ data: [] }));
+
+    await request({ method: 'GET', path: '/social-accounts' });
+    expect(fetchMock.mock.calls[0][1].headers['x-workspace-id']).toBeUndefined();
+
+    configureHttp({ profile: { ...profile, workspaceId: 'ws_9c3e1f' } });
+    await request({ method: 'GET', path: '/social-accounts' });
+    expect(fetchMock.mock.calls[1][1].headers['x-workspace-id']).toBe('ws_9c3e1f');
+  });
+
+  it('fails loudly when the workspace header names another workspace', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(
+        { statusCode: 403, code: 'workspace_access_denied', message: 'This API key belongs to a single workspace.' },
+        { status: 403 },
+      ),
+    );
+    configureHttp({ profile: { ...profile, workspaceId: 'ws_other' } });
+
+    await expect(request({ method: 'GET', path: '/social-posts' })).rejects.toMatchObject({
+      status: 403,
+      code: 'workspace_access_denied',
+      exitCode: 10,
+    });
+  });
+
   it('serialises a JSON body for writes', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ id: 'post_1' }, { status: 201 }));
     await request({ method: 'POST', path: '/social-posts', body: { content: 'hello' } });

@@ -109,6 +109,18 @@ const MODULES: Array<{ names: string[]; load: () => Promise<Registrar> }> = [
     names: ['media'],
     load: async () => (await import('./commands/media.js')).registerMediaCommands,
   },
+  {
+    names: ['connect'],
+    load: async () => (await import('./commands/connect.js')).registerConnectCommands,
+  },
+  {
+    names: ['webhook', 'webhooks'],
+    load: async () => (await import('./commands/webhook.js')).registerWebhookCommands,
+  },
+  {
+    names: ['ai'],
+    load: async () => (await import('./commands/ai.js')).registerAiCommands,
+  },
 ];
 
 function firstCommandToken(argv: string[]): string | undefined {

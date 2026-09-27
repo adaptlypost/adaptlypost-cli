@@ -34,6 +34,8 @@ export const EXIT_CODE_MEANINGS: Record<ExitCodeValue, string> = {
 export const API_CODE_PERMISSION_DENIED = "permission_denied";
 export const API_CODE_SUBSCRIPTION_REQUIRED = "subscription_required";
 export const API_CODE_TOKEN_ISSUER_LOST_ACCESS = "token_issuer_lost_access";
+export const API_CODE_WORKSPACE_ACCESS_DENIED = "workspace_access_denied";
+export const API_CODE_OAUTH_ACCOUNT_NOT_FOUND = "oauth_account_not_found";
 
 export function httpStatusToExitCode(status: number, apiCode?: string): ExitCodeValue {
   if (status >= 200 && status < 400) return ExitCode.OK;

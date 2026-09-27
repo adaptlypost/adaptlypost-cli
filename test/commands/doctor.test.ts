@@ -56,7 +56,7 @@ const ME = {
   tokenType: 'api_token',
   tokenId: 'tok_1',
   tokenName: 'CI deploy',
-  workspace: { id: 'ws_1', name: 'Acme' },
+  workspace: { id: 'ws_1' },
   organizationId: 'org_1',
   role: { key: 'editor', name: 'Editor' },
   issuerRole: 'admin',
@@ -174,7 +174,7 @@ describe('doctor', () => {
     expect(checkFor('api').detail).toContain('https://post.adaptlypost.com/post/api/v1');
     expect(checkFor('rate limit')).toMatchObject({ status: 'pass', detail: '599 of 600 left, resets in 41s' });
     expect(checkFor('clock').status).toBe('pass');
-    expect(checkFor('role')).toMatchObject({ status: 'pass', detail: 'Editor in Acme: draft, schedule, publish' });
+    expect(checkFor('role')).toMatchObject({ status: 'pass', detail: 'Editor in ws_1: draft, schedule, publish' });
     expect(checkFor('openapi').detail).toBe('reachable, version 1.0.0');
   });
 
@@ -192,7 +192,7 @@ describe('doctor', () => {
 
     expect(checkFor('api').status).toBe('pass');
     expect(checkFor('role')).toMatchObject({ status: 'warn' });
-    expect(checkFor('role').detail).toBe('Contributor in Acme: draft. The key is valid but cannot publish');
+    expect(checkFor('role').detail).toBe('Contributor in ws_1: draft. The key is valid but cannot publish');
     expect(checkFor('role').fix).toContain('editor or admin role');
     expect(process.exitCode).toBeUndefined();
   });
@@ -203,7 +203,7 @@ describe('doctor', () => {
         jsonResponse({
           ...ME,
           role: { key: 'viewer', name: 'Viewer' },
-          workspace: { id: 'ws_1', name: null },
+          workspace: { id: 'ws_1' },
           can: { draft: false, schedule: false, publish: false },
         }),
     });

@@ -50,7 +50,7 @@ export function describeAbilities(can: Me['can']): string {
 }
 
 function describeWorkspace(me: Me): string {
-  return me.workspace.name ? `${me.workspace.name} (${me.workspace.id})` : me.workspace.id;
+  return me.workspace.id;
 }
 
 function describeRole(me: Me): string {

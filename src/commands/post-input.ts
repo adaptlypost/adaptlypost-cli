@@ -98,6 +98,95 @@ export const CONFIG_FIELD: Partial<Record<PlatformType, keyof PostTargets>> = {
   LINKEDIN: "linkedinConfigs",
 };
 
+export const CONFIG_KEYS: Partial<Record<PlatformType, readonly string[]>> = {
+  FACEBOOK: ["postType", "videoTitle"],
+  INSTAGRAM: ["postType", "trialGraduation"],
+  TIKTOK: [
+    "privacyLevel",
+    "title",
+    "caption",
+    "allowComments",
+    "allowDuet",
+    "allowStitch",
+    "sendAsDraft",
+    "aiGenerated",
+    "brandedContent",
+    "brandedContentOwnBrand",
+    "autoAddMusic",
+  ],
+  PINTEREST: ["boardId", "title", "link"],
+  YOUTUBE: [
+    "postType",
+    "videoTitle",
+    "tags",
+    "privacyStatus",
+    "license",
+    "notifySubscribers",
+    "allowEmbedding",
+    "madeForKids",
+    "categoryId",
+    "playlistId",
+  ],
+  LINKEDIN: ["documentTitle"],
+};
+
+const squash = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+function editDistance(left: string, right: string): number {
+  let previous = Array.from({ length: right.length + 1 }, (_value, index) => index);
+  for (let i = 1; i <= left.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= right.length; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      current[j] = Math.min((previous[j] ?? 0) + 1, (current[j - 1] ?? 0) + 1, (previous[j - 1] ?? 0) + cost);
+    }
+    previous = current;
+  }
+  return previous[right.length] ?? 0;
+}
+
+function closestConfigKey(key: string, known: readonly string[]): string | undefined {
+  const target = squash(key);
+  const exact = known.find((candidate) => squash(candidate) === target);
+  if (exact) return exact;
+  let best: { key: string; distance: number } | undefined;
+  for (const candidate of known) {
+    const distance = editDistance(target, squash(candidate));
+    if (distance <= 2 && (!best || distance < best.distance)) best = { key: candidate, distance };
+  }
+  if (best) return best.key;
+  if (target.length < 4) return undefined;
+  return known.find((candidate) => squash(candidate).includes(target) || target.includes(squash(candidate)));
+}
+
+/** The API drops config keys it does not know without a word, so refuse them here. */
+export function assertConfigKeys(platform: PlatformType, config: object, context = ""): void {
+  const known = CONFIG_KEYS[platform];
+  if (!known) return;
+
+  const idField = platform === "FACEBOOK" ? "pageId" : "connectionId";
+
+  for (const key of Object.keys(config)) {
+    if (known.includes(key)) continue;
+
+    if (key === idField) {
+      throw new CliError(`${context}${platform} config key "${key}" is filled in from the account; leave it out.`, {
+        exitCode: ExitCode.VALIDATION,
+        hint: "Pick the account with --account <id> instead",
+      });
+    }
+
+    const suggestion = closestConfigKey(key, known);
+    throw new CliError(
+      `${context}Unknown ${platform} config key "${key}".${suggestion ? ` Did you mean "${suggestion}"?` : ""}`,
+      {
+        exitCode: ExitCode.VALIDATION,
+        hint: `${platform} config keys: ${known.join(", ")}`,
+      },
+    );
+  }
+}
+
 export const MAX_DOCUMENT_TITLE_LENGTH = 100;
 export const RECURRENCE_MAX_INTERVAL = 30;
 export const RECURRENCE_MIN_OCCURRENCES = 2;
@@ -983,6 +1072,8 @@ function buildConfigs(
         hint: `Configs exist for: ${Object.keys(CONFIG_FIELD).join(", ")}`,
       });
     }
+
+    assertConfigKeys(platform, config);
 
     const documentTitle = platform === "LINKEDIN" ? config.documentTitle : undefined;
     if (

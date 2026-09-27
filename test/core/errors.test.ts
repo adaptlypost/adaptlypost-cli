@@ -118,6 +118,53 @@ describe("access denials", () => {
     expect(accessHintFor(404, "not_found", {})).toBeUndefined();
   });
 
+  it("names the key role and the creator's role when the key was narrowed", () => {
+    const hint = accessHintFor(403, "permission_denied", {
+      ...denied,
+      role: "contributor",
+      keyRole: "editor",
+      issuerRole: "contributor",
+    });
+    expect(hint).toContain("issued as editor");
+    expect(hint).toContain("now contributor");
+    expect(hint).toContain("acts as contributor");
+    expect(hint).toContain("posts.publish");
+    expect(hint).not.toContain("swapping keys");
+  });
+
+  it("names the key role when the key was not narrowed", () => {
+    const hint = accessHintFor(403, "permission_denied", {
+      ...denied,
+      role: "viewer",
+      keyRole: "viewer",
+      issuerRole: "admin",
+    });
+    expect(hint).toContain("This key's role is viewer");
+    expect(hint).toContain("Ask a workspace admin for a key issued under a role that has it");
+  });
+
+  it("explains a workspace header the token cannot act in", () => {
+    const error = new ApiError({
+      status: 403,
+      body: { code: "workspace_access_denied", message: "This API key belongs to a single workspace" },
+    });
+    expect(error.exitCode).toBe(ExitCode.FORBIDDEN);
+    expect(error.code).toBe("workspace_access_denied");
+    expect(error.hint).toContain("X-Workspace-Id");
+    expect(error.hint).toContain("config unset workspaceId");
+    expect(error.hint).toContain("ADAPTLYPOST_WORKSPACE_ID");
+  });
+
+  it("explains an OAuth login without an account", () => {
+    const error = new ApiError({
+      status: 401,
+      body: { statusCode: 401, code: "oauth_account_not_found", message: "You signed in as a@b.c" },
+    });
+    expect(error.exitCode).toBe(ExitCode.AUTH);
+    expect(error.code).toBe("oauth_account_not_found");
+    expect(error.hint).toContain("has no AdaptlyPost account");
+  });
+
   it("keeps an explicit hint over the derived one", () => {
     const error = new ApiError({ status: 403, body: denied, hint: "custom" });
     expect(error.hint).toBe("custom");

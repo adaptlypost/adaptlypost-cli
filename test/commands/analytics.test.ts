@@ -39,6 +39,8 @@ describe('registerAnalyticsCommands', () => {
       'timeseries',
       'breakdown',
       'posts',
+      'top',
+      'discovered',
       'sync-status',
       'sync',
     ]);
@@ -54,7 +56,7 @@ describe('registerAnalyticsCommands', () => {
   it('gives every reporting verb a date range and a platform filter', () => {
     const program = buildProgram();
 
-    for (const name of ['overview', 'timeseries', 'breakdown', 'posts']) {
+    for (const name of ['overview', 'timeseries', 'breakdown', 'posts', 'top', 'discovered']) {
       expect(optionNames(subcommand(program, name))).toEqual(
         expect.arrayContaining(['--from', '--to', '--platform']),
       );
@@ -67,6 +69,15 @@ describe('registerAnalyticsCommands', () => {
     expect(optionNames(subcommand(program, 'posts'))).toEqual(
       expect.arrayContaining(['--sort-by', '--page', '--limit', '--all']),
     );
+  });
+
+  it('gives top a sort and a limit, and discovered a limit', () => {
+    const program = buildProgram();
+
+    expect(optionNames(subcommand(program, 'top'))).toEqual(expect.arrayContaining(['--sort-by', '--limit']));
+    expect(subcommand(program, 'top').opts()).toMatchObject({ sortBy: 'VIEWS', limit: '10' });
+    expect(optionNames(subcommand(program, 'discovered'))).toContain('--limit');
+    expect(subcommand(program, 'discovered').opts().limit).toBe('200');
   });
 
   it('gives timeseries a granularity flag and sync a wait flag', () => {

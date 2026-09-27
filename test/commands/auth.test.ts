@@ -8,7 +8,7 @@ const EDITOR_ME: Me = {
   tokenType: 'api_token',
   tokenId: 'tok_1',
   tokenName: 'CI deploy',
-  workspace: { id: 'ws_1', name: 'Acme' },
+  workspace: { id: 'ws_1' },
   organizationId: 'org_1',
   role: { key: 'editor', name: 'Editor' },
   issuerRole: 'admin',
@@ -262,7 +262,7 @@ describe('whoami', () => {
     expect(stdout).toContain('adaptly_stor…');
     expect(stdout).toContain('"CI deploy", from credentials file');
     expect(stdout).toContain('https://post.adaptlypost.com/post/api/v1');
-    expect(stdout).toContain('workspace  Acme (ws_1)');
+    expect(stdout).toContain('workspace  ws_1');
     expect(stdout).toContain('role       Editor (editor, key issued by admin)');
     expect(stdout).toContain('can        draft, schedule, publish');
     expect(stdout).toContain('1 connected account, 1 platform');
@@ -296,7 +296,7 @@ describe('whoami', () => {
   it('says a viewer key is read only', async () => {
     state.me = {
       ...EDITOR_ME,
-      workspace: { id: 'ws_1', name: null },
+      workspace: { id: 'ws_1' },
       role: { key: 'viewer', name: 'Viewer' },
       issuerRole: 'admin',
       can: { draft: false, schedule: false, publish: false },
@@ -332,7 +332,7 @@ describe('whoami', () => {
     expect(payload.data).toMatchObject({
       tokenType: 'api_token',
       tokenName: 'CI deploy',
-      workspace: { id: 'ws_1', name: 'Acme' },
+      workspace: { id: 'ws_1' },
       role: { key: 'editor', name: 'Editor' },
       issuerRole: 'admin',
       permissions: ['posts.read', 'posts.draft', 'posts.schedule', 'posts.publish'],

@@ -280,7 +280,7 @@ export const CONFIG_KEYS: Record<string, ConfigKeyDefinition> = {
     key: 'workspaceId',
     scope: 'profile',
     products: 'all',
-    description: 'Workspace this profile talks to',
+    description: 'Workspace this profile talks to, sent as the X-Workspace-Id header',
     parse: parseNonEmpty('workspaceId'),
     format: formatValue,
   },

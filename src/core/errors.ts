@@ -1,7 +1,10 @@
+import { PRODUCT } from "../product.js";
 import {
+  API_CODE_OAUTH_ACCOUNT_NOT_FOUND,
   API_CODE_PERMISSION_DENIED,
   API_CODE_SUBSCRIPTION_REQUIRED,
   API_CODE_TOKEN_ISSUER_LOST_ACCESS,
+  API_CODE_WORKSPACE_ACCESS_DENIED,
   ExitCode,
   httpStatusToExitCode,
   type ExitCodeValue,
@@ -95,6 +98,8 @@ export class ApiError extends Error {
 export interface AccessDenial {
   requiredPermission?: string;
   role?: string;
+  keyRole?: string;
+  issuerRole?: string;
   tokenType?: string;
 }
 
@@ -104,34 +109,70 @@ export function readAccessDenial(body: unknown): AccessDenial {
     const value = body[key];
     return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
   };
-  return { requiredPermission: pick("requiredPermission"), role: pick("role"), tokenType: pick("tokenType") };
+  return {
+    requiredPermission: pick("requiredPermission"),
+    role: pick("role"),
+    keyRole: pick("keyRole"),
+    issuerRole: pick("issuerRole"),
+    tokenType: pick("tokenType"),
+  };
+}
+
+function isNarrowed(denial: AccessDenial): boolean {
+  return (
+    denial.tokenType !== "oauth" &&
+    denial.keyRole !== undefined &&
+    denial.role !== undefined &&
+    denial.keyRole !== denial.role
+  );
+}
+
+function permissionLead(denial: AccessDenial): string {
+  const { requiredPermission, role, keyRole, issuerRole, tokenType } = denial;
+  const needs = requiredPermission === undefined ? "" : ` and this needs the ${requiredPermission} permission`;
+
+  if (isNarrowed(denial)) {
+    return `This key was issued as ${keyRole}, but the member who created it is now ${issuerRole ?? role}, so the key acts as ${role}${needs}.`;
+  }
+
+  const who = tokenType === "oauth" ? "Your role" : "This key's role";
+  const shown = tokenType === "oauth" ? role : (keyRole ?? role);
+  if (shown !== undefined && requiredPermission !== undefined) return `${who} is ${shown}${needs}.`;
+  if (requiredPermission !== undefined) {
+    return `This needs the ${requiredPermission} permission, which ${who.toLowerCase()} does not have.`;
+  }
+  if (shown !== undefined) return `${who} is ${shown}, which does not allow this.`;
+  return `${who} does not allow this.`;
 }
 
 export function accessHintFor(status: number, code: string, body: unknown): string | undefined {
   if (status === 401 && code === API_CODE_TOKEN_ISSUER_LOST_ACCESS) {
     return "The member who created this key no longer has access to the workspace, so the key stopped working. Ask a workspace admin for a new key.";
   }
+  if (status === 401 && code === API_CODE_OAUTH_ACCOUNT_NOT_FOUND) {
+    return `The login behind this token has no ${PRODUCT.displayName} account. Connect again with the email you use on ${PRODUCT.displayName}, or use an API key from ${PRODUCT.tokensUrl}.`;
+  }
   if (status !== 403) return undefined;
   if (code === API_CODE_SUBSCRIPTION_REQUIRED) {
     return "The workspace plan does not cover this. A workspace admin can change the plan in the dashboard.";
   }
+  if (code === API_CODE_WORKSPACE_ACCESS_DENIED) {
+    return (
+      `The X-Workspace-Id header names a workspace this token cannot act in. An API key only works in its own workspace. ` +
+      `Clear the setting with "${PRODUCT.binName} config unset workspaceId" and unset ${PRODUCT.envPrefix}_WORKSPACE_ID, ` +
+      "or use a key created in that workspace."
+    );
+  }
   if (code !== API_CODE_PERMISSION_DENIED) return undefined;
 
-  const { requiredPermission, role, tokenType } = readAccessDenial(body);
-  const who = tokenType === "oauth" ? "Your role" : "This key's role";
-  const lead =
-    role !== undefined && requiredPermission !== undefined
-      ? `${who} is ${role} and this needs the ${requiredPermission} permission.`
-      : requiredPermission !== undefined
-        ? `This needs the ${requiredPermission} permission, which ${who.toLowerCase()} does not have.`
-        : role !== undefined
-          ? `${who} is ${role}, which does not allow this.`
-          : `${who} does not allow this.`;
+  const denial = readAccessDenial(body);
   const ask =
-    tokenType === "oauth"
+    denial.tokenType === "oauth"
       ? "Ask a workspace admin to change your role."
-      : "Ask a workspace admin for a key issued under a role that has it. Retrying or swapping keys of the same role will not help.";
-  return `${lead} ${ask}`;
+      : isNarrowed(denial)
+        ? "A key never does more than its creator. Ask a workspace admin to restore the creator's role, or for a key from a member whose role has it."
+        : "Ask a workspace admin for a key issued under a role that has it. Retrying or swapping keys of the same role will not help.";
+  return `${permissionLead(denial)} ${ask}`;
 }
 
 export function flattenApiMessage(body: unknown): { message: string | null; details: string[] | null } {

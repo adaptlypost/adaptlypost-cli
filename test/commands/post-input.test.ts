@@ -7,6 +7,8 @@ import { describe, expect, it } from "vitest";
 import { ExitCode } from "../../src/core/exit-codes.js";
 import type { SocialAccount } from "../../src/api/types.js";
 import {
+  CONFIG_KEYS,
+  assertConfigKeys,
   buildPostBody,
   buildTargets,
   inferContentType,
@@ -613,5 +615,38 @@ describe("inspectLocalMedia", () => {
     await expect(inspectLocalMedia(file("bundle.zip", zip))).rejects.toMatchObject({
       exitCode: ExitCode.VALIDATION,
     });
+  });
+});
+
+describe("assertConfigKeys", () => {
+  it("accepts every key the API reads", () => {
+    for (const [platform, keys] of Object.entries(CONFIG_KEYS)) {
+      const config = Object.fromEntries((keys ?? []).map((key) => [key, "x"]));
+      expect(() => assertConfigKeys(platform as never, config)).not.toThrow();
+    }
+  });
+
+  it("refuses a key the API would drop and suggests the real one", () => {
+    const attempt = (platform: string, key: string): unknown => {
+      try {
+        assertConfigKeys(platform as never, { [key]: "x" });
+      } catch (error) {
+        return error;
+      }
+      return undefined;
+    };
+
+    expect(attempt("YOUTUBE", "title")).toMatchObject({
+      exitCode: ExitCode.VALIDATION,
+      message: 'Unknown YOUTUBE config key "title". Did you mean "videoTitle"?',
+    });
+    expect(attempt("TIKTOK", "privacy_level")).toMatchObject({ message: expect.stringContaining('"privacyLevel"') });
+    expect(attempt("PINTEREST", "board")).toMatchObject({ message: expect.stringContaining('"boardId"') });
+    expect(attempt("LINKEDIN", "zzz")).toMatchObject({ message: 'Unknown LINKEDIN config key "zzz".' });
+  });
+
+  it("refuses the id field, which the CLI fills in from the account", () => {
+    expect(() => assertConfigKeys("FACEBOOK", { pageId: "p" })).toThrow(/filled in from the account/);
+    expect(() => assertConfigKeys("INSTAGRAM", { connectionId: "c" })).toThrow(/filled in from the account/);
   });
 });

@@ -5,7 +5,9 @@ import {
   getAnalyticsSyncStatus,
   getAnalyticsTimeseries,
   getPlatformBreakdown,
+  listDiscoveredPosts,
   listPostAnalytics,
+  listTopPosts,
   triggerAnalyticsSync,
 } from '../api/client.js';
 import {
@@ -16,6 +18,7 @@ import {
   type AnalyticsSortMetric,
   type AnalyticsSyncStatus,
   type AnalyticsTimeseriesPoint,
+  type DiscoveredPost,
   type PlatformBreakdown,
   type PlatformType,
   type PostAnalytics,
@@ -49,6 +52,10 @@ const DAY_MS = 86_400_000;
 const DEFAULT_POSTS_LIMIT = 20;
 const MAX_POSTS_LIMIT = 100;
 const MAX_POST_PAGES = 50;
+const DEFAULT_TOP_LIMIT = 10;
+const MAX_TOP_LIMIT = 50;
+const DEFAULT_DISCOVERED_LIMIT = 200;
+const MAX_DISCOVERED_LIMIT = 1000;
 const SYNC_POLL_INTERVAL_MS = 15_000;
 const SYNC_POLL_TIMEOUT_MS = 15 * 60_000;
 
@@ -75,6 +82,15 @@ export interface PostsOptions extends RangeOptions {
   page: string | number;
   limit: string | number;
   all?: boolean;
+}
+
+export interface TopOptions extends RangeOptions {
+  sortBy: AnalyticsSortMetric;
+  limit: string | number;
+}
+
+export interface DiscoveredOptions extends RangeOptions {
+  limit: string | number;
 }
 
 export interface SyncOptions {
@@ -475,6 +491,76 @@ const runPosts = async (options: PostsOptions): Promise<void> => {
   }
 };
 
+const runTop = async (options: TopOptions): Promise<void> => {
+  const range = resolveDateRange(options.from, options.to);
+  const limit = validateLimit(Number(options.limit ?? DEFAULT_TOP_LIMIT), 1, MAX_TOP_LIMIT);
+  const { posts } = await withProgress('Loading top posts…', () =>
+    listTopPosts({ ...range, platforms: platformsOf(options), sortBy: options.sortBy, limit }),
+  );
+
+  if (isMachine()) {
+    printResult('analytics.top', posts, {
+      ...range,
+      sortBy: options.sortBy,
+      limit,
+      total: posts.length,
+      hasMore: false,
+    });
+    return;
+  }
+
+  print(`${rangeHeader(range, options.platform)} · top ${limit} by ${options.sortBy}`);
+  print();
+
+  if (posts.length === 0) {
+    print('No posts with analytics in this window.');
+    return;
+  }
+
+  printTable(posts, POSTS_COLUMNS);
+  print();
+  print(`${posts.length} ${posts.length === 1 ? 'post' : 'posts'}`);
+};
+
+const oneLine = (text: string | null): string => (text ?? '').replace(/\s+/g, ' ').trim() || '—';
+
+const DISCOVERED_COLUMNS: Column<DiscoveredPost>[] = [
+  { header: 'PLATFORM', value: (post) => post.platform },
+  { header: 'PUBLISHED', value: (post) => day(post.publishedAt) },
+  { header: 'ACCOUNT', value: (post) => post.accountName ?? '—' },
+  { header: 'TEXT', value: (post) => oneLine(post.text) },
+  { header: 'LINK', value: (post) => post.permalink ?? '—' },
+];
+
+const runDiscovered = async (options: DiscoveredOptions): Promise<void> => {
+  const range = resolveDateRange(options.from, options.to);
+  const limit = validateLimit(Number(options.limit ?? DEFAULT_DISCOVERED_LIMIT), 1, MAX_DISCOVERED_LIMIT);
+  const { posts } = await withProgress('Loading discovered posts…', () =>
+    listDiscoveredPosts({ ...range, platforms: platformsOf(options), limit }),
+  );
+
+  if (isMachine()) {
+    printResult('analytics.discovered', posts, { ...range, limit, total: posts.length, hasMore: false });
+    return;
+  }
+
+  print(`${rangeHeader(range, options.platform)} · published outside AdaptlyPost`);
+  print();
+
+  if (posts.length === 0) {
+    print('No posts published elsewhere in this window.');
+    return;
+  }
+
+  printTable(posts, DISCOVERED_COLUMNS);
+  print();
+  print(`${posts.length} ${posts.length === 1 ? 'post' : 'posts'}`);
+
+  if (posts.length === limit) {
+    hint(`showing the first ${limit}; raise --limit (up to ${MAX_DISCOVERED_LIMIT}) or narrow --from`);
+  }
+};
+
 const SYNC_COLUMNS: Column<AnalyticsSyncStatus['platforms'][number]>[] = [
   { header: 'PLATFORM', value: (row) => row.platform },
   { header: 'ACCOUNT', value: (row) => row.accountName ?? '—' },
@@ -667,6 +753,32 @@ export const registerAnalyticsCommands = (program: Command): void => {
     .option('--all', `page through every result, up to ${MAX_POST_PAGES} requests`)
     .action(async (options: PostsOptions) => {
       await runPosts(options);
+    });
+
+  withPlatforms(
+    withRange(analytics.command('top').description('best-performing posts in the window by one metric')),
+  )
+    .option(
+      '--sort-by <metric>',
+      `sort metric: ${ANALYTICS_SORT_METRICS.join(', ')}`,
+      normalizeSortMetric,
+      'VIEWS' as AnalyticsSortMetric,
+    )
+    .option('--limit <n>', `posts to return, 1..${MAX_TOP_LIMIT}`, String(DEFAULT_TOP_LIMIT))
+    .action(async (options: TopOptions) => {
+      await runTop(options);
+    });
+
+  withPlatforms(
+    withRange(
+      analytics
+        .command('discovered')
+        .description('posts found on the connected accounts that were not published through AdaptlyPost'),
+    ),
+  )
+    .option('--limit <n>', `posts to return, 1..${MAX_DISCOVERED_LIMIT}`, String(DEFAULT_DISCOVERED_LIMIT))
+    .action(async (options: DiscoveredOptions) => {
+      await runDiscovered(options);
     });
 
   analytics

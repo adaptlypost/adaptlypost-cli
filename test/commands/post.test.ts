@@ -394,6 +394,27 @@ describe("post create", () => {
     expect(client.createPost).not.toHaveBeenCalled();
   });
 
+  it("refuses a misnamed --config key instead of letting the API drop it", async () => {
+    await expect(
+      run(["post", "create", "-t", "hi", "-a", "ig_7c3e", "--config", 'INSTAGRAM={"post_type":"REEL"}', "--dry-run"]),
+    ).rejects.toMatchObject({ exitCode: 5, message: expect.stringContaining('Did you mean "postType"') });
+    expect(client.listSocialAccounts).not.toHaveBeenCalled();
+  });
+
+  it("refuses a misnamed key in a frontmatter platform block", async () => {
+    const file = join(workspace, "bad-config.md");
+    writeFileSync(file, ["---", "accounts: [ig_7c3e]", "instagram:", "  trial: MANUAL", "---", "Reel", ""].join("\n"));
+
+    await expect(run(["post", "create", "--file", file, "--dry-run"])).rejects.toMatchObject({ exitCode: 5 });
+    expect(client.createPost).not.toHaveBeenCalled();
+  });
+
+  it("refuses a connection id inside a platform config", async () => {
+    await expect(
+      run(["post", "create", "-t", "hi", "--config", 'YOUTUBE={"connectionId":"yt_1"}', "--dry-run"]),
+    ).rejects.toMatchObject({ exitCode: 5 });
+  });
+
   it("fails before the write when an account is not in the workspace", async () => {
     await expect(
       run(["post", "create", "-t", "hi", "-P", "TWITTER", "-a", "nope"]),
@@ -437,6 +458,89 @@ describe("post update", () => {
       linkedinConnectionIds: ["li_22aa"],
       linkedinConfigs: [{ connectionId: "li_22aa", documentTitle: "Renamed deck" }],
     });
+  });
+
+  it("resends the current targets with --alt, because the API only saves alt text with them", async () => {
+    vi.mocked(client.getPost).mockResolvedValue({
+      id: "post_1",
+      status: "SCHEDULED",
+      contentType: "IMAGE",
+      text: "Launch",
+      timezone: "UTC",
+      mediaUrls: ["https://cdn/hero.png"],
+      platforms: [
+        { id: "pp_1", platform: "TWITTER", status: "PENDING", connectionId: "tw_4d1b", text: "Short launch", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
+        { id: "pp_2", platform: "INSTAGRAM", status: "PENDING", connectionId: "ig_7c3e", instagramPostType: "FEED", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
+        { id: "pp_3", platform: "FACEBOOK", status: "PENDING", pageId: "fb_page_1", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
+        { id: "pp_4", platform: "TIKTOK", status: "PENDING", connectionId: "tt_1", tiktokPrivacyLevel: "SELF_ONLY", tiktokAllowDuet: false, mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
+      ],
+      createdAt: "",
+      updatedAt: "",
+      userId: "u",
+    });
+
+    await run(["post", "update", "post_1", "--alt", "The CLI in a dark terminal", "--dry-run"]);
+
+    expect(client.getPost).toHaveBeenCalledWith("post_1");
+    expect(stdoutJson().data).toEqual({
+      mediaAltTexts: ["The CLI in a dark terminal"],
+      platforms: ["TWITTER", "INSTAGRAM", "FACEBOOK", "TIKTOK"],
+      twitterConnectionIds: ["tw_4d1b"],
+      instagramConnectionIds: ["ig_7c3e"],
+      instagramConfigs: [{ connectionId: "ig_7c3e", postType: "FEED" }],
+      pageIds: ["fb_page_1"],
+      tiktokConnectionIds: ["tt_1"],
+      tiktokConfigs: [{ connectionId: "tt_1", privacyLevel: "SELF_ONLY", allowDuet: false }],
+      platformTexts: [{ platform: "TWITTER", text: "Short launch" }],
+    });
+  });
+
+  it("reads alt text from a file for an update", async () => {
+    vi.mocked(client.getPost).mockResolvedValue({
+      id: "post_1",
+      status: "DRAFT",
+      contentType: "IMAGE",
+      timezone: "UTC",
+      mediaUrls: ["https://cdn/hero.png"],
+      platforms: [
+        { id: "pp_1", platform: "LINKEDIN", status: "PENDING", connectionId: "li_22aa", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
+      ],
+      createdAt: "",
+      updatedAt: "",
+      userId: "u",
+    });
+    const file = join(workspace, "update-alt.md");
+    writeFileSync(file, ["---", 'alt: ["A chart going up"]', "---", ""].join("\n"));
+
+    await run(["post", "update", "post_1", "--file", file, "--dry-run"]);
+
+    expect(stdoutJson().data).toMatchObject({
+      mediaAltTexts: ["A chart going up"],
+      platforms: ["LINKEDIN"],
+      linkedinConnectionIds: ["li_22aa"],
+    });
+  });
+
+  it("keeps --alt with a new target set instead of fetching the post", async () => {
+    vi.mocked(client.listSocialAccounts).mockResolvedValue({ accounts });
+
+    await run(["post", "update", "post_1", "-P", "TWITTER", "-a", "tw_4d1b", "--alt", "Hero", "--yes", "--dry-run"]);
+
+    expect(client.getPost).not.toHaveBeenCalled();
+    expect(stdoutJson().data).toMatchObject({
+      platforms: ["TWITTER"],
+      twitterConnectionIds: ["tw_4d1b"],
+      mediaAltTexts: ["Hero"],
+    });
+  });
+
+  it("refuses --alt with --account but no --platform", async () => {
+    vi.mocked(client.listSocialAccounts).mockResolvedValue({ accounts });
+
+    await expect(
+      run(["post", "update", "post_1", "-a", "tw_4d1b", "--alt", "Hero", "--dry-run"]),
+    ).rejects.toMatchObject({ exitCode: 2 });
+    expect(client.updatePost).not.toHaveBeenCalled();
   });
 
   it("sends only the fields that were given", async () => {
@@ -608,6 +712,66 @@ describe("post bulk", () => {
     expect(client.bulkSchedulePosts).not.toHaveBeenCalled();
   });
 
+  it("infers the content type of a --dir post from its media", async () => {
+    const dir = mkdtempSync(join(workspace, "posts-"));
+    writeFileSync(join(dir, "01.md"), ["---", "at: 2026-09-19T09:00:00Z", "media: [https://cdn/clip.mp4]", "---", "Clip", ""].join("\n"));
+    writeFileSync(
+      join(dir, "02.md"),
+      ["---", "at: 2026-09-20T09:00:00Z", "media: [https://cdn/a.png, https://cdn/b.png]", "---", "Pair", ""].join("\n"),
+    );
+    writeFileSync(join(dir, "03.md"), ["---", "at: 2026-09-21T09:00:00Z", "---", "Words", ""].join("\n"));
+
+    await run(["post", "bulk", "--dir", dir, "-P", "TWITTER", "--dry-run"]);
+
+    const [batch] = stdoutJson().data as { posts: { contentType: string }[] }[];
+    expect(batch?.posts.map((item) => item.contentType)).toEqual(["VIDEO", "CAROUSEL", "TEXT"]);
+  });
+
+  it("refuses a --dir post with a misnamed config key", async () => {
+    const dir = mkdtempSync(join(workspace, "posts-"));
+    writeFileSync(
+      join(dir, "01.md"),
+      ["---", "at: 2026-09-19T09:00:00Z", "youtube:", "  title: Launch", "---", "Clip", ""].join("\n"),
+    );
+
+    await expect(run(["post", "bulk", "--dir", dir, "-P", "YOUTUBE"])).rejects.toMatchObject({
+      exitCode: 5,
+      message: expect.stringContaining("01.md"),
+    });
+  });
+
+  it("reads an alt column aligned with media", async () => {
+    const path = csvPath(
+      ["text,scheduledAt,media,alt", "Pair,2026-09-19T09:00:00Z,https://cdn/a.png;https://cdn/b.png,First;Second", ""].join("\n"),
+    );
+
+    await run(["post", "bulk", "--csv", path, "-P", "TWITTER", "--dry-run"]);
+
+    const [batch] = stdoutJson().data as { posts: Record<string, unknown>[] }[];
+    expect(batch?.posts[0]).toMatchObject({
+      contentType: "CAROUSEL",
+      mediaUrls: ["https://cdn/a.png", "https://cdn/b.png"],
+      mediaAltTexts: ["First", "Second"],
+    });
+  });
+
+  it("refuses more alt texts than media files in a row", async () => {
+    const path = csvPath(["text,scheduledAt,media,alt", "One,2026-09-19T09:00:00Z,https://cdn/a.png,First;Second", ""].join("\n"));
+
+    await expect(run(["post", "bulk", "--csv", path, "-P", "TWITTER"])).rejects.toMatchObject({ exitCode: 5 });
+  });
+
+  it("refuses a misnamed key in a config column with its row number", async () => {
+    const path = csvPath(
+      ["text,scheduledAt,config_TIKTOK", 'Clip,2026-09-19T09:00:00Z,"{""privacy"":""SELF_ONLY""}"', ""].join("\n"),
+    );
+
+    await expect(run(["post", "bulk", "--csv", path, "-P", "TIKTOK"])).rejects.toMatchObject({
+      exitCode: 5,
+      message: expect.stringMatching(/^Row 2: Unknown TIKTOK config key "privacy"\. Did you mean "privacyLevel"\?/),
+    });
+  });
+
   it("refuses a --dir post with repeat keys", async () => {
     const dir = mkdtempSync(join(workspace, "posts-"));
     writeFileSync(
@@ -675,8 +839,8 @@ describe("post watch", () => {
       timezone: "UTC",
       mediaUrls: [],
       platforms: [
-        { id: "pp_1", platform: "TWITTER", status: "PENDING", mediaUrls: [], previewUrls: [], createdAt: "", updatedAt: "" },
-        { id: "pp_2", platform: "LINKEDIN", status: "PENDING", mediaUrls: [], previewUrls: [], createdAt: "", updatedAt: "" },
+        { id: "pp_1", platform: "TWITTER", status: "PENDING", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
+        { id: "pp_2", platform: "LINKEDIN", status: "PENDING", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
       ],
       createdAt: "",
       updatedAt: "",

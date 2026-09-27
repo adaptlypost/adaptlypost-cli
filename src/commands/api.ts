@@ -139,6 +139,7 @@ export function registerApiCommand(program: Command): void {
         const headers: Record<string, string> = {
           Accept: 'application/json',
           'User-Agent': userAgent(PRODUCT.id),
+          ...(profile.workspaceId ? { 'X-Workspace-Id': profile.workspaceId } : {}),
           ...parseHeaders(options.header),
           Authorization: `Bearer ${profile.token}`,
         };

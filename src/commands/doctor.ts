@@ -264,7 +264,7 @@ async function checkRole(apiUrl: string, token: string | undefined, tokenValid: 
   if (!response.ok || !body) return check('role', 'warn', `/me answered ${response.status}`);
 
   const me = body as unknown as Me;
-  const label = `${me.role.name} in ${me.workspace.name ?? me.workspace.id}: ${describeAbilities(me.can)}`;
+  const label = `${me.role.name} in ${me.workspace.id}: ${describeAbilities(me.can)}`;
   if (me.can.publish) return check('role', 'pass', label);
   return check(
     'role',

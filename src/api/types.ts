@@ -224,7 +224,7 @@ export interface Me {
   tokenType: TokenType;
   tokenId: string | null;
   tokenName: string | null;
-  workspace: { id: string; name: string | null };
+  workspace: { id: string };
   organizationId: string;
   role: { key: string; name: string };
   issuerRole: string | null;
@@ -353,9 +353,9 @@ export interface SocialPostPlatform {
   platformPostId?: string;
   postUrl?: string;
   errorMessage?: string;
-  rawErrorMessage?: string;
   publishedAt?: string;
   mediaUrls: string[];
+  mediaAltTexts: string[];
   previewUrls: string[];
   createdAt: string;
   updatedAt: string;
@@ -376,6 +376,7 @@ export interface SocialPostPlatform {
   tiktokAutoAddMusic?: boolean;
   tiktokDraftFallback?: boolean;
   instagramPostType?: MetaPostType;
+  instagramTrialGraduation?: InstagramTrialGraduation;
   facebookPostType?: MetaPostType;
   facebookVideoTitle?: string;
   facebookPageExternalId?: string;
@@ -400,6 +401,7 @@ export interface SocialPost {
   timezone: string;
   status: PostStatus;
   thumbnailUrl?: string;
+  thumbnailTimestampMs?: number;
   mediaUrls: string[];
   mediaAltTexts?: string[];
   platforms: SocialPostPlatform[];
@@ -555,6 +557,11 @@ export interface BulkPostInput {
   thumbnailUrl?: string;
   thumbnailTimestampMs?: number;
   platformTexts?: PlatformText[];
+  pinterestConfigs?: PinterestPostConfig[];
+  tiktokConfigs?: TikTokPostConfig[];
+  instagramConfigs?: InstagramPostConfig[];
+  facebookConfigs?: FacebookPostConfig[];
+  youtubeConfigs?: YouTubePostConfig[];
 }
 
 export interface BulkSchedulePostsRequest extends PostTargets {
