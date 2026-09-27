@@ -213,6 +213,7 @@ Per-platform flags on `post create` and `post update`:
 | `--config <PLATFORM=json>` | The platform's `*Configs` entry, one per account of that platform |
 | `--tiktok-privacy <level>` | `tiktokConfigs[].privacyLevel` |
 | `--ig-type <type>` | `instagramConfigs[].postType` |
+| `--ig-trial <graduation>` | `instagramConfigs[].trialGraduation`: `MANUAL` (you share it to followers from the Instagram app) or `SS_PERFORMANCE` (Instagram shares it if it performs well). Video reels only; a story, image or carousel is rejected |
 | `--yt-title <title>` | `youtubeConfigs[].videoTitle` |
 | `--pinterest-board <id>` | `pinterestConfigs[].boardId` |
 | `--document-title <title>` | `linkedinConfigs[].documentTitle`, the title LinkedIn shows on a DOCUMENT post. Max 100 characters, defaults to the file name, ignored for other content types |

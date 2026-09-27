@@ -45,6 +45,14 @@ const accounts: SocialAccount[] = [
     avatarUrl: "",
     status: "active",
   },
+  {
+    id: "ig_7c3e",
+    platform: "INSTAGRAM",
+    displayName: "Acme",
+    username: "acme.ig",
+    avatarUrl: "",
+    status: "active",
+  },
 ];
 
 let written: string[] = [];
@@ -243,6 +251,37 @@ describe("post create", () => {
       linkedinConnectionIds: ["li_22aa"],
       linkedinConfigs: [{ connectionId: "li_22aa", documentTitle: "Q3 report" }],
     });
+    expect(client.createPost).not.toHaveBeenCalled();
+  });
+
+  it("publishes an Instagram reel as a trial reel from --ig-type and --ig-trial", async () => {
+    await run([
+      "post",
+      "create",
+      "-t",
+      "Behind the scenes",
+      "-a",
+      "ig_7c3e",
+      "-m",
+      "https://cdn.example.com/clip.mp4",
+      "--ig-type",
+      "reel",
+      "--ig-trial",
+      "ss_performance",
+      "--dry-run",
+    ]);
+
+    expect(stdoutJson().data).toMatchObject({
+      instagramConnectionIds: ["ig_7c3e"],
+      instagramConfigs: [{ connectionId: "ig_7c3e", postType: "REEL", trialGraduation: "SS_PERFORMANCE" }],
+    });
+    expect(client.createPost).not.toHaveBeenCalled();
+  });
+
+  it("refuses an unknown --ig-trial value before sending anything", async () => {
+    await expect(
+      run(["post", "create", "-t", "Clip", "-a", "ig_7c3e", "-m", "https://cdn/clip.mp4", "--ig-trial", "later"]),
+    ).rejects.toMatchObject({ exitCode: 2 });
     expect(client.createPost).not.toHaveBeenCalled();
   });
 

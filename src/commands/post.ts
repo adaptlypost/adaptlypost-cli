@@ -18,6 +18,7 @@ import {
 } from "../api/client.js";
 import {
   CONTENT_TYPES,
+  INSTAGRAM_TRIAL_GRADUATIONS,
   META_POST_TYPES,
   POST_STATUSES,
   RECURRENCE_FREQUENCIES,
@@ -175,6 +176,7 @@ interface ContentOptions {
   config: string[];
   tiktokPrivacy?: string;
   igType?: string;
+  igTrial?: string;
   ytTitle?: string;
   pinterestBoard?: string;
   documentTitle?: string;
@@ -302,6 +304,17 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
       );
     }
     mergeConfig("INSTAGRAM", { postType });
+  }
+
+  if (options.igTrial !== undefined) {
+    const trialGraduation = options.igTrial.trim().toUpperCase();
+    if (!(INSTAGRAM_TRIAL_GRADUATIONS as readonly string[]).includes(trialGraduation)) {
+      throw new CliError(
+        `Unknown Instagram trial graduation "${options.igTrial}". Expected one of: ${INSTAGRAM_TRIAL_GRADUATIONS.join(", ")}.`,
+        { exitCode: ExitCode.USAGE },
+      );
+    }
+    mergeConfig("INSTAGRAM", { trialGraduation });
   }
 
   if (options.ytTitle !== undefined) mergeConfig("YOUTUBE", { videoTitle: options.ytTitle });
@@ -1406,6 +1419,10 @@ const withContentOptions = (command: Command): Command =>
     .option("--config <PLATFORM=json>", "Per-platform config object, repeatable", collect, [])
     .option("--tiktok-privacy <level>", `TikTok privacy level (${TIKTOK_PRIVACY_LEVELS.join(", ")})`)
     .option("--ig-type <type>", `Instagram post type (${META_POST_TYPES.join(", ")})`)
+    .option(
+      "--ig-trial <graduation>",
+      `Publish an Instagram video reel as a trial reel: MANUAL (you share it from the app) or SS_PERFORMANCE (Instagram shares it if it performs well)`,
+    )
     .option("--yt-title <title>", "YouTube video title")
     .option("--pinterest-board <id>", "Pinterest board id")
     .option(

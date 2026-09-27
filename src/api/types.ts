@@ -124,6 +124,9 @@ export type TikTokPrivacyLevel = (typeof TIKTOK_PRIVACY_LEVELS)[number];
 export const META_POST_TYPES = ['FEED', 'REEL', 'STORY'] as const;
 export type MetaPostType = (typeof META_POST_TYPES)[number];
 
+export const INSTAGRAM_TRIAL_GRADUATIONS = ['MANUAL', 'SS_PERFORMANCE'] as const;
+export type InstagramTrialGraduation = (typeof INSTAGRAM_TRIAL_GRADUATIONS)[number];
+
 export const YOUTUBE_POST_TYPES = ['VIDEO', 'SHORTS'] as const;
 export type YouTubePostType = (typeof YOUTUBE_POST_TYPES)[number];
 
@@ -292,6 +295,7 @@ export interface TikTokPostConfig {
 export interface InstagramPostConfig {
   connectionId: string;
   postType?: MetaPostType;
+  trialGraduation?: InstagramTrialGraduation;
 }
 
 export interface FacebookPostConfig {
