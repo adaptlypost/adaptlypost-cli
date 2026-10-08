@@ -220,6 +220,7 @@ Per-platform flags on `post create` and `post update`:
 | `--ig-trial <graduation>` | `instagramConfigs[].trialGraduation`: `MANUAL` (you share it to followers from the Instagram app) or `SS_PERFORMANCE` (Instagram shares it if it performs well). Video reels only; a story, image or carousel is rejected |
 | `--yt-title <title>` | `youtubeConfigs[].videoTitle` |
 | `--pinterest-board <id>` | `pinterestConfigs[].boardId` |
+| `--gbp-*` | `googleBusinessConfigs[]`, see below |
 | `--document-title <title>` | `linkedinConfigs[].documentTitle`, the title LinkedIn shows on a DOCUMENT post. Max 100 characters, defaults to the file name, ignored for other content types |
 
 Repeat flags, `post create` only:
@@ -231,6 +232,19 @@ Repeat flags, `post create` only:
 | `--on <weekday>` | `recurrence.weekdays`, repeatable, WEEKLY only. `MONDAY` to `SUNDAY` or the first three letters |
 | `--until <YYYY-MM-DD>` | `recurrence.endsOn`, the last day a post may go out. Not with `--count` |
 | `--count <n>` | `recurrence.maxOccurrences`, 2 to 365 posts in total. Not with `--until` |
+
+Google Business Profile (`GOOGLE_BUSINESS`, alias `gbp`) posts to each connected business location. Without any `--gbp-*` flag a location gets a standard update with no button.
+
+| Flag | Values | Notes |
+|---|---|---|
+| `--gbp-topic` | `STANDARD`, `EVENT`, `OFFER` | Required as soon as any other `--gbp-*` flag is set |
+| `--gbp-button` | `BOOK`, `ORDER`, `SHOP`, `LEARN_MORE`, `SIGN_UP`, `CALL` | `CALL` dials the phone number on the business profile and ignores `--gbp-button-url` |
+| `--gbp-button-url` | URL | Required for every button except `CALL` |
+| `--gbp-event-title` | text | Required for `EVENT` and `OFFER` |
+| `--gbp-event-start`, `--gbp-event-end` | `YYYY-MM-DD` or `YYYY-MM-DDTHH:mm` | Required for `EVENT` and `OFFER`. The business's local time, with no timezone |
+| `--gbp-coupon`, `--gbp-redeem-url`, `--gbp-terms` | text, URL, text | `OFFER` only |
+
+A Google Business Profile post is text or one JPEG or PNG image up to 5 MB: no video, no carousels, no alt text, and at most 1500 characters. Google removes posts that put a phone number or email address in the text, so use `--gbp-button CALL` instead. Google reviews each post and can reject it after it publishes. Analytics for Google Business Profile are location-level impressions only; there are no per-post numbers. In a markdown file the same fields go in a `google_business:` (or `gbp:`) block using the API names (`topicType`, `callToActionType`, `eventStart`, ...), and in a bulk CSV in a `config_GOOGLE_BUSINESS` column holding a JSON object.
 
 ### recurring
 

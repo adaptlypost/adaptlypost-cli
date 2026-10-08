@@ -9,6 +9,7 @@ export const PLATFORM_TYPES = [
   'PINTEREST',
   'YOUTUBE',
   'MASTODON',
+  'GOOGLE_BUSINESS',
 ] as const;
 export type PlatformType = (typeof PLATFORM_TYPES)[number];
 
@@ -140,6 +141,20 @@ export type YouTubePrivacyStatus = (typeof YOUTUBE_PRIVACY_STATUSES)[number];
 export const YOUTUBE_LICENSES = ['youtube', 'creativeCommon'] as const;
 export type YouTubeLicense = (typeof YOUTUBE_LICENSES)[number];
 
+export const GOOGLE_BUSINESS_TOPIC_TYPES = ['STANDARD', 'EVENT', 'OFFER'] as const;
+export type GoogleBusinessTopicType = (typeof GOOGLE_BUSINESS_TOPIC_TYPES)[number];
+
+export const GOOGLE_BUSINESS_CALL_TO_ACTION_TYPES = [
+  'BOOK',
+  'ORDER',
+  'SHOP',
+  'LEARN_MORE',
+  'SIGN_UP',
+  'CALL',
+] as const;
+export type GoogleBusinessCallToActionType =
+  (typeof GOOGLE_BUSINESS_CALL_TO_ACTION_TYPES)[number];
+
 export const IMAGE_ASPECT_RATIOS = [
   '1:1',
   '16:9',
@@ -179,6 +194,7 @@ export const CAPTION_PLATFORMS = [
   'LINKEDIN',
   'YOUTUBE',
   'FACEBOOK',
+  'GOOGLE_BUSINESS',
 ] as const;
 export type CaptionPlatform = (typeof CAPTION_PLATFORMS)[number];
 
@@ -323,6 +339,19 @@ export interface LinkedInPostConfig {
   documentTitle?: string;
 }
 
+export interface GoogleBusinessPostConfig {
+  connectionId: string;
+  topicType: GoogleBusinessTopicType;
+  callToActionType?: GoogleBusinessCallToActionType;
+  callToActionUrl?: string;
+  eventTitle?: string;
+  eventStart?: string;
+  eventEnd?: string;
+  offerCouponCode?: string;
+  offerRedeemUrl?: string;
+  offerTerms?: string;
+}
+
 export interface PostTargets {
   pageIds?: string[];
   tiktokConnectionIds?: string[];
@@ -331,6 +360,7 @@ export interface PostTargets {
   twitterConnectionIds?: string[];
   blueskyConnectionIds?: string[];
   mastodonConnectionIds?: string[];
+  googleBusinessConnectionIds?: string[];
   linkedinConnectionIds?: string[];
   pinterestConnectionIds?: string[];
   youtubeConnectionIds?: string[];
@@ -340,6 +370,7 @@ export interface PostTargets {
   facebookConfigs?: FacebookPostConfig[];
   youtubeConfigs?: YouTubePostConfig[];
   linkedinConfigs?: LinkedInPostConfig[];
+  googleBusinessConfigs?: GoogleBusinessPostConfig[];
 }
 
 export interface SocialPostPlatform {
@@ -390,6 +421,15 @@ export interface SocialPostPlatform {
   youtubeMadeForKids?: boolean;
   youtubeCategoryId?: string;
   youtubePlaylistId?: string;
+  googleBusinessTopicType?: GoogleBusinessTopicType;
+  googleBusinessCallToActionType?: GoogleBusinessCallToActionType;
+  googleBusinessCallToActionUrl?: string;
+  googleBusinessEventTitle?: string;
+  googleBusinessEventStart?: string;
+  googleBusinessEventEnd?: string;
+  googleBusinessOfferCouponCode?: string;
+  googleBusinessOfferRedeemUrl?: string;
+  googleBusinessOfferTerms?: string;
 }
 
 export interface SocialPost {
