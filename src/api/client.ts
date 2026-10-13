@@ -24,6 +24,7 @@ import type {
   GenerateImageRequest,
   GenerateImageResponse,
   ImageJob,
+  InstagramAudioResponse,
   ListPostAnalyticsResponse,
   ListPostsQuery,
   ListPostsResponse,
@@ -38,6 +39,7 @@ import type {
   RefineCaptionRequest,
   RetryFailedPlatformsRequest,
   RevokeConnectLinkResponse,
+  SearchInstagramAudioQuery,
   SocialAccountCheck,
   SocialAccountsResponse,
   SocialPost,
@@ -65,6 +67,16 @@ export const checkSocialAccount = (
     method: 'POST',
     path: `/social-accounts/${segment(accountId)}/check`,
     idempotent: true,
+  });
+
+export const searchInstagramAudio = (
+  accountId: string,
+  searchInstagramAudioQuery: SearchInstagramAudioQuery,
+): Promise<InstagramAudioResponse> =>
+  request<InstagramAudioResponse>({
+    method: 'GET',
+    path: `/social-accounts/${segment(accountId)}/instagram-audio`,
+    query: searchInstagramAudioQuery,
   });
 
 export const createUploadUrls = (

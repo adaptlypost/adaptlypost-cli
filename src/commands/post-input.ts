@@ -4,12 +4,25 @@ import { basename, resolve as resolvePath } from "node:path";
 
 import { createUploadUrls } from "../api/client.js";
 import {
+  ASPECT_RATIOS_BY_PLATFORM,
   CONTENT_TYPES,
+  FIRST_COMMENT_MAX_LENGTH,
+  GOOGLE_BUSINESS_CALL_TO_ACTION_TYPES,
+  GOOGLE_BUSINESS_TOPIC_TYPES,
+  INSTAGRAM_AUDIO_VOLUME_MAX,
+  INSTAGRAM_AUDIO_VOLUME_MIN,
+  INSTAGRAM_COLLABORATORS_MAX,
+  MEDIA_ASPECT_RATIOS,
+  MEDIA_ASPECT_RATIO_FITS,
   PLATFORM_TYPES,
   RECURRENCE_FREQUENCIES,
+  THUMBNAIL_KIND_BY_PLATFORM,
   WEEKDAYS,
   type ContentType,
   type CreatePostRequest,
+  type MediaAspectRatio,
+  type MediaAspectRatioFit,
+  type PlatformExtras,
   type PlatformText,
   type PlatformType,
   type PostTargets,
@@ -73,10 +86,24 @@ export interface PostInput {
   draft?: boolean;
   platformTexts?: Partial<Record<PlatformType, string>>;
   platformConfigs?: Partial<Record<PlatformType, Record<string, FrontmatterValue>>>;
+  firstComments?: Partial<Record<PlatformType, string>>;
+  platformThumbnails?: Partial<Record<PlatformType, ThumbnailInput>>;
+  platformAspectRatios?: Partial<Record<PlatformType, AspectRatioInput>>;
+  twitterKeepLinks?: boolean;
   recurrence?: RecurrenceInput;
 }
 
-export const CONNECTION_FIELD: Record<PlatformType, keyof PostTargets> = {
+export interface ThumbnailInput {
+  thumbnailUrl?: string;
+  thumbnailTimestampMs?: number;
+}
+
+export interface AspectRatioInput {
+  aspectRatio?: MediaAspectRatio;
+  fit?: MediaAspectRatioFit;
+}
+
+export const CONNECTION_FIELD: Partial<Record<PlatformType, keyof PostTargets>> = {
   FACEBOOK: "pageIds",
   INSTAGRAM: "instagramConnectionIds",
   THREADS: "threadsConnectionIds",
@@ -87,7 +114,19 @@ export const CONNECTION_FIELD: Record<PlatformType, keyof PostTargets> = {
   LINKEDIN: "linkedinConnectionIds",
   PINTEREST: "pinterestConnectionIds",
   YOUTUBE: "youtubeConnectionIds",
+  GOOGLE_BUSINESS: "googleBusinessConnectionIds",
 };
+
+export function connectionFieldFor(platform: PlatformType): keyof PostTargets {
+  const field = CONNECTION_FIELD[platform];
+  if (!field) {
+    throw new CliError(`${platform} posts can only be created in the AdaptlyPost app.`, {
+      exitCode: ExitCode.VALIDATION,
+      hint: "The API has no way to target this platform; drop it from --platform",
+    });
+  }
+  return field;
+}
 
 export const CONFIG_FIELD: Partial<Record<PlatformType, keyof PostTargets>> = {
   FACEBOOK: "facebookConfigs",
@@ -96,11 +135,12 @@ export const CONFIG_FIELD: Partial<Record<PlatformType, keyof PostTargets>> = {
   PINTEREST: "pinterestConfigs",
   YOUTUBE: "youtubeConfigs",
   LINKEDIN: "linkedinConfigs",
+  GOOGLE_BUSINESS: "googleBusinessConfigs",
 };
 
 export const CONFIG_KEYS: Partial<Record<PlatformType, readonly string[]>> = {
-  FACEBOOK: ["postType", "videoTitle"],
-  INSTAGRAM: ["postType", "trialGraduation"],
+  FACEBOOK: ["postType", "shareToStory", "videoTitle", "textFormatPresetId"],
+  INSTAGRAM: ["postType", "shareToStory", "trialGraduation", "collaborators", "audio"],
   TIKTOK: [
     "privacyLevel",
     "title",
@@ -128,7 +168,20 @@ export const CONFIG_KEYS: Partial<Record<PlatformType, readonly string[]>> = {
     "playlistId",
   ],
   LINKEDIN: ["documentTitle"],
+  GOOGLE_BUSINESS: [
+    "topicType",
+    "callToActionType",
+    "callToActionUrl",
+    "eventTitle",
+    "eventStart",
+    "eventEnd",
+    "offerCouponCode",
+    "offerRedeemUrl",
+    "offerTerms",
+  ],
 };
+
+const INSTAGRAM_AUDIO_KEYS = ["audioId", "title", "artist", "audioVolume", "videoVolume"] as const;
 
 const squash = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, "");
 
@@ -199,9 +252,14 @@ const PLATFORM_ALIASES: Record<string, PlatformType> = {
   li: "LINKEDIN",
   yt: "YOUTUBE",
   tt: "TIKTOK",
+  gbp: "GOOGLE_BUSINESS",
+  googlebusiness: "GOOGLE_BUSINESS",
+  "google-business": "GOOGLE_BUSINESS",
 };
 
 const SCALAR_KEYS = new Map<string, keyof PostInput | keyof RecurrenceInput | "documentTitle">([
+  ["keeplinks", "twitterKeepLinks"],
+  ["twitterkeeplinks", "twitterKeepLinks"],
   ["text", "text"],
   ["platforms", "platforms"],
   ["platform", "platforms"],
@@ -305,6 +363,26 @@ export function normalizeWeekday(value: string): Weekday {
 
   return weekday;
 }
+
+function pickEnum<T extends string>(
+  value: string,
+  allowed: readonly T[],
+  label: string,
+  exitCode: ExitCodeValue,
+): T {
+  const normalized = value.trim().toUpperCase().replace(/[\s-]+/g, "_");
+  const match = allowed.find((candidate) => candidate.toUpperCase() === normalized);
+  if (!match) {
+    throw new CliError(`Unknown ${label} "${value}". Expected one of: ${allowed.join(", ")}.`, { exitCode });
+  }
+  return match;
+}
+
+export const normalizeAspectRatio = (value: string, exitCode: ExitCodeValue = ExitCode.USAGE): MediaAspectRatio =>
+  pickEnum(value, MEDIA_ASPECT_RATIOS, "aspect ratio", exitCode);
+
+export const normalizeAspectRatioFit = (value: string, exitCode: ExitCodeValue = ExitCode.USAGE): MediaAspectRatioFit =>
+  pickEnum(value, MEDIA_ASPECT_RATIO_FITS, "fit", exitCode);
 
 export function assertWholeNumberInRange(
   value: number,
@@ -623,6 +701,88 @@ function platformKey(key: string): PlatformType | undefined {
   return (PLATFORM_TYPES as readonly string[]).includes(upper) ? (upper as PlatformType) : undefined;
 }
 
+const BLOCK_EXTRA_KEYS: Record<string, "firstComment" | "thumbnailUrl" | "thumbnailTimestampMs" | "aspectRatio" | "fit" | "keepLinks"> = {
+  firstcomment: "firstComment",
+  comment: "firstComment",
+  thumbnail: "thumbnailUrl",
+  thumbnailurl: "thumbnailUrl",
+  thumbnailms: "thumbnailTimestampMs",
+  thumbnailtimestampms: "thumbnailTimestampMs",
+  aspect: "aspectRatio",
+  aspectratio: "aspectRatio",
+  fit: "fit",
+  aspectratiofit: "fit",
+  keeplinks: "keepLinks",
+};
+
+export function setFirstComment(input: PostInput, platform: PlatformType, text: string): void {
+  input.firstComments = { ...input.firstComments, [platform]: text };
+}
+
+export function setPlatformThumbnail(input: PostInput, platform: PlatformType, thumbnail: ThumbnailInput): void {
+  input.platformThumbnails = {
+    ...input.platformThumbnails,
+    [platform]: { ...input.platformThumbnails?.[platform], ...thumbnail },
+  };
+}
+
+export function setPlatformAspectRatio(input: PostInput, platform: PlatformType, aspect: AspectRatioInput): void {
+  input.platformAspectRatios = {
+    ...input.platformAspectRatios,
+    [platform]: { ...input.platformAspectRatios?.[platform], ...aspect },
+  };
+}
+
+function takePlatformExtras(
+  input: PostInput,
+  platform: PlatformType,
+  block: FrontmatterMap,
+  blockKey: string,
+): FrontmatterMap {
+  const config: FrontmatterMap = {};
+
+  for (const [key, value] of Object.entries(block)) {
+    const extra = BLOCK_EXTRA_KEYS[squash(key)];
+    const label = `${blockKey}.${key}`;
+
+    if (!extra || value === null) {
+      if (value !== null) config[key] = value;
+      continue;
+    }
+    if (extra === "firstComment") setFirstComment(input, platform, asString(value, label));
+    if (extra === "thumbnailUrl") setPlatformThumbnail(input, platform, { thumbnailUrl: asString(value, label) });
+    if (extra === "thumbnailTimestampMs") {
+      setPlatformThumbnail(input, platform, { thumbnailTimestampMs: asMilliseconds(value, label) });
+    }
+    if (extra === "aspectRatio") {
+      setPlatformAspectRatio(input, platform, {
+        aspectRatio: normalizeAspectRatio(asString(value, label), ExitCode.VALIDATION),
+      });
+    }
+    if (extra === "fit") {
+      setPlatformAspectRatio(input, platform, { fit: normalizeAspectRatioFit(asString(value, label), ExitCode.VALIDATION) });
+    }
+    if (extra === "keepLinks") {
+      if (platform !== "TWITTER") {
+        throw new CliError(`Frontmatter key "${label}" only applies to X (TWITTER).`, { exitCode: ExitCode.VALIDATION });
+      }
+      input.twitterKeepLinks = asBoolean(value, label);
+    }
+  }
+
+  return config;
+}
+
+const asMilliseconds = (value: FrontmatterValue, key: string): number => {
+  const ms = asNumber(value, key);
+  if (!Number.isInteger(ms) || ms < 0) {
+    throw new CliError(`Frontmatter key "${key}" must be a whole number of milliseconds.`, {
+      exitCode: ExitCode.VALIDATION,
+    });
+  }
+  return ms;
+};
+
 export function parsePostInput(source: string): PostInput {
   const { data, body } = parseFrontmatter(source);
   const input: PostInput = {};
@@ -720,6 +880,10 @@ export function parsePostInput(source: string): PostInput {
       };
       continue;
     }
+    if (target === "twitterKeepLinks") {
+      input.twitterKeepLinks = asBoolean(value, rawKey);
+      continue;
+    }
     if (target === "documentTitle") {
       input.platformConfigs = {
         ...input.platformConfigs,
@@ -743,7 +907,8 @@ export function parsePostInput(source: string): PostInput {
     }
 
     const block = asMap(value, rawKey);
-    const { text: platformText, ...config } = block;
+    const { text: platformText, ...rest } = block;
+    const config = takePlatformExtras(input, platform, rest, rawKey);
 
     if (platformText !== undefined && platformText !== null) {
       input.platformTexts = {
@@ -784,6 +949,19 @@ export function mergePostInput(base: PostInput, override: PostInput): PostInput 
         ...config,
       };
     }
+  }
+
+  if (base.firstComments || override.firstComments) {
+    merged.firstComments = { ...base.firstComments, ...override.firstComments };
+  }
+
+  for (const key of ["platformThumbnails", "platformAspectRatios"] as const) {
+    if (!base[key] && !override[key]) continue;
+    const combined: Record<string, object> = { ...base[key] };
+    for (const [platform, entry] of Object.entries(override[key] ?? {})) {
+      combined[platform] = { ...combined[platform], ...entry };
+    }
+    Object.assign(merged, { [key]: combined });
   }
 
   if (base.recurrence || override.recurrence) {
@@ -1029,6 +1207,8 @@ function routeAccounts(
   const connectionsByPlatform = new Map<PlatformType, string[]>();
   const resolved = [...platforms];
 
+  for (const platform of platforms) connectionFieldFor(platform);
+
   for (const id of ids) {
     const account = accounts.find(
       (candidate) => candidate.id === id || candidate.pageId === id,
@@ -1043,7 +1223,7 @@ function routeAccounts(
 
     if (!resolved.includes(account.platform)) resolved.push(account.platform);
 
-    const field = CONNECTION_FIELD[account.platform];
+    const field = connectionFieldFor(account.platform);
     const existing = (targets[field] as string[] | undefined) ?? [];
     if (!existing.includes(account.id)) existing.push(account.id);
     Object.assign(targets, { [field]: existing });
@@ -1074,6 +1254,7 @@ function buildConfigs(
     }
 
     assertConfigKeys(platform, config);
+    const normalized = normalizeConfig(platform, config);
 
     const documentTitle = platform === "LINKEDIN" ? config.documentTitle : undefined;
     if (
@@ -1097,13 +1278,291 @@ function buildConfigs(
     }
 
     const entries = connections.map((connectionId) =>
-      platform === "FACEBOOK" ? { pageId: connectionId, ...config } : { connectionId, ...config },
+      platform === "FACEBOOK" ? { pageId: connectionId, ...normalized } : { connectionId, ...normalized },
     );
 
     Object.assign(configs, { [field]: entries });
   }
 
   return configs;
+}
+
+const INSTAGRAM_USERNAME = /^@?[A-Za-z0-9._]{1,30}$/;
+const FACEBOOK_PRESET_ID = /^\d{1,20}$/;
+const GOOGLE_BUSINESS_EVENT_DATE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/;
+
+const configError = (message: string, hint?: string): CliError =>
+  new CliError(message, { exitCode: ExitCode.VALIDATION, hint });
+
+function configString(value: FrontmatterValue | undefined, label: string): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "string") return value;
+  if (typeof value === "number" && Number.isSafeInteger(value)) return String(value);
+  if (typeof value === "number") throw configError(`${label} must be written in quotes, it is too long for a number.`);
+  if (typeof value === "boolean") return String(value);
+  throw configError(`${label} must be a string.`);
+}
+
+function configBoolean(value: FrontmatterValue | undefined, label: string): boolean | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "boolean") throw configError(`${label} must be true or false.`);
+  return value;
+}
+
+function normalizeCollaborators(value: FrontmatterValue | undefined): string[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  const list = Array.isArray(value) ? value : [value];
+  const usernames: string[] = [];
+
+  for (const entry of list) {
+    const raw = configString(entry, "INSTAGRAM collaborators")?.trim() ?? "";
+    if (!INSTAGRAM_USERNAME.test(raw)) {
+      throw configError(
+        `"${raw}" is not an Instagram username.`,
+        "Use 1 to 30 letters, digits, dots or underscores, with or without a leading @",
+      );
+    }
+    const username = raw.replace(/^@/, "");
+    if (!usernames.some((known) => known.toLowerCase() === username.toLowerCase())) usernames.push(username);
+  }
+
+  if (usernames.length > INSTAGRAM_COLLABORATORS_MAX) {
+    throw configError(`Instagram takes up to ${INSTAGRAM_COLLABORATORS_MAX} collaborators, got ${usernames.length}.`);
+  }
+  return usernames;
+}
+
+function normalizeAudioVolume(value: FrontmatterValue | undefined, label: string): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  return assertWholeNumberInRange(
+    Number(value),
+    label,
+    INSTAGRAM_AUDIO_VOLUME_MIN,
+    INSTAGRAM_AUDIO_VOLUME_MAX,
+    ExitCode.VALIDATION,
+  );
+}
+
+function normalizeInstagramAudio(value: FrontmatterValue | undefined): FrontmatterMap | undefined {
+  if (value === undefined || value === null) return undefined;
+  const audio = typeof value === "string" ? { audioId: value } : value;
+  if (typeof audio !== "object" || Array.isArray(audio)) {
+    throw configError("INSTAGRAM audio must be an audio id or a block with audioId.");
+  }
+
+  for (const key of Object.keys(audio)) {
+    if (!(INSTAGRAM_AUDIO_KEYS as readonly string[]).includes(key)) {
+      const suggestion = closestConfigKey(key, INSTAGRAM_AUDIO_KEYS);
+      throw configError(
+        `Unknown INSTAGRAM audio key "${key}".${suggestion ? ` Did you mean "${suggestion}"?` : ""}`,
+        `audio keys: ${INSTAGRAM_AUDIO_KEYS.join(", ")}`,
+      );
+    }
+  }
+
+  const audioId = configString(audio.audioId, "INSTAGRAM audio.audioId")?.trim();
+  if (!audioId) {
+    throw configError("INSTAGRAM audio needs an audioId.", "Find one with: adaptlypost accounts instagram-audio <id>");
+  }
+
+  return definedEntries({
+    audioId,
+    title: configString(audio.title, "INSTAGRAM audio.title"),
+    artist: configString(audio.artist, "INSTAGRAM audio.artist"),
+    audioVolume: normalizeAudioVolume(audio.audioVolume, "INSTAGRAM audio.audioVolume"),
+    videoVolume: normalizeAudioVolume(audio.videoVolume, "INSTAGRAM audio.videoVolume"),
+  });
+}
+
+function definedEntries(entries: Record<string, FrontmatterValue | undefined>): FrontmatterMap {
+  return Object.fromEntries(
+    Object.entries(entries).filter((entry): entry is [string, FrontmatterValue] => entry[1] !== undefined),
+  );
+}
+
+function normalizeGoogleBusinessConfig(config: FrontmatterMap): FrontmatterMap {
+  const topicType = pickEnum(
+    configString(config.topicType, "GOOGLE_BUSINESS topicType") ?? "STANDARD",
+    GOOGLE_BUSINESS_TOPIC_TYPES,
+    "Google Business topic type",
+    ExitCode.VALIDATION,
+  );
+  const rawCta = configString(config.callToActionType, "GOOGLE_BUSINESS callToActionType");
+  const callToActionType =
+    rawCta === undefined
+      ? undefined
+      : pickEnum(rawCta, GOOGLE_BUSINESS_CALL_TO_ACTION_TYPES, "Google Business call to action", ExitCode.VALIDATION);
+
+  const normalized = definedEntries({
+    topicType,
+    callToActionType,
+    callToActionUrl: configString(config.callToActionUrl, "GOOGLE_BUSINESS callToActionUrl"),
+    eventTitle: configString(config.eventTitle, "GOOGLE_BUSINESS eventTitle"),
+    eventStart: configString(config.eventStart, "GOOGLE_BUSINESS eventStart"),
+    eventEnd: configString(config.eventEnd, "GOOGLE_BUSINESS eventEnd"),
+    offerCouponCode: configString(config.offerCouponCode, "GOOGLE_BUSINESS offerCouponCode"),
+    offerRedeemUrl: configString(config.offerRedeemUrl, "GOOGLE_BUSINESS offerRedeemUrl"),
+    offerTerms: configString(config.offerTerms, "GOOGLE_BUSINESS offerTerms"),
+  });
+
+  if (callToActionType && callToActionType !== "CALL" && !normalized.callToActionUrl) {
+    throw configError(
+      `A ${callToActionType} button on Google Business Profile needs a link.`,
+      "Add --gbp-cta-url <url>, or use CALL to dial the phone number on the profile",
+    );
+  }
+
+  if (topicType !== "STANDARD") {
+    const missing = (["eventTitle", "eventStart", "eventEnd"] as const).filter((key) => !normalized[key]);
+    if (missing.length > 0) {
+      throw configError(
+        `A Google Business ${topicType} post needs ${missing.join(", ")}.`,
+        "Pass --gbp-event-title, --gbp-event-start and --gbp-event-end",
+      );
+    }
+  }
+
+  for (const key of ["eventStart", "eventEnd"] as const) {
+    const value = normalized[key];
+    if (typeof value === "string" && !GOOGLE_BUSINESS_EVENT_DATE.test(value)) {
+      throw configError(
+        `Google Business ${key} must be YYYY-MM-DD or YYYY-MM-DDTHH:mm, got "${value}".`,
+        "Use the business's local time, with no offset",
+      );
+    }
+  }
+
+  return normalized;
+}
+
+export function normalizeConfig(platform: PlatformType, config: FrontmatterMap): FrontmatterMap {
+  if (platform === "GOOGLE_BUSINESS") return normalizeGoogleBusinessConfig(config);
+
+  if (platform === "INSTAGRAM") {
+    return definedEntries({
+      ...config,
+      shareToStory: configBoolean(config.shareToStory, "INSTAGRAM shareToStory"),
+      collaborators: normalizeCollaborators(config.collaborators),
+      audio: normalizeInstagramAudio(config.audio),
+    });
+  }
+
+  if (platform === "FACEBOOK") {
+    const textFormatPresetId = configString(config.textFormatPresetId, "FACEBOOK textFormatPresetId")?.trim();
+    if (textFormatPresetId !== undefined && !FACEBOOK_PRESET_ID.test(textFormatPresetId)) {
+      throw configError(
+        `Facebook text background id must be 1 to 20 digits, got "${textFormatPresetId}".`,
+        "For example 106018623298955 (solid purple)",
+      );
+    }
+    return definedEntries({
+      ...config,
+      shareToStory: configBoolean(config.shareToStory, "FACEBOOK shareToStory"),
+      textFormatPresetId,
+    });
+  }
+
+  return config;
+}
+
+const extraError = (context: string, message: string, hint?: string): CliError =>
+  new CliError(`${context}${message}`, { exitCode: ExitCode.VALIDATION, hint });
+
+/** Builds firstComments, platformThumbnails and platformAspectRatios, refusing what the API would 400 on. */
+export function buildPlatformExtras(input: PostInput, context = ""): PlatformExtras {
+  const extras: PlatformExtras = {};
+
+  for (const [rawPlatform, rawText] of Object.entries(input.firstComments ?? {})) {
+    const platform = rawPlatform as PlatformType;
+    const limit = FIRST_COMMENT_MAX_LENGTH[platform];
+    const text = (rawText ?? "").trim();
+    if (limit === undefined) {
+      throw extraError(
+        context,
+        `${platform} has no first comment.`,
+        `First comments work on ${Object.keys(FIRST_COMMENT_MAX_LENGTH).join(", ")}`,
+      );
+    }
+    if (text === "") throw extraError(context, `The ${platform} first comment is empty.`);
+    if (text.length > limit) {
+      throw extraError(context, `The ${platform} first comment is ${text.length} characters; the limit is ${limit}.`);
+    }
+    extras.firstComments = [...(extras.firstComments ?? []), { platform, text }];
+  }
+
+  for (const [rawPlatform, thumbnail] of Object.entries(input.platformThumbnails ?? {})) {
+    const platform = rawPlatform as PlatformType;
+    const kind = THUMBNAIL_KIND_BY_PLATFORM[platform];
+    const { thumbnailUrl, thumbnailTimestampMs } = thumbnail ?? {};
+    if (!kind) {
+      throw extraError(
+        context,
+        `${platform} takes no thumbnail.`,
+        `Per-platform thumbnails work on ${Object.keys(THUMBNAIL_KIND_BY_PLATFORM).join(", ")}`,
+      );
+    }
+    if (thumbnailUrl === undefined && thumbnailTimestampMs === undefined) {
+      throw extraError(context, `The ${platform} thumbnail needs an image or a frame.`);
+    }
+    if (kind === "frame" && thumbnailUrl !== undefined) {
+      throw extraError(context, `${platform} takes a video frame as its thumbnail, not an image.`, "Pass the frame in milliseconds instead");
+    }
+    if (kind === "image" && thumbnailUrl === undefined) {
+      throw extraError(context, `${platform} takes an image as its thumbnail, not a video frame.`, "Pass an https URL instead");
+    }
+    extras.platformThumbnails = [
+      ...(extras.platformThumbnails ?? []),
+      {
+        platform,
+        ...(thumbnailUrl !== undefined ? { thumbnailUrl } : {}),
+        ...(thumbnailTimestampMs !== undefined && kind !== "image" ? { thumbnailTimestampMs } : {}),
+      },
+    ];
+  }
+
+  for (const [rawPlatform, aspect] of Object.entries(input.platformAspectRatios ?? {})) {
+    const platform = rawPlatform as PlatformType;
+    const allowed = ASPECT_RATIOS_BY_PLATFORM[platform];
+    if (!allowed) {
+      throw extraError(
+        context,
+        `${platform} has no aspect ratio choice.`,
+        `Aspect ratios work on ${Object.keys(ASPECT_RATIOS_BY_PLATFORM).join(", ")}`,
+      );
+    }
+    if (!aspect?.aspectRatio) {
+      throw extraError(context, `A ${platform} fit needs an aspect ratio for ${platform} too.`);
+    }
+    if (!allowed.includes(aspect.aspectRatio)) {
+      throw extraError(context, `${platform} takes ${allowed.join(", ")}, not ${aspect.aspectRatio}.`);
+    }
+    extras.platformAspectRatios = [
+      ...(extras.platformAspectRatios ?? []),
+      { platform, aspectRatio: aspect.aspectRatio, ...(aspect.fit ? { fit: aspect.fit } : {}) },
+    ];
+  }
+
+  return extras;
+}
+
+export function assertExtrasFitPost(
+  extras: PlatformExtras,
+  contentType: ContentType,
+  platforms: readonly PlatformType[] | undefined,
+  context = "",
+): void {
+  if (extras.platformThumbnails?.length && contentType !== "VIDEO") {
+    throw extraError(context, "Per-platform thumbnails only apply to VIDEO posts.");
+  }
+  if (extras.platformAspectRatios?.length && contentType !== "IMAGE" && contentType !== "CAROUSEL") {
+    throw extraError(context, "Per-platform aspect ratios only apply to IMAGE and CAROUSEL posts.");
+  }
+  if (!platforms) return;
+  const entries = [...(extras.firstComments ?? []), ...(extras.platformThumbnails ?? []), ...(extras.platformAspectRatios ?? [])];
+  const stray = entries.find((entry) => !platforms.includes(entry.platform));
+  if (stray) {
+    throw extraError(context, `This post does not go to ${stray.platform}, so its ${stray.platform} options cannot be sent.`, `Add a ${stray.platform} account with --account <id>`);
+  }
 }
 
 function validateRequiredConfigs(body: CreatePostRequest | UpdatePostRequest): void {
@@ -1170,7 +1629,7 @@ function buildRecurrence(input: PostInput, body: CreatePostRequest): Recurrence 
   if (!recurrence.frequency) {
     throw new CliError("Choose how often the post repeats.", {
       exitCode: ExitCode.USAGE,
-      hint: "Pass --repeat DAILY, WEEKLY or MONTHLY, or set repeat: in the frontmatter",
+      hint: "Pass --repeat DAILY, WEEKLY, MONTHLY or YEARLY, or set repeat: in the frontmatter",
     });
   }
 
@@ -1272,6 +1731,11 @@ export function buildPostBody(
   if (input.thumbnail !== undefined) body.thumbnailUrl = input.thumbnail;
   if (input.thumbnailMs !== undefined) body.thumbnailTimestampMs = input.thumbnailMs;
   if (platformTexts.length > 0) body.platformTexts = platformTexts;
+  if (input.twitterKeepLinks !== undefined) body.twitterKeepLinks = input.twitterKeepLinks;
+
+  const extras = buildPlatformExtras(input);
+  Object.assign(body, extras);
+  if (options.requireContent !== false) assertExtrasFitPost(extras, contentType, routing.platforms);
 
   if (options.requireContent !== false && !body.text && mediaUrls.length === 0) {
     throw new CliError("A post needs text or media.", {

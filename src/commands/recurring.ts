@@ -38,6 +38,7 @@ const UNITS: Record<Recurrence["frequency"], [string, string]> = {
   DAILY: ["daily", "days"],
   WEEKLY: ["weekly", "weeks"],
   MONTHLY: ["monthly", "months"],
+  YEARLY: ["yearly", "years"],
 };
 
 type RecurrenceSummary = Pick<Recurrence, "frequency"> & {

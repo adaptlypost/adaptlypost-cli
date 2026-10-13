@@ -1,16 +1,20 @@
 import { Command } from 'commander';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { checkSocialAccount, listSocialAccounts } = vi.hoisted(() => ({
+const { checkSocialAccount, listSocialAccounts, searchInstagramAudio } = vi.hoisted(() => ({
   checkSocialAccount: vi.fn(),
   listSocialAccounts: vi.fn(),
+  searchInstagramAudio: vi.fn(),
 }));
 
-vi.mock('../../src/api/client.js', () => ({ checkSocialAccount, listSocialAccounts }));
+vi.mock('../../src/api/client.js', () => ({ checkSocialAccount, listSocialAccounts, searchInstagramAudio }));
 
 import {
   accountHandle,
   accountNote,
+  audioArtist,
+  formatAudioLength,
+  normalizeAudioType,
   filterAccounts,
   findAccount,
   needsReauthorisation,
@@ -51,6 +55,7 @@ let stdout: string[];
 beforeEach(() => {
   checkSocialAccount.mockReset();
   listSocialAccounts.mockReset();
+  searchInstagramAudio.mockReset();
   setOutputMode('machine');
   stdout = [];
   vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
@@ -60,12 +65,61 @@ beforeEach(() => {
 });
 
 describe('registerAccountCommands', () => {
-  it('registers list, view and check', () => {
+  it('registers list, view, check and instagram-audio', () => {
     expect(accountsCommand(buildProgram()).commands.map((command) => command.name())).toEqual([
       'list',
       'view',
       'check',
+      'instagram-audio',
     ]);
+  });
+});
+
+describe('accounts instagram-audio', () => {
+  const instagram = (overrides: Partial<SocialAccount> = {}): SocialAccount =>
+    account({ id: 'ig_1', platform: 'INSTAGRAM', supportsInstagramAudio: true, ...overrides });
+
+  it('searches music by default and prints the API payload', async () => {
+    listSocialAccounts.mockResolvedValue({ accounts: [instagram()] });
+    searchInstagramAudio.mockResolvedValue({
+      audio: [{ audioId: '901', audioType: 'music', title: 'Sunrise', displayArtist: 'Ada', durationMs: 95_000 }],
+    });
+
+    await run(['instagram-audio', 'ig_1', '--search', ' sunrise ']);
+
+    expect(searchInstagramAudio).toHaveBeenCalledWith('ig_1', { audioType: 'music', searchQuery: 'sunrise' });
+    expect(JSON.parse(stdout.join(''))).toMatchObject({
+      command: 'accounts.instagram-audio',
+      data: [{ audioId: '901', title: 'Sunrise' }],
+      meta: { total: 1 },
+    });
+  });
+
+  it('asks for trending original sounds when there is no search', async () => {
+    listSocialAccounts.mockResolvedValue({ accounts: [instagram()] });
+    searchInstagramAudio.mockResolvedValue({ audio: [] });
+
+    await run(['instagram-audio', 'ig_1', '--type', 'original-sound']);
+
+    expect(searchInstagramAudio).toHaveBeenCalledWith('ig_1', { audioType: 'original_sound', searchQuery: undefined });
+  });
+
+  it('refuses other platforms, accounts without audio support and long searches before calling the API', async () => {
+    listSocialAccounts.mockResolvedValue({ accounts: [account(), instagram({ id: 'ig_2', supportsInstagramAudio: false })] });
+
+    await expect(run(['instagram-audio', 'acc_1'])).rejects.toThrow(/no Instagram audio/);
+    await expect(run(['instagram-audio', 'ig_2'])).rejects.toThrow(/cannot add audio/);
+    await expect(run(['instagram-audio', 'ig_2', '--search', 'x'.repeat(101)])).rejects.toThrow(/limit is 100/);
+    await expect(run(['instagram-audio', 'ig_2', '--type', 'podcast'])).rejects.toThrow(/Unknown audio type/);
+    expect(searchInstagramAudio).not.toHaveBeenCalled();
+  });
+
+  it('formats the audio type, artist and length', () => {
+    expect(normalizeAudioType('Original Sound')).toBe('original_sound');
+    expect(audioArtist({ audioId: '1', audioType: 'original_sound', igUsername: 'ada' })).toBe('@ada');
+    expect(audioArtist({ audioId: '1', audioType: 'music', displayArtist: 'Ada' })).toBe('Ada');
+    expect(formatAudioLength(65_400)).toBe('1:05');
+    expect(formatAudioLength(undefined)).toBe('—');
   });
 });
 

@@ -140,6 +140,29 @@ Shipping the CLI today. Schedule, publish and check results without
 leaving your terminal.
 ```
 
+A platform block takes the platform's text and config keys plus a few options of its own: `firstComment`, `thumbnail` (an image URL), `thumbnailMs` (a video frame), `aspectRatio` with `fit`, and `keepLinks` in the `twitter:` block. On LinkedIn, mention a company page in the text with `@[Page Name](urn:li:organization:<id>)`, using the page name exactly as LinkedIn shows it.
+
+```markdown
+---
+accounts: [tw_4d1b, ig_7c3e, gbp_51e0]
+media: [./storefront.png]
+twitter:
+  firstComment: Opening hours and directions in the replies
+instagram:
+  aspectRatio: PORTRAIT
+  fit: PAD
+  collaborators: [acme.bakery]
+google_business:
+  topicType: EVENT
+  eventTitle: Open day
+  eventStart: 2026-10-17T10:00
+  eventEnd: 2026-10-17T16:00
+  callToActionType: LEARN_MORE
+  callToActionUrl: https://acme.example/open-day
+---
+Open day on Saturday. Come and taste the new bread.
+```
+
 **LinkedIn document posts.** `--type DOCUMENT` publishes one PDF, PPT, PPTX, DOC or DOCX file (max 100 MB, 300 pages) as a LinkedIn document post. DOCUMENT is LinkedIn only, and `--media` must hold exactly that one file. A single document file with no `--type` is inferred as DOCUMENT. `--document-title` sets the title LinkedIn shows (max 100 characters, defaults to the uploaded file name, ignored for non-DOCUMENT posts); it is sent as `linkedinConfigs` for every LinkedIn account on the post. In frontmatter use `documentTitle:` (or `document-title:`, `linkedinDocumentTitle:`), or `documentTitle` inside a `linkedin:` block.
 
 ```bash
@@ -154,13 +177,13 @@ The API reads the document type from the file extension of the stored URL, so th
 adaptlypost ai caption --prompt "announce the launch" --platform TWITTER | adaptlypost post create -t - -a tw_4d1b --at "+2h"
 ```
 
-**Recurring posts.** `post create --repeat DAILY|WEEKLY|MONTHLY` turns the post into a series. `--at` is required and must be in the future. That first post sets the time of day for every post after it, in the zone from `--timezone`. `--every 2` repeats every 2 days, weeks or months (1 to 30). `--on` picks the weekdays of a WEEKLY repeat, one per flag (`--on MONDAY --on THURSDAY`, or `mon`, `thu`); the weekday of `--at` is always included. End the series with `--until 2026-12-31` (the last day a post may go out) or `--count 10` (2 to 365 posts in total), not both. With neither, it repeats until you pause or delete it. The create output prints the `recurring` id next to the first post's id.
+**Recurring posts.** `post create --repeat DAILY|WEEKLY|MONTHLY|YEARLY` turns the post into a series. `--at` is required and must be in the future. That first post sets the time of day for every post after it, in the zone from `--timezone`. A YEARLY series comes back on the same date every year; one started on February 29 posts on February 28 in other years. `--every 2` repeats every 2 days, weeks, months or years (1 to 30). `--on` picks the weekdays of a WEEKLY repeat, one per flag (`--on MONDAY --on THURSDAY`, or `mon`, `thu`); the weekday of `--at` is always included. End the series with `--until 2026-12-31` (the last day a post may go out) or `--count 10` (2 to 365 posts in total), not both. With neither, it repeats until you pause or delete it. The create output prints the `recurring` id next to the first post's id.
 
 ```bash
 adaptlypost post create -t "{Hi|Hello}, here is this week's tip" -a tw_4d1b --at "2026-10-05 09:00" --repeat WEEKLY --on mon --on thu --count 12
 ```
 
-The CLI refuses, before sending, a repeat without `--at`, a repeat on a draft, a TIKTOK account in the series, `--on` on a DAILY or MONTHLY repeat, and an end date before the first post. X and LinkedIn reject identical text, so give those series spintax like `{Hi|Hello}` and each post comes out different. Only the next post of an active series exists as a scheduled post, created about a day ahead. Deleting that one post skips its date and the series carries on. A slot missed while the series is paused is skipped, never published late.
+The CLI refuses, before sending, a repeat without `--at`, a repeat on a draft, a TIKTOK account in the series, `--on` on a DAILY, MONTHLY or YEARLY repeat, and an end date before the first post. X and LinkedIn reject identical text, so give those series spintax like `{Hi|Hello}` and each post comes out different. Only the next post of an active series exists as a scheduled post, created about a day ahead. Deleting that one post skips its date and the series carries on. A slot missed while the series is paused is skipped, never published late.
 
 In frontmatter the keys are `repeat:`, `every:`, `on:`, `until:` and `count:`, or their API names `frequency:`, `interval:`, `weekdays:`, `endsOn:` and `maxOccurrences:`. Write weekdays as a YAML list, `on: [MONDAY, THURSDAY]` or one `- MONDAY` per line. A comma-separated string is refused. `post update` and `post bulk --dir` refuse a file with these keys, because only `post create` can start a series.
 
@@ -177,7 +200,19 @@ until: 2026-12-31
 
 **Upload that actually uploads.** `media upload` mints presigned URLs in chunks of 20 and PUTs the bytes with the exact MIME type the presign was signed for, sniffed from the first 12 bytes rather than the extension. A mismatched content type fails the S3 signature with an opaque error, which is the step everyone gets wrong by hand. Accepted: `image/jpeg`, `image/png`, `image/webp` (50 MB), `video/mp4`, `video/quicktime` (250 MB), and for LinkedIn document posts `application/pdf`, `application/vnd.ms-powerpoint`, `application/vnd.openxmlformats-officedocument.presentationml.presentation`, `application/msword` and `application/vnd.openxmlformats-officedocument.wordprocessingml.document` (100 MB). A PDF is read from its `%PDF-` signature. A DOC and a PPT share one container format, and so do a DOCX and a PPTX, so for those the bytes are checked and the `.doc`, `.ppt`, `.docx` or `.pptx` extension picks the type; a file without one is refused.
 
-**Bulk schedule from a CSV.** `post bulk --csv september.csv` validates every row before sending anything, uploads local media once per content hash however many rows reference it, chunks into batches of 100, and reports failures with their row number. Columns are `text`, `scheduledAt`, `contentType` (`TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`, inferred from `media` when empty), `media` (`;`-separated), `alt` (`;`-separated alt text, one per `media` entry in the same order), `thumbnail`, `thumbnailMs`, `text_<PLATFORM>` and `config_<PLATFORM>` (a JSON object). Rows with different configs go out as separate requests. LinkedIn document posts cannot be bulk scheduled, so a `DOCUMENT` row or a `config_LINKEDIN` column is refused; create those with `post create`.
+**Bulk schedule from a CSV.** `post bulk --csv september.csv` validates every row before sending anything, uploads local media once per content hash however many rows reference it, chunks into batches of 100, and reports failures with their row number. Columns are `text`, `scheduledAt`, `contentType` (`TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`, inferred from `media` when empty), `media` (`;`-separated), `alt` (`;`-separated alt text, one per `media` entry in the same order), `thumbnail`, `thumbnailMs`, and these per-platform columns, where `<PLATFORM>` is a name such as `TWITTER` or `GOOGLE_BUSINESS`:
+
+| Column | Sends, for that row |
+|---|---|
+| `text_<PLATFORM>` | `platformTexts` |
+| `config_<PLATFORM>` | The platform's config, as a JSON object. Rows with different configs go out as separate requests |
+| `firstComment_<PLATFORM>` | `firstComments`, the whole cell as one comment |
+| `thumbnail_<PLATFORM>` | `platformThumbnails[].thumbnailUrl` |
+| `thumbnailMs_<PLATFORM>` | `platformThumbnails[].thumbnailTimestampMs` |
+| `aspectRatio_<PLATFORM>` | `platformAspectRatios[].aspectRatio`: `SQUARE`, `PORTRAIT`, `VERTICAL` or `LANDSCAPE` |
+| `fit_<PLATFORM>` | `platformAspectRatios[].fit`: `CROP` or `PAD`. Needs `aspectRatio_<PLATFORM>` |
+
+`--dir` files take the same options in their platform blocks. Keeping X links clickable is not available for bulk scheduling, so a `--dir` file with `keepLinks` is refused. LinkedIn document posts cannot be bulk scheduled, so a `DOCUMENT` row or a `config_LINKEDIN` column is refused; create those with `post create`.
 
 **Watch a post land.** Publishing is asynchronous and `queuedPlatforms` is not an outcome. `post watch` polls the results endpoint on a decaying schedule (5 s for a minute, 15 s for five, 60 s after) and prints each platform the moment its state changes.
 
@@ -192,6 +227,9 @@ Grammar is noun then verb, space-separated. `ls` works wherever `list` does, `rm
 | `accounts list` | `--platform`, `--status` | Connected accounts and which need reconnecting |
 | `accounts view <id>` | | One account by its id or Facebook page id |
 | `accounts check <id>` | | Facebook pages only. Takes the account id or the Facebook page id |
+| `accounts instagram-audio <id>` | `--type music\|original_sound`, `--search` | Music and original sounds the Instagram account can add to a reel. `--type` defaults to `music`; without `--search` it lists what is trending. Pass the `AUDIO ID` to `post create --ig-audio`. Only accounts connected through Facebook can add audio, which `accounts view` shows as `reel audio` |
+
+Google Business Profile locations show up as `GOOGLE_BUSINESS` accounts, named after the location and with no handle. Telegram chats are not listed: the API cannot post to Telegram, so the CLI refuses `TELEGRAM` as a target. It still accepts `TELEGRAM` as a filter on `post list`.
 
 ### post
 
@@ -199,7 +237,7 @@ Grammar is noun then verb, space-separated. `ls` works wherever `list` does, `rm
 |---|---|---|
 | `post create` | `-t/--text`, `-f/--file`, `-P/--platform`, `-a/--account`, `-m/--media`, `--alt`, `--type`, `-s/--at`, `--timezone`, `--draft`, `--repeat`, `--every`, `--on` (repeatable), `--until`, `--count`, `--watch`, `--dry-run` | `-` on `--text` or `--file` reads stdin. `--alt` is the alt text for the `--media` image at the same position. `--type` is `TEXT`, `IMAGE`, `VIDEO`, `CAROUSEL` or `DOCUMENT`, inferred from `--media` when omitted. `--repeat` needs `--at` |
 | `post list` | `--status`, `--platform`, `--from`, `--to`, `--sort`, `--limit`, `--offset`, `--all` | |
-| `post get <id>` | | Post header plus one row per platform |
+| `post get <id>` | | Post header plus one row per platform. A story shared next to an Instagram or Facebook post shows as its own `story` row, and a `FIRST COMMENT` column appears when any platform has one |
 | `post update <id>` | Same as `create` minus `--draft`, `--watch` and the repeat flags | `--platform` replaces every target on the post, so it confirms first. The API saves alt text only when the targets are sent too, so `--alt` (or `alt:` in `--file`) without `--platform` reads the post first and sends its current targets back unchanged. Moving a scheduled post more than a minute into the past fails with a 400 |
 | `post delete <id>` | `--yes` | |
 | `post results <id>` | | The only source of truth for what published |
@@ -221,12 +259,44 @@ Per-platform flags on `post create` and `post update`:
 | `--yt-title <title>` | `youtubeConfigs[].videoTitle` |
 | `--pinterest-board <id>` | `pinterestConfigs[].boardId` |
 | `--document-title <title>` | `linkedinConfigs[].documentTitle`, the title LinkedIn shows on a DOCUMENT post. Max 100 characters, defaults to the file name, ignored for other content types |
+| `--first-comment <PLATFORM=text>` | `firstComments`, a comment posted from the same account about 10 seconds after the post goes out (60 on YouTube). One flag per platform: LINKEDIN (1250 characters), TWITTER (280), THREADS (500), BLUESKY (300), MASTODON (500), YOUTUBE (10000). A comment that fails never fails the post; `post get` shows its status. On `post update` the flags replace every stored first comment |
+| `--thumbnail-for <PLATFORM=url>` | `platformThumbnails[].thumbnailUrl`, a thumbnail image for one platform of a VIDEO post. YOUTUBE, FACEBOOK, LINKEDIN, INSTAGRAM, PINTEREST |
+| `--thumbnail-ms-for <PLATFORM=ms>` | `platformThumbnails[].thumbnailTimestampMs`, a video frame for one platform. INSTAGRAM, PINTEREST, TIKTOK. A platform without either flag uses `--thumbnail` and `--thumbnail-ms` |
+| `--aspect-ratio <PLATFORM=ratio>` | `platformAspectRatios[].aspectRatio` for IMAGE and CAROUSEL posts: `SQUARE` (1:1), `PORTRAIT` (4:5), `VERTICAL` (9:16) or `LANDSCAPE` (1.91:1). INSTAGRAM takes all but VERTICAL, TIKTOK takes all four |
+| `--fit <PLATFORM=fit>` | `platformAspectRatios[].fit`: `CROP` (the default, cut from the center) or `PAD` (keep the whole image on a blurred fill) |
+| `--ig-share-to-story` | `instagramConfigs[].shareToStory`: also publish the media as a story next to the feed post or reel. The story is its own platform entry and skips the caption, first comment, cover, collaborators, trial and audio. Videos up to 60 seconds |
+| `--ig-collaborator <username>` | `instagramConfigs[].collaborators`, repeatable, up to 3. A leading `@` is dropped. Feed images, carousels and reels; each collaborator accepts the invite in Instagram |
+| `--ig-audio <audioId>` | `instagramConfigs[].audio.audioId`, music or an original sound for a reel. Find ids with `accounts instagram-audio`. `--ig-audio-title` and `--ig-audio-artist` are stored for display; `--ig-audio-volume` and `--ig-video-volume` take 1 to 100 and default to 100 |
+| `--fb-share-to-story` | `facebookConfigs[].shareToStory`, the same as `--ig-share-to-story` for a Facebook page |
+| `--fb-text-background <presetId>` | `facebookConfigs[].textFormatPresetId`, a colored background such as `106018623298955` (solid purple) or `249307305544279` (red to blue). TEXT posts with no media and up to 130 characters only |
+| `--x-keep-links`, `--no-x-keep-links` | `twitterKeepLinks`. By default links in X text are broken (`example. com`), because X charges over 10 times more for a post with a link. Only AppSumo lifetime deals can keep them, and a kept link costs 20 credits instead of 2; any other plan gets a 400 |
+| `--gbp-topic <type>` | `googleBusinessConfigs[].topicType`: `STANDARD` (an update, the default), `EVENT` or `OFFER`. EVENT and OFFER need `--gbp-event-title`, `--gbp-event-start` and `--gbp-event-end` |
+| `--gbp-cta <type>`, `--gbp-cta-url <url>` | `callToActionType` and `callToActionUrl`: `BOOK`, `ORDER`, `SHOP`, `LEARN_MORE`, `SIGN_UP` or `CALL`. Every button except CALL needs the URL; CALL dials the phone number on the profile |
+| `--gbp-event-title`, `--gbp-event-start`, `--gbp-event-end` | `eventTitle`, `eventStart`, `eventEnd`. Dates are `YYYY-MM-DD` or `YYYY-MM-DDTHH:mm` in the business's local time, with no offset |
+| `--gbp-coupon`, `--gbp-redeem-url`, `--gbp-terms` | `offerCouponCode`, `offerRedeemUrl`, `offerTerms` for an OFFER |
+
+Google Business Profile takes TEXT or IMAGE posts with one JPEG or PNG up to 5 MB and text up to 1500 characters, and has no alt text. A location with no `--gbp-*` flag posts a STANDARD update.
+
+```bash
+adaptlypost post create -t "Autumn sale, 20% off" -a gbp_51e0 -m ./sale.png \
+  --gbp-topic OFFER --gbp-event-title "Autumn sale" --gbp-event-start 2026-10-20 --gbp-event-end 2026-10-27 \
+  --gbp-coupon AUTUMN20 --gbp-cta SHOP --gbp-cta-url https://acme.example/shop
+
+adaptlypost post create -t "New reel" -a ig_7c3e -m ./reel.mp4 --ig-type REEL \
+  --ig-share-to-story --ig-collaborator acme.bakery --ig-audio 1234567890 --ig-audio-volume 40
+
+adaptlypost post create -t "Slides from today's talk" -a li_22aa -a tw_4d1b \
+  --first-comment "LINKEDIN=Download the deck: https://acme.example/deck" \
+  --first-comment "TWITTER=Deck link in the next post"
+```
+
+Like the other config flags, the Instagram, Facebook and Google Business Profile flags reach the API on `post update` only together with `--platform` or `--account`. `--first-comment`, the thumbnail and aspect ratio flags and `--x-keep-links` work on their own.
 
 Repeat flags, `post create` only:
 
 | Flag | Sends |
 |---|---|
-| `--repeat <frequency>` | `recurrence.frequency`: `DAILY`, `WEEKLY` or `MONTHLY`. Needs `--at` |
+| `--repeat <frequency>` | `recurrence.frequency`: `DAILY`, `WEEKLY`, `MONTHLY` or `YEARLY`. Needs `--at` |
 | `--every <n>` | `recurrence.interval`, 1 to 30. Defaults to 1 |
 | `--on <weekday>` | `recurrence.weekdays`, repeatable, WEEKLY only. `MONDAY` to `SUNDAY` or the first three letters |
 | `--until <YYYY-MM-DD>` | `recurrence.endsOn`, the last day a post may go out. Not with `--count` |
@@ -255,12 +325,13 @@ Per-platform config keys, for `--config`, frontmatter platform blocks and `confi
 
 | Platform | Keys |
 |---|---|
-| `FACEBOOK` | `postType`, `videoTitle` |
-| `INSTAGRAM` | `postType`, `trialGraduation` |
+| `FACEBOOK` | `postType`, `shareToStory`, `videoTitle`, `textFormatPresetId` |
+| `INSTAGRAM` | `postType`, `shareToStory`, `trialGraduation`, `collaborators`, `audio` (an audio id, or a block with `audioId`, `title`, `artist`, `audioVolume`, `videoVolume`) |
 | `TIKTOK` | `privacyLevel`, `title`, `caption`, `allowComments`, `allowDuet`, `allowStitch`, `sendAsDraft`, `aiGenerated`, `brandedContent`, `brandedContentOwnBrand`, `autoAddMusic` |
 | `PINTEREST` | `boardId`, `title`, `link` |
 | `YOUTUBE` | `postType`, `videoTitle`, `tags`, `privacyStatus`, `license`, `notifySubscribers`, `allowEmbedding`, `madeForKids`, `categoryId`, `playlistId` |
 | `LINKEDIN` | `documentTitle` |
+| `GOOGLE_BUSINESS` | `topicType`, `callToActionType`, `callToActionUrl`, `eventTitle`, `eventStart`, `eventEnd`, `offerCouponCode`, `offerRedeemUrl`, `offerTerms`. `topicType` defaults to `STANDARD` |
 
 ### connect
 
@@ -292,6 +363,8 @@ Per-platform config keys, for `--config`, frontmatter platform blocks and `confi
 | `analytics discovered` | `--from`, `--to`, `--platform`, `--limit` | Posts found on the connected accounts that were not published through AdaptlyPost. 200 by default, 1000 at most |
 | `analytics sync-status` | | Per-account sync and discovery state |
 | `analytics sync` | `--wait` | One run per workspace per ten minutes |
+
+Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, LinkedIn, YouTube, X and Google Business Profile. Google Business Profile reports how often a location was seen, with no per-post numbers. Mastodon and Telegram have no analytics, and `--platform` ignores them. Connecting an account imports its posts from the last 180 days, and a post keeps refreshing for 180 days after it is published.
 
 ### ai
 

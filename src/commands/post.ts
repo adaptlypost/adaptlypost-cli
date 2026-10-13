@@ -18,6 +18,9 @@ import {
 } from "../api/client.js";
 import {
   CONTENT_TYPES,
+  FIRST_COMMENT_MAX_LENGTH,
+  GOOGLE_BUSINESS_CALL_TO_ACTION_TYPES,
+  GOOGLE_BUSINESS_TOPIC_TYPES,
   INSTAGRAM_TRIAL_GRADUATIONS,
   META_POST_TYPES,
   POST_STATUSES,
@@ -77,11 +80,15 @@ import {
   RECURRENCE_MIN_OCCURRENCES,
   assertCalendarDate,
   assertConfigKeys,
+  assertExtrasFitPost,
   assertWholeNumberInRange,
+  buildPlatformExtras,
   buildPostBody,
   buildTargets,
   inferContentTypeFromReferences,
   mergePostInput,
+  normalizeAspectRatio,
+  normalizeAspectRatioFit,
   normalizeContentType,
   normalizeFrequency,
   normalizePlatformName,
@@ -89,6 +96,9 @@ import {
   parsePostInput,
   readSource,
   readStdin,
+  setFirstComment,
+  setPlatformAspectRatio,
+  setPlatformThumbnail,
   uploadLocalMedia,
   type PostInput,
 } from "./post-input.js";
@@ -184,6 +194,30 @@ interface ContentOptions {
   ytTitle?: string;
   pinterestBoard?: string;
   documentTitle?: string;
+  firstComment: string[];
+  thumbnailFor: string[];
+  thumbnailMsFor: string[];
+  aspectRatio: string[];
+  fit: string[];
+  igShareToStory?: boolean;
+  igCollaborator: string[];
+  igAudio?: string;
+  igAudioTitle?: string;
+  igAudioArtist?: string;
+  igAudioVolume?: string;
+  igVideoVolume?: string;
+  fbShareToStory?: boolean;
+  fbTextBackground?: string;
+  xKeepLinks?: boolean;
+  gbpTopic?: string;
+  gbpCta?: string;
+  gbpCtaUrl?: string;
+  gbpEventTitle?: string;
+  gbpEventStart?: string;
+  gbpEventEnd?: string;
+  gbpCoupon?: string;
+  gbpRedeemUrl?: string;
+  gbpTerms?: string;
   repeat?: string;
   every?: string;
   on?: Weekday[];
@@ -329,7 +363,86 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
     mergeConfig("LINKEDIN", { documentTitle: options.documentTitle });
   }
 
+  if (options.igShareToStory !== undefined) mergeConfig("INSTAGRAM", { shareToStory: options.igShareToStory });
+  if (options.igCollaborator.length > 0) mergeConfig("INSTAGRAM", { collaborators: options.igCollaborator });
+
+  const audioDetails = [options.igAudioTitle, options.igAudioArtist, options.igAudioVolume, options.igVideoVolume];
+  if (options.igAudio === undefined && audioDetails.some((value) => value !== undefined)) {
+    throw new CliError("--ig-audio-title, --ig-audio-artist and the volume flags need --ig-audio <audioId>.", {
+      exitCode: ExitCode.USAGE,
+      hint: "Find an audio id with: adaptlypost accounts instagram-audio <id>",
+    });
+  }
+  if (options.igAudio !== undefined) {
+    const volume = (value: string | undefined, flag: string): number | undefined =>
+      value === undefined ? undefined : assertWholeNumberInRange(Number(value), flag, 1, 100, ExitCode.USAGE);
+    mergeConfig("INSTAGRAM", {
+      audio: Object.fromEntries(
+        Object.entries({
+          audioId: options.igAudio,
+          title: options.igAudioTitle,
+          artist: options.igAudioArtist,
+          audioVolume: volume(options.igAudioVolume, "--ig-audio-volume"),
+          videoVolume: volume(options.igVideoVolume, "--ig-video-volume"),
+        }).filter(([, value]) => value !== undefined),
+      ),
+    });
+  }
+
+  if (options.fbShareToStory !== undefined) mergeConfig("FACEBOOK", { shareToStory: options.fbShareToStory });
+  if (options.fbTextBackground !== undefined) {
+    mergeConfig("FACEBOOK", { textFormatPresetId: options.fbTextBackground });
+  }
+
+  const googleBusiness = Object.fromEntries(
+    Object.entries({
+      topicType: options.gbpTopic,
+      callToActionType: options.gbpCta,
+      callToActionUrl: options.gbpCtaUrl,
+      eventTitle: options.gbpEventTitle,
+      eventStart: options.gbpEventStart,
+      eventEnd: options.gbpEventEnd,
+      offerCouponCode: options.gbpCoupon,
+      offerRedeemUrl: options.gbpRedeemUrl,
+      offerTerms: options.gbpTerms,
+    }).filter(([, value]) => value !== undefined),
+  );
+  if (Object.keys(googleBusiness).length > 0) mergeConfig("GOOGLE_BUSINESS", googleBusiness);
+
   if (Object.keys(configs).length > 0) input.platformConfigs = configs;
+
+  if (options.xKeepLinks !== undefined) input.twitterKeepLinks = options.xKeepLinks;
+
+  for (const entry of options.firstComment) {
+    const [platform, text] = parsePair(entry, "--first-comment");
+    setFirstComment(input, normalizePlatformName(platform), text);
+  }
+
+  for (const entry of options.thumbnailFor) {
+    const [platform, thumbnailUrl] = parsePair(entry, "--thumbnail-for");
+    setPlatformThumbnail(input, normalizePlatformName(platform), { thumbnailUrl });
+  }
+
+  for (const entry of options.thumbnailMsFor) {
+    const [platform, raw] = parsePair(entry, "--thumbnail-ms-for");
+    const ms = Number(raw);
+    if (raw.trim() === "" || !Number.isInteger(ms) || ms < 0) {
+      throw new CliError(`--thumbnail-ms-for ${platform} must be a whole number of milliseconds.`, {
+        exitCode: ExitCode.USAGE,
+      });
+    }
+    setPlatformThumbnail(input, normalizePlatformName(platform), { thumbnailTimestampMs: ms });
+  }
+
+  for (const entry of options.aspectRatio) {
+    const [platform, ratio] = parsePair(entry, "--aspect-ratio");
+    setPlatformAspectRatio(input, normalizePlatformName(platform), { aspectRatio: normalizeAspectRatio(ratio) });
+  }
+
+  for (const entry of options.fit) {
+    const [platform, fit] = parsePair(entry, "--fit");
+    setPlatformAspectRatio(input, normalizePlatformName(platform), { fit: normalizeAspectRatioFit(fit) });
+  }
 
   const recurrence = recurrenceFromOptions(options);
   if (recurrence) input.recurrence = recurrence;
@@ -510,14 +623,32 @@ async function runView(id: string, options: GlobalOptions): Promise<void> {
 
   print("");
   printTable(targets, [
-    { header: "PLATFORM", value: (target) => target.platform },
+    { header: "PLATFORM", value: platformLabel },
     { header: "ACCOUNT", value: (target) => target.accountName ?? target.connectionId ?? target.pageId ?? "—" },
     { header: "STATUS", value: (target) => target.status },
     { header: "CHARS", value: (target) => (target.text ?? post.text ?? "").length, align: "right" },
     { header: "POST ID", value: (target) => target.platformPostId ?? "—" },
+    ...(targets.some((target) => target.firstCommentStatus)
+      ? [{ header: "FIRST COMMENT", value: firstCommentCell }]
+      : []),
     { header: "ERROR", value: (target) => target.errorMessage ?? "—" },
   ]);
 }
+
+const platformLabel = (target: SocialPostPlatform): string => {
+  const postType = target.platform === "INSTAGRAM" ? target.instagramPostType : target.facebookPostType;
+  return (target.platform === "INSTAGRAM" || target.platform === "FACEBOOK") && postType === "STORY"
+    ? `${target.platform} story`
+    : target.platform;
+};
+
+const firstCommentCell = (target: SocialPostPlatform): string => {
+  if (!target.firstCommentStatus) return "—";
+  if (target.firstCommentStatus === "FAILED" && target.firstCommentError) {
+    return `FAILED: ${target.firstCommentError}`;
+  }
+  return target.firstCommentStatus;
+};
 
 interface CreateOptions extends ContentOptions, GlobalOptions {
   watch?: boolean;
@@ -597,14 +728,36 @@ interface UpdateOptions extends ContentOptions, GlobalOptions {
 type ConfigEntry = Record<string, unknown>;
 
 const definedOnly = (entry: ConfigEntry): ConfigEntry =>
-  Object.fromEntries(Object.entries(entry).filter(([, value]) => value !== undefined && value !== null));
+  Object.fromEntries(
+    Object.entries(entry).filter(
+      ([, value]) => value !== undefined && value !== null && !(Array.isArray(value) && value.length === 0),
+    ),
+  );
 
 function storedConfig(target: SocialPostPlatform): ConfigEntry | undefined {
   switch (target.platform) {
     case "FACEBOOK":
-      return definedOnly({ postType: target.facebookPostType, videoTitle: target.facebookVideoTitle });
+      return definedOnly({
+        postType: target.facebookPostType,
+        videoTitle: target.facebookVideoTitle,
+        textFormatPresetId: target.facebookTextFormatPresetId,
+      });
     case "INSTAGRAM":
-      return definedOnly({ postType: target.instagramPostType, trialGraduation: target.instagramTrialGraduation });
+      return definedOnly({
+        postType: target.instagramPostType,
+        trialGraduation: target.instagramTrialGraduation,
+        collaborators: target.instagramCollaborators,
+        audio:
+          target.instagramAudioId === undefined
+            ? undefined
+            : definedOnly({
+                audioId: target.instagramAudioId,
+                title: target.instagramAudioTitle,
+                artist: target.instagramAudioArtist,
+                audioVolume: target.instagramAudioVolume,
+                videoVolume: target.instagramVideoVolume,
+              }),
+      });
     case "TIKTOK":
       return target.tiktokPrivacyLevel === undefined
         ? undefined
@@ -640,6 +793,20 @@ function storedConfig(target: SocialPostPlatform): ConfigEntry | undefined {
       });
     case "LINKEDIN":
       return definedOnly({ documentTitle: target.linkedinDocumentTitle });
+    case "GOOGLE_BUSINESS":
+      return target.googleBusinessTopicType === undefined
+        ? undefined
+        : definedOnly({
+            topicType: target.googleBusinessTopicType,
+            callToActionType: target.googleBusinessCallToActionType,
+            callToActionUrl: target.googleBusinessCallToActionUrl,
+            eventTitle: target.googleBusinessEventTitle,
+            eventStart: target.googleBusinessEventStart,
+            eventEnd: target.googleBusinessEventEnd,
+            offerCouponCode: target.googleBusinessOfferCouponCode,
+            offerRedeemUrl: target.googleBusinessOfferRedeemUrl,
+            offerTerms: target.googleBusinessOfferTerms,
+          });
     default:
       return undefined;
   }
@@ -658,23 +825,46 @@ export function targetsFromPost(post: SocialPost): {
     targets[field] = [...(targets[field] ?? []), value];
   };
 
+  const unreachable = [
+    ...new Set((post.platforms ?? []).map((target) => target.platform).filter((platform) => !CONNECTION_FIELD[platform])),
+  ];
+  if (unreachable.length > 0) {
+    throw new CliError(
+      `This post also goes to ${unreachable.join(", ")}, which the API cannot target, so its targets cannot be resent.`,
+      { exitCode: ExitCode.VALIDATION, hint: "Change the alt text in the AdaptlyPost app" },
+    );
+  }
+
+  const groups = new Map<string, SocialPostPlatform[]>();
   for (const target of post.platforms ?? []) {
     const id = target.platform === "FACEBOOK" ? target.pageId : target.connectionId;
     if (id === undefined) continue;
+    const key = `${target.platform}:${id}`;
+    groups.set(key, [...(groups.get(key) ?? []), target]);
+  }
 
-    push(CONNECTION_FIELD[target.platform], id);
+  for (const entries of groups.values()) {
+    const isStory = (target: SocialPostPlatform): boolean =>
+      (target.platform === "INSTAGRAM" ? target.instagramPostType : target.facebookPostType) === "STORY";
+    const primary = entries.find((target) => !isStory(target)) ?? entries[0];
+    if (!primary) continue;
+    const id = (primary.platform === "FACEBOOK" ? primary.pageId : primary.connectionId) as string;
+    const connectionField = CONNECTION_FIELD[primary.platform] as string;
 
-    const field = CONFIG_FIELD[target.platform];
-    const config = storedConfig(target);
+    push(connectionField, id);
+
+    const field = CONFIG_FIELD[primary.platform];
+    const config = storedConfig(primary);
+    if (config && !isStory(primary) && entries.some(isStory)) config.shareToStory = true;
     if (field && config && Object.keys(config).length > 0) {
-      push(field, target.platform === "FACEBOOK" ? { pageId: id, ...config } : { connectionId: id, ...config });
+      push(field, primary.platform === "FACEBOOK" ? { pageId: id, ...config } : { connectionId: id, ...config });
     }
 
-    if (target.text && !platformTexts.has(target.platform)) platformTexts.set(target.platform, target.text);
+    if (primary.text && !platformTexts.has(primary.platform)) platformTexts.set(primary.platform, primary.text);
   }
 
   const platforms = [...new Set((post.platforms ?? []).map((target) => target.platform))].filter(
-    (platform) => (targets[CONNECTION_FIELD[platform]] ?? []).length > 0,
+    (platform) => (targets[CONNECTION_FIELD[platform] as string] ?? []).length > 0,
   );
 
   return {
@@ -733,6 +923,10 @@ async function runUpdate(id: string, options: UpdateOptions): Promise<void> {
   if (input.at !== undefined) body.scheduledAt = full.scheduledAt;
   if (options.thumbnail !== undefined) body.thumbnailUrl = full.thumbnailUrl;
   if (options.thumbnailMs !== undefined) body.thumbnailTimestampMs = full.thumbnailTimestampMs;
+  if (input.twitterKeepLinks !== undefined) body.twitterKeepLinks = input.twitterKeepLinks;
+  if (input.firstComments !== undefined) body.firstComments = full.firstComments;
+  if (input.platformThumbnails !== undefined) body.platformThumbnails = full.platformThumbnails;
+  if (input.platformAspectRatios !== undefined) body.platformAspectRatios = full.platformAspectRatios;
 
   if (targetsChanged) {
     const { platforms, ...rest } = full;
@@ -776,7 +970,7 @@ async function runUpdate(id: string, options: UpdateOptions): Promise<void> {
   if (Object.keys(body).length === 0) {
     throw new CliError("Nothing to update.", {
       exitCode: ExitCode.USAGE,
-      hint: "Pass at least one of --text, --file, --at, --timezone, --type, --thumbnail, --alt or --platform",
+      hint: "Pass at least one of --text, --file, --at, --timezone, --type, --thumbnail, --alt, --first-comment, --thumbnail-for, --aspect-ratio, --x-keep-links or --platform",
     });
   }
 
@@ -1114,18 +1308,25 @@ function refuseDocumentRows(rows: BulkRow[]): void {
   }
 }
 
+const PLATFORM_COLUMN_PREFIXES = ["text", "config", "firstComment", "thumbnail", "thumbnailMs", "aspectRatio", "fit"] as const;
+type PlatformColumnPrefix = (typeof PLATFORM_COLUMN_PREFIXES)[number];
+
+const PLATFORM_COLUMN = /^([A-Za-z]+)_([A-Za-z_]+)$/;
+
+function platformColumn(header: string): { prefix: PlatformColumnPrefix; platform: string } | undefined {
+  const match = PLATFORM_COLUMN.exec(header);
+  const prefix = match?.[1] as PlatformColumnPrefix | undefined;
+  if (!match || !prefix || !PLATFORM_COLUMN_PREFIXES.includes(prefix)) return undefined;
+  return { prefix, platform: match[2] ?? "" };
+}
+
 function readBulkColumns(headers: string[]): void {
-  const unknown = headers.filter(
-    (header) =>
-      !CORE_COLUMNS.has(header) &&
-      !/^text_[A-Za-z]+$/.test(header) &&
-      !/^config_[A-Za-z]+$/.test(header),
-  );
+  const unknown = headers.filter((header) => !CORE_COLUMNS.has(header) && !platformColumn(header));
 
   if (unknown.length > 0) {
     throw new CliError(`Unknown CSV column(s): ${unknown.join(", ")}.`, {
       exitCode: ExitCode.VALIDATION,
-      hint: `Known columns: ${[...CORE_COLUMNS].join(", ")}, text_<PLATFORM>, config_<PLATFORM>`,
+      hint: `Known columns: ${[...CORE_COLUMNS].join(", ")}, ${PLATFORM_COLUMN_PREFIXES.map((prefix) => `${prefix}_<PLATFORM>`).join(", ")}`,
     });
   }
 }
@@ -1175,17 +1376,50 @@ function bulkRowFromRecord(
 
   const platformTexts: PlatformText[] = [];
   const configs: PostInput["platformConfigs"] = {};
+  const extrasInput: PostInput = {};
 
   for (const [column, value] of Object.entries(record)) {
     if (value.trim() === "") continue;
 
-    if (column.startsWith("text_")) {
-      platformTexts.push({ platform: normalizePlatformName(column.slice(5)), text: value });
+    const target = platformColumn(column);
+    if (!target) continue;
+    const platform = normalizePlatformName(target.platform);
+
+    if (target.prefix === "text") {
+      platformTexts.push({ platform, text: value });
       continue;
     }
 
-    if (column.startsWith("config_")) {
-      const platform = normalizePlatformName(column.slice(7));
+    if (target.prefix === "firstComment") {
+      setFirstComment(extrasInput, platform, value);
+      continue;
+    }
+
+    if (target.prefix === "thumbnail") {
+      setPlatformThumbnail(extrasInput, platform, { thumbnailUrl: value.trim() });
+      continue;
+    }
+
+    if (target.prefix === "thumbnailMs") {
+      const ms = Number(value);
+      if (!Number.isInteger(ms) || ms < 0) {
+        throw new CliError(`Row ${line}: ${column} must be a whole number.`, { exitCode: ExitCode.VALIDATION });
+      }
+      setPlatformThumbnail(extrasInput, platform, { thumbnailTimestampMs: ms });
+      continue;
+    }
+
+    if (target.prefix === "aspectRatio") {
+      setPlatformAspectRatio(extrasInput, platform, { aspectRatio: normalizeAspectRatio(value, ExitCode.VALIDATION) });
+      continue;
+    }
+
+    if (target.prefix === "fit") {
+      setPlatformAspectRatio(extrasInput, platform, { fit: normalizeAspectRatioFit(value, ExitCode.VALIDATION) });
+      continue;
+    }
+
+    if (target.prefix === "config") {
       let parsed: unknown;
       try {
         parsed = JSON.parse(value);
@@ -1220,6 +1454,10 @@ function bulkRowFromRecord(
     item.thumbnailTimestampMs = ms;
   }
 
+  const extras = buildPlatformExtras(extrasInput, `Row ${line}: `);
+  assertExtrasFitPost(extras, contentType, undefined, `Row ${line}: `);
+  Object.assign(item, extras);
+
   return { line, item, mediaRefs, configs: Object.keys(configs).length > 0 ? configs : undefined };
 }
 
@@ -1248,6 +1486,13 @@ async function rowsFromDirectory(path: string, timezone: string): Promise<BulkRo
       });
     }
 
+    if (input.twitterKeepLinks !== undefined) {
+      throw new CliError(`${name}: keeping X links is not available for bulk scheduling.`, {
+        exitCode: ExitCode.VALIDATION,
+        hint: 'Create the post with "adaptlypost post create --x-keep-links"',
+      });
+    }
+
     for (const [platform, config] of Object.entries(input.platformConfigs ?? {})) {
       assertConfigKeys(platform as PlatformType, config, `${name}: `);
     }
@@ -1268,6 +1513,10 @@ async function rowsFromDirectory(path: string, timezone: string): Promise<BulkRo
     if (platformTexts.length > 0) item.platformTexts = platformTexts;
 
     if (input.media?.length && input.alt?.length) item.mediaAltTexts = input.alt;
+
+    const extras = buildPlatformExtras(input, `${name}: `);
+    assertExtrasFitPost(extras, item.contentType, undefined, `${name}: `);
+    Object.assign(item, extras);
 
     rows.push({
       line: index + 1,
@@ -1568,7 +1817,74 @@ const withContentOptions = (command: Command): Command =>
     .option(
       "--document-title <title>",
       "LinkedIn document title, max 100 characters. Defaults to the file name; ignored for non-DOCUMENT posts",
-    );
+    )
+    .option(
+      "--first-comment <PLATFORM=text>",
+      `Comment posted from the same account right after the post, one flag per platform. Works on ${Object.entries(FIRST_COMMENT_MAX_LENGTH).map(([platform, limit]) => `${platform} (${limit})`).join(", ")}`,
+      collect,
+      [],
+    )
+    .option(
+      "--thumbnail-for <PLATFORM=url>",
+      "Video thumbnail image for one platform, repeatable. YOUTUBE, FACEBOOK, LINKEDIN, INSTAGRAM, PINTEREST",
+      collect,
+      [],
+    )
+    .option(
+      "--thumbnail-ms-for <PLATFORM=ms>",
+      "Video frame to use as one platform's thumbnail, repeatable. INSTAGRAM, PINTEREST, TIKTOK",
+      collect,
+      [],
+    )
+    .option(
+      "--aspect-ratio <PLATFORM=ratio>",
+      "Reframe the images on one platform, repeatable: SQUARE, PORTRAIT, VERTICAL or LANDSCAPE. INSTAGRAM (no VERTICAL) and TIKTOK",
+      collect,
+      [],
+    )
+    .option(
+      "--fit <PLATFORM=fit>",
+      "How --aspect-ratio reframes on that platform: CROP (default, cut from the center) or PAD (keep the whole image)",
+      collect,
+      [],
+    )
+    .option("--ig-share-to-story", "Also publish the Instagram media as a story next to the feed post or reel")
+    .option(
+      "--ig-collaborator <username>",
+      "Invite an Instagram account as a collaborator, repeatable, up to 3",
+      collect,
+      [],
+    )
+    .option("--ig-audio <audioId>", "Add music or an original sound to an Instagram reel. Find ids with: accounts instagram-audio")
+    .option("--ig-audio-title <title>", "Track title stored with --ig-audio, for display only")
+    .option("--ig-audio-artist <artist>", "Artist stored with --ig-audio, for display only")
+    .option("--ig-audio-volume <1-100>", "Volume of the added audio. Defaults to 100")
+    .option("--ig-video-volume <1-100>", "Volume of the reel's own sound. Defaults to 100")
+    .option("--fb-share-to-story", "Also publish the Facebook media as a story next to the feed post or reel")
+    .option(
+      "--fb-text-background <presetId>",
+      "Facebook colored text background id, for example 106018623298955. TEXT posts up to 130 characters, no media",
+    )
+    .option(
+      "--x-keep-links",
+      "Keep links in the X text clickable. AppSumo lifetime deals only; a kept link costs 20 credits instead of 2",
+    )
+    .option("--no-x-keep-links", "Break links in the X text again (the default)")
+    .option(
+      "--gbp-topic <type>",
+      `Google Business Profile post type: ${GOOGLE_BUSINESS_TOPIC_TYPES.join(", ")}. Defaults to STANDARD (an update)`,
+    )
+    .option("--gbp-cta <type>", `Google Business Profile button: ${GOOGLE_BUSINESS_CALL_TO_ACTION_TYPES.join(", ")}`)
+    .option("--gbp-cta-url <url>", "Link for the --gbp-cta button. Every button except CALL needs one")
+    .option("--gbp-event-title <title>", "Event or offer title. EVENT and OFFER need it")
+    .option(
+      "--gbp-event-start <date>",
+      "Event or offer start, YYYY-MM-DD or YYYY-MM-DDTHH:mm in the business's local time",
+    )
+    .option("--gbp-event-end <date>", "Event or offer end, YYYY-MM-DD or YYYY-MM-DDTHH:mm in the business's local time")
+    .option("--gbp-coupon <code>", "Coupon code for an OFFER")
+    .option("--gbp-redeem-url <url>", "Where to redeem an OFFER")
+    .option("--gbp-terms <text>", "Terms and conditions of an OFFER");
 
 export function registerPostCommands(program: Command): void {
   const post = program.command("post").description("Create, schedule and inspect posts");
@@ -1601,7 +1917,7 @@ export function registerPostCommands(program: Command): void {
     .description("Create a post from flags, a markdown file or stdin")
     .option("--draft", "Save as a draft instead of scheduling")
     .option("--repeat <frequency>", `Repeat the post: ${RECURRENCE_FREQUENCIES.join(", ")}. Needs --at, which sets the first post and its time of day`)
-    .option("--every <n>", `Repeat every n days, weeks or months, 1 to ${RECURRENCE_MAX_INTERVAL}. Defaults to 1`)
+    .option("--every <n>", `Repeat every n days, weeks, months or years, 1 to ${RECURRENCE_MAX_INTERVAL}. Defaults to 1`)
     .option("--on <weekday>", "Weekday for a WEEKLY repeat, repeatable. The weekday of --at is always included", collectWeekday, [])
     .option("--until <YYYY-MM-DD>", "Last day a post of the series may go out. Cannot be combined with --count")
     .option("--count <n>", `Total posts in the series, ${RECURRENCE_MIN_OCCURRENCES} to ${RECURRENCE_MAX_OCCURRENCES}. Cannot be combined with --until`)

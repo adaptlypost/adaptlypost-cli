@@ -699,13 +699,19 @@ const withRange = (command: Command): Command =>
 const withPlatforms = (command: Command): Command =>
   command.option(
     '--platform <platform>',
-    'limit to a platform, repeatable',
+    'limit to a platform, repeatable. MASTODON and TELEGRAM have no analytics',
     collectPlatform,
     [] as PlatformType[],
   );
 
 export const registerAnalyticsCommands = (program: Command): void => {
-  const analytics = program.command('analytics').description('social analytics for the workspace');
+  const analytics = program
+    .command('analytics')
+    .description(
+      'social analytics for the workspace: Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, LinkedIn, ' +
+        'YouTube, X and Google Business Profile (location impressions only, no per-post numbers). ' +
+        'Mastodon and Telegram have no analytics',
+    );
 
   withPlatforms(
     withRange(

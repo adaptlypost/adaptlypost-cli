@@ -9,15 +9,18 @@ import type { SocialAccount } from "../../src/api/types.js";
 import {
   CONFIG_KEYS,
   assertConfigKeys,
+  buildPlatformExtras,
   buildPostBody,
   buildTargets,
   inferContentType,
   inspectLocalMedia,
   mergePostInput,
+  normalizeConfig,
   parseFrontmatter,
   parsePostInput,
   parseScalar,
   sniffMimeType,
+  type FrontmatterMap,
 } from "../../src/commands/post-input.js";
 
 const accounts: SocialAccount[] = [
@@ -53,6 +56,27 @@ const accounts: SocialAccount[] = [
     username: "acme",
     avatarUrl: "",
     status: "active",
+  },
+];
+
+const moreAccounts: SocialAccount[] = [
+  ...accounts,
+  {
+    id: "gbp_1",
+    platform: "GOOGLE_BUSINESS",
+    displayName: "Acme Bakery, Main St",
+    username: "",
+    avatarUrl: "",
+    status: "active",
+  },
+  {
+    id: "ig_1",
+    platform: "INSTAGRAM",
+    displayName: "Acme",
+    username: "acme.ig",
+    avatarUrl: "",
+    status: "active",
+    supportsInstagramAudio: true,
   },
 ];
 
@@ -648,5 +672,214 @@ describe("assertConfigKeys", () => {
   it("refuses the id field, which the CLI fills in from the account", () => {
     expect(() => assertConfigKeys("FACEBOOK", { pageId: "p" })).toThrow(/filled in from the account/);
     expect(() => assertConfigKeys("INSTAGRAM", { connectionId: "c" })).toThrow(/filled in from the account/);
+  });
+});
+
+describe("per-platform options in frontmatter", () => {
+  it("pulls first comments, thumbnails, aspect ratios and keepLinks out of platform blocks", () => {
+    const input = parsePostInput(
+      [
+        "---",
+        "twitter:",
+        "  firstComment: Link in the reply",
+        "  keepLinks: true",
+        "instagram:",
+        "  postType: FEED",
+        "  aspectRatio: portrait",
+        "  fit: PAD",
+        "  thumbnailMs: 1500",
+        "  collaborators: [ada, \"@grace\"]",
+        "  audio:",
+        "    audioId: \"901\"",
+        "    audioVolume: 40",
+        "youtube:",
+        "  thumbnail: https://cdn/yt.png",
+        "google_business:",
+        "  topicType: EVENT",
+        "---",
+        "Hello",
+      ].join("\n"),
+    );
+
+    expect(input.firstComments).toEqual({ TWITTER: "Link in the reply" });
+    expect(input.twitterKeepLinks).toBe(true);
+    expect(input.platformAspectRatios).toEqual({ INSTAGRAM: { aspectRatio: "PORTRAIT", fit: "PAD" } });
+    expect(input.platformThumbnails).toEqual({
+      INSTAGRAM: { thumbnailTimestampMs: 1500 },
+      YOUTUBE: { thumbnailUrl: "https://cdn/yt.png" },
+    });
+    expect(input.platformConfigs).toEqual({
+      INSTAGRAM: { postType: "FEED", collaborators: ["ada", "@grace"], audio: { audioId: "901", audioVolume: 40 } },
+      GOOGLE_BUSINESS: { topicType: "EVENT" },
+    });
+  });
+
+  it("reads a top-level twitterKeepLinks key and refuses keepLinks outside the X block", () => {
+    expect(parsePostInput("---\ntwitterKeepLinks: false\n---\nHi").twitterKeepLinks).toBe(false);
+    expect(exitCodeOf(() => parsePostInput("---\nlinkedin:\n  keepLinks: true\n---\nHi"))).toBe(ExitCode.VALIDATION);
+  });
+
+  it("refuses an aspect ratio the API does not know", () => {
+    expect(exitCodeOf(() => parsePostInput("---\ninstagram:\n  aspectRatio: WIDE\n---\nHi"))).toBe(ExitCode.VALIDATION);
+  });
+
+  it("merges per-platform options field by field", () => {
+    const merged = mergePostInput(
+      { firstComments: { TWITTER: "a" }, platformAspectRatios: { INSTAGRAM: { aspectRatio: "SQUARE" } } },
+      { firstComments: { LINKEDIN: "b" }, platformAspectRatios: { INSTAGRAM: { fit: "PAD" } } },
+    );
+    expect(merged.firstComments).toEqual({ TWITTER: "a", LINKEDIN: "b" });
+    expect(merged.platformAspectRatios).toEqual({ INSTAGRAM: { aspectRatio: "SQUARE", fit: "PAD" } });
+  });
+});
+
+describe("buildPlatformExtras", () => {
+  it("builds the three arrays, trimming comments and dropping a frame an image-only platform cannot use", () => {
+    expect(
+      buildPlatformExtras({
+        firstComments: { LINKEDIN: "  More in the comments  " },
+        platformThumbnails: {
+          TIKTOK: { thumbnailTimestampMs: 0 },
+          INSTAGRAM: { thumbnailUrl: "https://cdn/ig.png", thumbnailTimestampMs: 900 },
+        },
+        platformAspectRatios: { TIKTOK: { aspectRatio: "VERTICAL" } },
+      }),
+    ).toEqual({
+      firstComments: [{ platform: "LINKEDIN", text: "More in the comments" }],
+      platformThumbnails: [
+        { platform: "TIKTOK", thumbnailTimestampMs: 0 },
+        { platform: "INSTAGRAM", thumbnailUrl: "https://cdn/ig.png", thumbnailTimestampMs: 900 },
+      ],
+      platformAspectRatios: [{ platform: "TIKTOK", aspectRatio: "VERTICAL" }],
+    });
+  });
+
+  it("refuses what the API would reject", () => {
+    const cases = [
+      { firstComments: { INSTAGRAM: "hi" } },
+      { firstComments: { TWITTER: "   " } },
+      { firstComments: { TWITTER: "x".repeat(281) } },
+      { platformThumbnails: { THREADS: { thumbnailUrl: "https://cdn/a.png" } } },
+      { platformThumbnails: { TIKTOK: { thumbnailUrl: "https://cdn/a.png" } } },
+      { platformThumbnails: { YOUTUBE: { thumbnailTimestampMs: 10 } } },
+      { platformAspectRatios: { FACEBOOK: { aspectRatio: "SQUARE" as const } } },
+      { platformAspectRatios: { INSTAGRAM: { aspectRatio: "VERTICAL" as const } } },
+      { platformAspectRatios: { INSTAGRAM: { fit: "PAD" as const } } },
+    ];
+    for (const input of cases) {
+      expect(exitCodeOf(() => buildPlatformExtras(input))).toBe(ExitCode.VALIDATION);
+    }
+  });
+});
+
+describe("normalizeConfig", () => {
+  it("defaults a Google Business config to STANDARD and normalizes enum spellings", () => {
+    expect(normalizeConfig("GOOGLE_BUSINESS", { callToActionType: "learn more", callToActionUrl: "https://acme.test" })).toEqual({
+      topicType: "STANDARD",
+      callToActionType: "LEARN_MORE",
+      callToActionUrl: "https://acme.test",
+    });
+    expect(normalizeConfig("GOOGLE_BUSINESS", { callToActionType: "call" })).toEqual({
+      topicType: "STANDARD",
+      callToActionType: "CALL",
+    });
+  });
+
+  it("refuses an incomplete event, a button without a link and a malformed date", () => {
+    const configs: FrontmatterMap[] = [
+      { topicType: "EVENT", eventTitle: "Open day" },
+      { topicType: "STANDARD", callToActionType: "BOOK" },
+      { topicType: "OFFER", eventTitle: "Sale", eventStart: "2026-10-01 18:00", eventEnd: "2026-10-02" },
+      { topicType: "PARTY" },
+    ];
+    for (const config of configs) {
+      expect(exitCodeOf(() => normalizeConfig("GOOGLE_BUSINESS", config))).toBe(ExitCode.VALIDATION);
+    }
+  });
+
+  it("strips @ from Instagram collaborators, drops duplicates and caps them at 3", () => {
+    expect(normalizeConfig("INSTAGRAM", { collaborators: ["@ada", "ADA", "grace"] })).toEqual({
+      collaborators: ["ada", "grace"],
+    });
+    expect(exitCodeOf(() => normalizeConfig("INSTAGRAM", { collaborators: ["a", "b", "c", "d"] }))).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => normalizeConfig("INSTAGRAM", { collaborators: ["no spaces"] }))).toBe(ExitCode.VALIDATION);
+  });
+
+  it("checks Instagram audio keys and volumes", () => {
+    expect(normalizeConfig("INSTAGRAM", { audio: "901" })).toEqual({ audio: { audioId: "901" } });
+    expect(exitCodeOf(() => normalizeConfig("INSTAGRAM", { audio: { audioId: "901", volume: 50 } }))).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => normalizeConfig("INSTAGRAM", { audio: { audioId: "901", audioVolume: 0 } }))).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => normalizeConfig("INSTAGRAM", { audio: { title: "No id" } }))).toBe(ExitCode.VALIDATION);
+  });
+
+  it("turns a numeric Facebook text background id into a string and refuses anything but digits", () => {
+    expect(normalizeConfig("FACEBOOK", { textFormatPresetId: 106018623298955 })).toEqual({
+      textFormatPresetId: "106018623298955",
+    });
+    expect(exitCodeOf(() => normalizeConfig("FACEBOOK", { textFormatPresetId: "purple" }))).toBe(ExitCode.VALIDATION);
+  });
+});
+
+describe("buildPostBody with the new platforms and options", () => {
+  it("routes a Google Business Profile location and fills in its config", () => {
+    const body = buildPostBody(
+      {
+        text: "Open day on Saturday",
+        accounts: ["gbp_1"],
+        platformConfigs: {
+          GOOGLE_BUSINESS: {
+            topicType: "event",
+            eventTitle: "Open day",
+            eventStart: "2026-10-17T10:00",
+            eventEnd: "2026-10-17T16:00",
+          },
+        },
+      },
+      { accounts: moreAccounts },
+    );
+
+    expect(body.platforms).toEqual(["GOOGLE_BUSINESS"]);
+    expect(body.googleBusinessConnectionIds).toEqual(["gbp_1"]);
+    expect(body.googleBusinessConfigs).toEqual([
+      {
+        connectionId: "gbp_1",
+        topicType: "EVENT",
+        eventTitle: "Open day",
+        eventStart: "2026-10-17T10:00",
+        eventEnd: "2026-10-17T16:00",
+      },
+    ]);
+  });
+
+  it("refuses TELEGRAM as a target, because the API cannot post there", () => {
+    expect(exitCodeOf(() => buildPostBody({ text: "Hi", platforms: ["TELEGRAM"] }, { accounts }))).toBe(ExitCode.VALIDATION);
+  });
+
+  it("sends twitterKeepLinks and the extras, and refuses extras for a platform the post skips", () => {
+    const body = buildPostBody(
+      { text: "See example.com", accounts: ["tw_4d1b"], twitterKeepLinks: true, firstComments: { TWITTER: "More" } },
+      { accounts },
+    );
+    expect(body.twitterKeepLinks).toBe(true);
+    expect(body.firstComments).toEqual([{ platform: "TWITTER", text: "More" }]);
+
+    expect(
+      exitCodeOf(() => buildPostBody({ text: "Hi", accounts: ["tw_4d1b"], firstComments: { LINKEDIN: "More" } }, { accounts })),
+    ).toBe(ExitCode.VALIDATION);
+  });
+
+  it("refuses thumbnails on a non-video post and aspect ratios on a video", () => {
+    expect(() =>
+      buildPostBody(
+        { text: "Hi", accounts: ["ig_1"], platformThumbnails: { INSTAGRAM: { thumbnailTimestampMs: 5 } } },
+        { accounts: moreAccounts, mediaUrls: ["https://cdn/a.png"] },
+      ),
+    ).toThrow(/only apply to VIDEO posts/);
+    expect(() =>
+      buildPostBody(
+        { text: "Hi", accounts: ["ig_1"], platformAspectRatios: { INSTAGRAM: { aspectRatio: "SQUARE" } } },
+        { accounts: moreAccounts, mediaUrls: ["https://cdn/a.mp4"] },
+      ),
+    ).toThrow(/only apply to IMAGE and CAROUSEL posts/);
   });
 });

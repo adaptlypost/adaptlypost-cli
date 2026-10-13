@@ -1,9 +1,13 @@
 import type { Command } from 'commander';
 
-import { checkSocialAccount, listSocialAccounts } from '../api/client.js';
+import { checkSocialAccount, listSocialAccounts, searchInstagramAudio } from '../api/client.js';
 import {
+  INSTAGRAM_AUDIO_SEARCH_MAX_LENGTH,
+  INSTAGRAM_AUDIO_TYPES,
   PLATFORM_TYPES,
   SOCIAL_ACCOUNT_STATUSES,
+  type InstagramAudio,
+  type InstagramAudioType,
   type PlatformType,
   type SocialAccount,
   type SocialAccountCheck,
@@ -101,6 +105,29 @@ const fetchAccounts = async (label: string): Promise<SocialAccount[]> => {
   }
 };
 
+export const normalizeAudioType = (value: string): InstagramAudioType => {
+  const audioType = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (!(INSTAGRAM_AUDIO_TYPES as readonly string[]).includes(audioType)) {
+    throw usageError(
+      `Unknown audio type "${value}"`,
+      `valid types: ${INSTAGRAM_AUDIO_TYPES.join(', ')}`,
+    );
+  }
+  return audioType as InstagramAudioType;
+};
+
+export const formatAudioLength = (durationMs: number | undefined): string => {
+  if (durationMs === undefined || durationMs === null) return '—';
+  const seconds = Math.round(durationMs / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+};
+
+export const audioArtist = (audio: InstagramAudio): string => {
+  if (audio.displayArtist) return audio.displayArtist;
+  if (audio.igUsername) return audio.igUsername.startsWith('@') ? audio.igUsername : `@${audio.igUsername}`;
+  return '—';
+};
+
 const LIST_COLUMNS: Column<SocialAccount>[] = [
   { header: 'ID', value: (account) => formatId(account.id) },
   { header: 'PLATFORM', value: (account) => account.platform },
@@ -171,6 +198,12 @@ const runView = async (id: string): Promise<void> => {
   ];
 
   if (account.pageId) entries.push(['page', account.pageId]);
+  if (account.platform === 'INSTAGRAM' && account.supportsInstagramAudio !== undefined) {
+    entries.push([
+      'reel audio',
+      account.supportsInstagramAudio ? 'yes' : 'no, reconnect the account through Facebook to add audio',
+    ]);
+  }
   if (account.unauthorizedReason) entries.push(['reason', account.unauthorizedReason]);
   if (account.avatarUrl) entries.push(['avatar', account.avatarUrl]);
 
@@ -233,6 +266,69 @@ const runCheck = async (id: string): Promise<void> => {
   }
 };
 
+interface InstagramAudioOptions {
+  type: InstagramAudioType;
+  search?: string;
+}
+
+const AUDIO_COLUMNS: Column<InstagramAudio>[] = [
+  { header: 'AUDIO ID', value: (audio) => audio.audioId },
+  { header: 'TYPE', value: (audio) => (audio.audioType === 'original_sound' ? 'original sound' : audio.audioType) },
+  { header: 'TITLE', value: (audio) => audio.title || '—' },
+  { header: 'ARTIST', value: audioArtist },
+  { header: 'LENGTH', value: (audio) => formatAudioLength(audio.durationMs), align: 'right' },
+];
+
+const runInstagramAudio = async (id: string, options: InstagramAudioOptions): Promise<void> => {
+  const searchQuery = options.search?.trim() || undefined;
+  if (searchQuery && searchQuery.length > INSTAGRAM_AUDIO_SEARCH_MAX_LENGTH) {
+    throw usageError(`--search is ${searchQuery.length} characters; the limit is ${INSTAGRAM_AUDIO_SEARCH_MAX_LENGTH}`);
+  }
+
+  const account = findAccount(await fetchAccounts('Loading account…'), id);
+
+  if (!account) {
+    throw notFoundError(
+      `No account with id "${id}" in this workspace`,
+      'list them with: adaptlypost accounts list --platform INSTAGRAM',
+    );
+  }
+
+  if (account.platform !== 'INSTAGRAM') {
+    throw usageError(`${account.platform} accounts have no Instagram audio`, 'pass an INSTAGRAM account id');
+  }
+
+  if (account.supportsInstagramAudio === false) {
+    throw usageError(
+      'This Instagram account cannot add audio to reels',
+      'Meta only allows it for accounts connected through Facebook; reconnect it that way in AdaptlyPost',
+    );
+  }
+
+  const progress = isQuiet() || isMachine() ? null : spinner('Asking Instagram…');
+  let audio: InstagramAudio[];
+  try {
+    ({ audio } = await searchInstagramAudio(account.id, { audioType: options.type, searchQuery }));
+  } finally {
+    progress?.stop();
+  }
+
+  if (isMachine()) {
+    printResult('accounts.instagram-audio', audio, { total: audio.length, hasMore: false });
+    return;
+  }
+
+  if (audio.length === 0) {
+    print(searchQuery ? `No ${options.type.replace('_', ' ')} matches "${searchQuery}".` : 'Nothing trending right now.');
+    return;
+  }
+
+  printTable(audio, AUDIO_COLUMNS);
+  print();
+  print(`${audio.length} ${searchQuery ? `results for "${searchQuery}"` : 'trending'}`);
+  hint('add one to a reel: adaptlypost post create --ig-type REEL --ig-audio <audioId> …');
+};
+
 export const registerAccountCommands = (program: Command): void => {
   const accounts = program
     .command('accounts')
@@ -271,5 +367,17 @@ export const registerAccountCommands = (program: Command): void => {
     .description('ask Facebook whether a page token still works (Facebook pages only)')
     .action(async (id: string) => {
       await runCheck(id);
+    });
+
+  accounts
+    .command('instagram-audio <id>')
+    .alias('ig-audio')
+    .description(
+      'search the music and original sounds an Instagram account can add to a reel; trending audio without --search',
+    )
+    .option('--type <type>', `${INSTAGRAM_AUDIO_TYPES.join(' or ')}`, normalizeAudioType, 'music' as InstagramAudioType)
+    .option('--search <query>', `keyword filter, up to ${INSTAGRAM_AUDIO_SEARCH_MAX_LENGTH} characters`)
+    .action(async (id: string, options: InstagramAudioOptions) => {
+      await runInstagramAudio(id, options);
     });
 };

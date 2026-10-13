@@ -9,6 +9,8 @@ export const PLATFORM_TYPES = [
   'PINTEREST',
   'YOUTUBE',
   'MASTODON',
+  'TELEGRAM',
+  'GOOGLE_BUSINESS',
 ] as const;
 export type PlatformType = (typeof PLATFORM_TYPES)[number];
 
@@ -40,7 +42,7 @@ export const PLATFORM_POST_STATUSES = [
 ] as const;
 export type PlatformPostStatus = (typeof PLATFORM_POST_STATUSES)[number];
 
-export const RECURRENCE_FREQUENCIES = ['DAILY', 'WEEKLY', 'MONTHLY'] as const;
+export const RECURRENCE_FREQUENCIES = ['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'] as const;
 export type RecurrenceFrequency = (typeof RECURRENCE_FREQUENCIES)[number];
 
 export const WEEKDAYS = [
@@ -127,6 +129,62 @@ export type MetaPostType = (typeof META_POST_TYPES)[number];
 export const INSTAGRAM_TRIAL_GRADUATIONS = ['MANUAL', 'SS_PERFORMANCE'] as const;
 export type InstagramTrialGraduation = (typeof INSTAGRAM_TRIAL_GRADUATIONS)[number];
 
+export const INSTAGRAM_COLLABORATORS_MAX = 3;
+export const INSTAGRAM_AUDIO_VOLUME_MIN = 1;
+export const INSTAGRAM_AUDIO_VOLUME_MAX = 100;
+export const INSTAGRAM_AUDIO_SEARCH_MAX_LENGTH = 100;
+
+export const INSTAGRAM_AUDIO_TYPES = ['music', 'original_sound'] as const;
+export type InstagramAudioType = (typeof INSTAGRAM_AUDIO_TYPES)[number];
+
+export const GOOGLE_BUSINESS_TOPIC_TYPES = ['STANDARD', 'EVENT', 'OFFER'] as const;
+export type GoogleBusinessTopicType = (typeof GOOGLE_BUSINESS_TOPIC_TYPES)[number];
+
+export const GOOGLE_BUSINESS_CALL_TO_ACTION_TYPES = [
+  'BOOK',
+  'ORDER',
+  'SHOP',
+  'LEARN_MORE',
+  'SIGN_UP',
+  'CALL',
+] as const;
+export type GoogleBusinessCallToActionType =
+  (typeof GOOGLE_BUSINESS_CALL_TO_ACTION_TYPES)[number];
+
+export const MEDIA_ASPECT_RATIOS = ['SQUARE', 'PORTRAIT', 'VERTICAL', 'LANDSCAPE'] as const;
+export type MediaAspectRatio = (typeof MEDIA_ASPECT_RATIOS)[number];
+
+export const MEDIA_ASPECT_RATIO_FITS = ['CROP', 'PAD'] as const;
+export type MediaAspectRatioFit = (typeof MEDIA_ASPECT_RATIO_FITS)[number];
+
+export const ASPECT_RATIOS_BY_PLATFORM: Partial<Record<PlatformType, readonly MediaAspectRatio[]>> = {
+  INSTAGRAM: ['SQUARE', 'PORTRAIT', 'LANDSCAPE'],
+  TIKTOK: MEDIA_ASPECT_RATIOS,
+};
+
+export const FIRST_COMMENT_MAX_LENGTH: Partial<Record<PlatformType, number>> = {
+  LINKEDIN: 1250,
+  TWITTER: 280,
+  THREADS: 500,
+  BLUESKY: 300,
+  MASTODON: 500,
+  YOUTUBE: 10000,
+};
+
+export const FIRST_COMMENT_STATUSES = ['PENDING', 'PUBLISHED', 'FAILED'] as const;
+export type FirstCommentStatus = (typeof FIRST_COMMENT_STATUSES)[number];
+
+export type ThumbnailKind = 'image' | 'frame' | 'image-or-frame';
+
+export const THUMBNAIL_KIND_BY_PLATFORM: Partial<Record<PlatformType, ThumbnailKind>> = {
+  YOUTUBE: 'image',
+  FACEBOOK: 'image',
+  LINKEDIN: 'image',
+  INSTAGRAM: 'image-or-frame',
+  PINTEREST: 'image-or-frame',
+  TIKTOK: 'frame',
+};
+
 export const YOUTUBE_POST_TYPES = ['VIDEO', 'SHORTS'] as const;
 export type YouTubePostType = (typeof YOUTUBE_POST_TYPES)[number];
 
@@ -179,6 +237,7 @@ export const CAPTION_PLATFORMS = [
   'LINKEDIN',
   'YOUTUBE',
   'FACEBOOK',
+  'GOOGLE_BUSINESS',
 ] as const;
 export type CaptionPlatform = (typeof CAPTION_PLATFORMS)[number];
 
@@ -212,10 +271,34 @@ export interface SocialAccount {
   status: SocialAccountStatus;
   unauthorizedReason?: string;
   pageId?: string;
+  supportsInstagramAudio?: boolean;
 }
 
 export interface SocialAccountsResponse {
   accounts: SocialAccount[];
+}
+
+export type SearchInstagramAudioQuery = {
+  audioType: InstagramAudioType;
+  searchQuery?: string;
+};
+
+export interface InstagramAudio {
+  audioId: string;
+  audioType: InstagramAudioType;
+  title?: string;
+  displayArtist?: string;
+  igUsername?: string;
+  durationMs?: number;
+  coverArtworkUrl?: string;
+  profilePictureUrl?: string;
+  previewUrl?: string;
+  instagramUrl?: string;
+  isAdsEligible?: boolean;
+}
+
+export interface InstagramAudioResponse {
+  audio: InstagramAudio[];
 }
 
 export type TokenType = 'api_token' | 'oauth';
@@ -270,6 +353,29 @@ export interface PlatformText {
   text: string;
 }
 
+export interface PlatformFirstComment {
+  platform: PlatformType;
+  text: string;
+}
+
+export interface PlatformThumbnail {
+  platform: PlatformType;
+  thumbnailUrl?: string;
+  thumbnailTimestampMs?: number;
+}
+
+export interface PlatformAspectRatio {
+  platform: PlatformType;
+  aspectRatio: MediaAspectRatio;
+  fit?: MediaAspectRatioFit;
+}
+
+export interface PlatformExtras {
+  firstComments?: PlatformFirstComment[];
+  platformThumbnails?: PlatformThumbnail[];
+  platformAspectRatios?: PlatformAspectRatio[];
+}
+
 export interface PinterestPostConfig {
   connectionId: string;
   boardId: string;
@@ -292,16 +398,42 @@ export interface TikTokPostConfig {
   autoAddMusic?: boolean;
 }
 
+export interface InstagramAudioConfig {
+  audioId: string;
+  title?: string;
+  artist?: string;
+  audioVolume?: number;
+  videoVolume?: number;
+}
+
 export interface InstagramPostConfig {
   connectionId: string;
   postType?: MetaPostType;
+  shareToStory?: boolean;
   trialGraduation?: InstagramTrialGraduation;
+  collaborators?: string[];
+  audio?: InstagramAudioConfig;
 }
 
 export interface FacebookPostConfig {
   pageId: string;
   postType?: MetaPostType;
+  shareToStory?: boolean;
   videoTitle?: string;
+  textFormatPresetId?: string;
+}
+
+export interface GoogleBusinessPostConfig {
+  connectionId: string;
+  topicType: GoogleBusinessTopicType;
+  callToActionType?: GoogleBusinessCallToActionType;
+  callToActionUrl?: string;
+  eventTitle?: string;
+  eventStart?: string;
+  eventEnd?: string;
+  offerCouponCode?: string;
+  offerRedeemUrl?: string;
+  offerTerms?: string;
 }
 
 export interface YouTubePostConfig {
@@ -331,6 +463,7 @@ export interface PostTargets {
   twitterConnectionIds?: string[];
   blueskyConnectionIds?: string[];
   mastodonConnectionIds?: string[];
+  googleBusinessConnectionIds?: string[];
   linkedinConnectionIds?: string[];
   pinterestConnectionIds?: string[];
   youtubeConnectionIds?: string[];
@@ -340,6 +473,7 @@ export interface PostTargets {
   facebookConfigs?: FacebookPostConfig[];
   youtubeConfigs?: YouTubePostConfig[];
   linkedinConfigs?: LinkedInPostConfig[];
+  googleBusinessConfigs?: GoogleBusinessPostConfig[];
 }
 
 export interface SocialPostPlatform {
@@ -356,9 +490,18 @@ export interface SocialPostPlatform {
   publishedAt?: string;
   mediaUrls: string[];
   mediaAltTexts: string[];
+  mediaAspectRatio?: MediaAspectRatio;
+  mediaAspectRatioFit?: MediaAspectRatioFit;
+  thumbnailUrl?: string;
+  thumbnailTimestampMs?: number;
   previewUrls: string[];
   createdAt: string;
   updatedAt: string;
+  firstComment?: string;
+  firstCommentStatus?: FirstCommentStatus;
+  firstCommentId?: string;
+  firstCommentError?: string;
+  firstCommentPublishedAt?: string;
   linkedinDocumentTitle?: string;
   pinterestBoardId?: string;
   pinterestTitle?: string;
@@ -377,8 +520,16 @@ export interface SocialPostPlatform {
   tiktokDraftFallback?: boolean;
   instagramPostType?: MetaPostType;
   instagramTrialGraduation?: InstagramTrialGraduation;
+  instagramCollaborators?: string[];
+  instagramUsername?: string;
+  instagramAudioId?: string;
+  instagramAudioTitle?: string;
+  instagramAudioArtist?: string;
+  instagramAudioVolume?: number;
+  instagramVideoVolume?: number;
   facebookPostType?: MetaPostType;
   facebookVideoTitle?: string;
+  facebookTextFormatPresetId?: string;
   facebookPageExternalId?: string;
   youtubePostType?: YouTubePostType;
   youtubeVideoTitle?: string;
@@ -390,6 +541,16 @@ export interface SocialPostPlatform {
   youtubeMadeForKids?: boolean;
   youtubeCategoryId?: string;
   youtubePlaylistId?: string;
+  twitterKeepLinks?: boolean;
+  googleBusinessTopicType?: GoogleBusinessTopicType;
+  googleBusinessCallToActionType?: GoogleBusinessCallToActionType;
+  googleBusinessCallToActionUrl?: string;
+  googleBusinessEventTitle?: string;
+  googleBusinessEventStart?: string;
+  googleBusinessEventEnd?: string;
+  googleBusinessOfferCouponCode?: string;
+  googleBusinessOfferRedeemUrl?: string;
+  googleBusinessOfferTerms?: string;
 }
 
 export interface SocialPost {
@@ -425,7 +586,7 @@ export type ListPostsQuery = {
   endDate?: string;
 };
 
-export interface CreatePostRequest extends PostTargets {
+export interface CreatePostRequest extends PostTargets, PlatformExtras {
   platforms: PlatformType[];
   contentType: ContentType;
   timezone: string;
@@ -438,6 +599,7 @@ export interface CreatePostRequest extends PostTargets {
   scheduledAt?: string;
   saveAsDraft?: boolean;
   recurrence?: Recurrence;
+  twitterKeepLinks?: boolean;
 }
 
 export interface Recurrence {
@@ -484,7 +646,7 @@ export type ListRecurringPostsQuery = {
   statuses?: RecurringPostStatus[];
 };
 
-export interface UpdatePostRequest extends PostTargets {
+export interface UpdatePostRequest extends PostTargets, PlatformExtras {
   platforms?: PlatformType[];
   contentType?: ContentType;
   timezone?: string;
@@ -495,6 +657,7 @@ export interface UpdatePostRequest extends PostTargets {
   thumbnailUrl?: string;
   thumbnailTimestampMs?: number;
   scheduledAt?: string;
+  twitterKeepLinks?: boolean;
 }
 
 export interface SkippedPlatform {
@@ -548,7 +711,7 @@ export interface PostResultsResponse {
   results: PostResult[];
 }
 
-export interface BulkPostInput {
+export interface BulkPostInput extends PlatformExtras {
   contentType: ContentType;
   scheduledAt: string;
   text?: string;
@@ -562,6 +725,7 @@ export interface BulkPostInput {
   instagramConfigs?: InstagramPostConfig[];
   facebookConfigs?: FacebookPostConfig[];
   youtubeConfigs?: YouTubePostConfig[];
+  googleBusinessConfigs?: GoogleBusinessPostConfig[];
 }
 
 export interface BulkSchedulePostsRequest extends PostTargets {

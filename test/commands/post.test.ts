@@ -329,6 +329,12 @@ describe("post create", () => {
     });
   });
 
+  it("sends a yearly recurrence", async () => {
+    await run(["post", "create", "-t", "Happy birthday, Acme", "-a", "tw_4d1b", "--at", "2027-03-01T09:00:00Z", "--repeat", "yearly", "--count", "5", "--dry-run"]);
+
+    expect((stdoutJson().data as Record<string, unknown>).recurrence).toEqual({ frequency: "YEARLY", maxOccurrences: 5 });
+  });
+
   it("returns the recurringPostId the API sends back", async () => {
     vi.mocked(client.createPost).mockResolvedValue({
       postId: "post_1",
@@ -888,6 +894,385 @@ describe("post watch", () => {
   it("refuses a timeout that is not a duration", async () => {
     await expect(run(["post", "watch", "post_1", "--timeout", "soon"])).rejects.toMatchObject({
       exitCode: 2,
+    });
+  });
+});
+
+describe("per-platform options on create, update and bulk", () => {
+  const withNewPlatforms: SocialAccount[] = [
+    ...accounts,
+    {
+      id: "gbp_1",
+      platform: "GOOGLE_BUSINESS",
+      displayName: "Acme Bakery, Main St",
+      username: "",
+      avatarUrl: "",
+      status: "active",
+    },
+    {
+      id: "fb_1",
+      platform: "FACEBOOK",
+      displayName: "Acme Page",
+      username: "",
+      avatarUrl: "",
+      status: "active",
+      pageId: "102938",
+    },
+  ];
+
+  const csvPath = (contents: string): string => {
+    const path = join(workspace, `bulk-${Math.random().toString(16).slice(2)}.csv`);
+    writeFileSync(path, contents);
+    return path;
+  };
+
+  beforeEach(() => {
+    vi.mocked(client.listSocialAccounts).mockResolvedValue({ accounts: withNewPlatforms });
+  });
+
+  it("builds a Google Business Profile offer from the --gbp flags", async () => {
+    await run([
+      "post",
+      "create",
+      "-t",
+      "20% off all week",
+      "-a",
+      "gbp_1",
+      "--gbp-topic",
+      "offer",
+      "--gbp-cta",
+      "SHOP",
+      "--gbp-cta-url",
+      "https://acme.test/shop",
+      "--gbp-event-title",
+      "Autumn sale",
+      "--gbp-event-start",
+      "2026-10-20",
+      "--gbp-event-end",
+      "2026-10-27",
+      "--gbp-coupon",
+      "AUTUMN20",
+      "--dry-run",
+    ]);
+
+    expect(stdoutJson().data).toMatchObject({
+      platforms: ["GOOGLE_BUSINESS"],
+      googleBusinessConnectionIds: ["gbp_1"],
+      googleBusinessConfigs: [
+        {
+          connectionId: "gbp_1",
+          topicType: "OFFER",
+          callToActionType: "SHOP",
+          callToActionUrl: "https://acme.test/shop",
+          eventTitle: "Autumn sale",
+          eventStart: "2026-10-20",
+          eventEnd: "2026-10-27",
+          offerCouponCode: "AUTUMN20",
+        },
+      ],
+    });
+  });
+
+  it("sends Instagram and Facebook story, collaborator, audio and background options", async () => {
+    await run([
+      "post",
+      "create",
+      "-t",
+      "New reel",
+      "-a",
+      "ig_7c3e",
+      "-a",
+      "fb_1",
+      "-m",
+      "https://cdn/reel.mp4",
+      "--ig-type",
+      "REEL",
+      "--ig-share-to-story",
+      "--ig-collaborator",
+      "@ada",
+      "--ig-collaborator",
+      "grace",
+      "--ig-audio",
+      "901",
+      "--ig-audio-volume",
+      "40",
+      "--fb-share-to-story",
+      "--dry-run",
+    ]);
+
+    expect(stdoutJson().data).toMatchObject({
+      instagramConfigs: [
+        {
+          connectionId: "ig_7c3e",
+          postType: "REEL",
+          shareToStory: true,
+          collaborators: ["ada", "grace"],
+          audio: { audioId: "901", audioVolume: 40 },
+        },
+      ],
+      facebookConfigs: [{ pageId: "fb_1", shareToStory: true }],
+    });
+  });
+
+  it("refuses audio details without --ig-audio", async () => {
+    await expect(
+      run(["post", "create", "-t", "Hi", "-a", "ig_7c3e", "--ig-audio-title", "Sunrise", "--dry-run"]),
+    ).rejects.toMatchObject({ exitCode: 2 });
+  });
+
+  it("sends first comments, per-platform thumbnails, aspect ratios and keep links", async () => {
+    await run([
+      "post",
+      "create",
+      "-t",
+      "Read more at example.com",
+      "-a",
+      "tw_4d1b",
+      "-a",
+      "li_22aa",
+      "--first-comment",
+      "TWITTER=Thread below = more",
+      "--first-comment",
+      "li=Questions welcome",
+      "--x-keep-links",
+      "--dry-run",
+    ]);
+
+    expect(stdoutJson().data).toMatchObject({
+      twitterKeepLinks: true,
+      firstComments: [
+        { platform: "TWITTER", text: "Thread below = more" },
+        { platform: "LINKEDIN", text: "Questions welcome" },
+      ],
+    });
+
+    written = [];
+    await run([
+      "post",
+      "create",
+      "-t",
+      "Clip",
+      "-a",
+      "ig_7c3e",
+      "-a",
+      "li_22aa",
+      "-m",
+      "https://cdn/clip.mp4",
+      "--thumbnail-for",
+      "LINKEDIN=https://cdn/li.png",
+      "--thumbnail-ms-for",
+      "INSTAGRAM=2500",
+      "--dry-run",
+    ]);
+
+    expect(stdoutJson().data).toMatchObject({
+      platformThumbnails: [
+        { platform: "LINKEDIN", thumbnailUrl: "https://cdn/li.png" },
+        { platform: "INSTAGRAM", thumbnailTimestampMs: 2500 },
+      ],
+    });
+
+    written = [];
+    await run([
+      "post",
+      "create",
+      "-t",
+      "Photo",
+      "-a",
+      "ig_7c3e",
+      "-m",
+      "https://cdn/a.png",
+      "--aspect-ratio",
+      "INSTAGRAM=portrait",
+      "--fit",
+      "INSTAGRAM=pad",
+      "--dry-run",
+    ]);
+
+    expect(stdoutJson().data).toMatchObject({
+      platformAspectRatios: [{ platform: "INSTAGRAM", aspectRatio: "PORTRAIT", fit: "PAD" }],
+    });
+  });
+
+  it("refuses a first comment on a platform without one, and a TELEGRAM target", async () => {
+    await expect(
+      run(["post", "create", "-t", "Hi", "-a", "ig_7c3e", "--first-comment", "INSTAGRAM=hi", "--dry-run"]),
+    ).rejects.toMatchObject({ exitCode: 5 });
+    await expect(run(["post", "create", "-t", "Hi", "-P", "TELEGRAM", "--dry-run"])).rejects.toMatchObject({
+      exitCode: 5,
+    });
+  });
+
+  it("sends first comments and keep links on update without touching the targets", async () => {
+    await run([
+      "post",
+      "update",
+      "post_1",
+      "--first-comment",
+      "TWITTER=Updated reply",
+      "--no-x-keep-links",
+      "--dry-run",
+    ]);
+
+    expect(stdoutJson().data).toEqual({
+      twitterKeepLinks: false,
+      firstComments: [{ platform: "TWITTER", text: "Updated reply" }],
+    });
+  });
+
+  it("resends one Instagram target with shareToStory, collaborators and audio when the post has a story sibling", async () => {
+    vi.mocked(client.getPost).mockResolvedValue({
+      id: "post_1",
+      status: "SCHEDULED",
+      contentType: "VIDEO",
+      text: "Reel",
+      timezone: "UTC",
+      mediaUrls: ["https://cdn/reel.mp4"],
+      platforms: [
+        {
+          id: "pp_1",
+          platform: "INSTAGRAM",
+          status: "PENDING",
+          connectionId: "ig_7c3e",
+          instagramPostType: "REEL",
+          instagramCollaborators: ["ada"],
+          instagramAudioId: "901",
+          instagramAudioVolume: 40,
+          mediaUrls: [],
+          mediaAltTexts: [],
+          previewUrls: [],
+          createdAt: "",
+          updatedAt: "",
+        },
+        {
+          id: "pp_2",
+          platform: "INSTAGRAM",
+          status: "PENDING",
+          connectionId: "ig_7c3e",
+          instagramPostType: "STORY",
+          mediaUrls: [],
+          mediaAltTexts: [],
+          previewUrls: [],
+          createdAt: "",
+          updatedAt: "",
+        },
+        {
+          id: "pp_3",
+          platform: "GOOGLE_BUSINESS",
+          status: "PENDING",
+          connectionId: "gbp_1",
+          googleBusinessTopicType: "STANDARD",
+          googleBusinessCallToActionType: "CALL",
+          mediaUrls: [],
+          mediaAltTexts: [],
+          previewUrls: [],
+          createdAt: "",
+          updatedAt: "",
+        },
+      ],
+      createdAt: "",
+      updatedAt: "",
+      userId: "u",
+    });
+
+    await run(["post", "update", "post_1", "--alt", "A reel", "--dry-run"]);
+
+    expect(stdoutJson().data).toEqual({
+      mediaAltTexts: ["A reel"],
+      platforms: ["INSTAGRAM", "GOOGLE_BUSINESS"],
+      instagramConnectionIds: ["ig_7c3e"],
+      instagramConfigs: [
+        {
+          connectionId: "ig_7c3e",
+          postType: "REEL",
+          collaborators: ["ada"],
+          audio: { audioId: "901", audioVolume: 40 },
+          shareToStory: true,
+        },
+      ],
+      googleBusinessConnectionIds: ["gbp_1"],
+      googleBusinessConfigs: [{ connectionId: "gbp_1", topicType: "STANDARD", callToActionType: "CALL" }],
+    });
+  });
+
+  it("refuses to resend the targets of a post that also goes to Telegram", async () => {
+    vi.mocked(client.getPost).mockResolvedValue({
+      id: "post_1",
+      status: "SCHEDULED",
+      contentType: "IMAGE",
+      timezone: "UTC",
+      mediaUrls: ["https://cdn/a.png"],
+      platforms: [
+        { id: "pp_1", platform: "TWITTER", status: "PENDING", connectionId: "tw_4d1b", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
+        { id: "pp_2", platform: "TELEGRAM", status: "PENDING", connectionId: "tg_1", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
+      ],
+      createdAt: "",
+      updatedAt: "",
+      userId: "u",
+    });
+
+    await expect(run(["post", "update", "post_1", "--alt", "A photo", "--dry-run"])).rejects.toMatchObject({
+      exitCode: 5,
+      message: expect.stringContaining("TELEGRAM"),
+    });
+  });
+
+  it("reads the per-platform CSV columns into each bulk item and GOOGLE_BUSINESS configs into the batch", async () => {
+    const path = csvPath(
+      [
+        "text,scheduledAt,media,firstComment_TWITTER,aspectRatio_INSTAGRAM,fit_INSTAGRAM,text_GOOGLE_BUSINESS,config_GOOGLE_BUSINESS",
+        'Photo,2026-10-19T09:00:00Z,https://cdn/a.png,"Reply, with a comma",square,pad,Shorter,"{""topicType"":""STANDARD"",""callToActionType"":""CALL""}"',
+        "",
+      ].join("\n"),
+    );
+
+    await run(["post", "bulk", "--csv", path, "-a", "tw_4d1b", "-a", "ig_7c3e", "-a", "gbp_1", "--dry-run"]);
+
+    const [batch] = stdoutJson().data as Record<string, unknown>[];
+    expect(batch).toMatchObject({
+      platforms: ["TWITTER", "INSTAGRAM", "GOOGLE_BUSINESS"],
+      googleBusinessConnectionIds: ["gbp_1"],
+      googleBusinessConfigs: [{ connectionId: "gbp_1", topicType: "STANDARD", callToActionType: "CALL" }],
+    });
+    expect((batch?.posts as Record<string, unknown>[])[0]).toMatchObject({
+      platformTexts: [{ platform: "GOOGLE_BUSINESS", text: "Shorter" }],
+      firstComments: [{ platform: "TWITTER", text: "Reply, with a comma" }],
+      platformAspectRatios: [{ platform: "INSTAGRAM", aspectRatio: "SQUARE", fit: "PAD" }],
+    });
+  });
+
+  it("refuses a bulk row whose per-platform column the API would reject, with its row number", async () => {
+    const path = csvPath(
+      ["text,scheduledAt,thumbnail_TIKTOK", "Clip,2026-10-19T09:00:00Z,https://cdn/t.png", ""].join("\n"),
+    );
+
+    await expect(run(["post", "bulk", "--csv", path, "-P", "TIKTOK", "--dry-run"])).rejects.toMatchObject({
+      exitCode: 5,
+      message: expect.stringContaining("Row 2"),
+    });
+  });
+
+  it("reads first comments from --dir files and refuses keepLinks there", async () => {
+    const dir = mkdtempSync(join(workspace, "posts-"));
+    writeFileSync(
+      join(dir, "01.md"),
+      ["---", "at: 2026-10-19T09:00:00Z", "linkedin:", "  firstComment: Slides in the comments", "---", "Talk", ""].join("\n"),
+    );
+
+    await run(["post", "bulk", "--dir", dir, "-P", "LINKEDIN", "--dry-run"]);
+
+    const [batch] = stdoutJson().data as { posts: Record<string, unknown>[] }[];
+    expect(batch?.posts[0]).toMatchObject({
+      firstComments: [{ platform: "LINKEDIN", text: "Slides in the comments" }],
+    });
+
+    writeFileSync(
+      join(dir, "02.md"),
+      ["---", "at: 2026-10-20T09:00:00Z", "twitter:", "  keepLinks: true", "---", "example.com", ""].join("\n"),
+    );
+    await expect(run(["post", "bulk", "--dir", dir, "-P", "TWITTER", "--dry-run"])).rejects.toMatchObject({
+      exitCode: 5,
+      message: expect.stringContaining("02.md"),
     });
   });
 });

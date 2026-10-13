@@ -187,5 +187,7 @@ describe("describeRecurrence", () => {
       "monthly until 2027-06-30",
     );
     expect(describeRecurrence({ frequency: "DAILY", maxOccurrences: 10 })).toBe("daily for 10 posts");
+    expect(describeRecurrence({ frequency: "YEARLY" })).toBe("yearly");
+    expect(describeRecurrence({ frequency: "YEARLY", interval: 2 })).toBe("every 2 years");
   });
 });
