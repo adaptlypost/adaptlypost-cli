@@ -31,6 +31,11 @@ describe('endpoint mapping', () => {
       },
     ],
     [
+      'listPinterestBoards',
+      () => client.listPinterestBoards('pin_3c1d'),
+      { method: 'GET', path: '/social-accounts/pin_3c1d/pinterest-boards' },
+    ],
+    [
       'createUploadUrls',
       () =>
         client.createUploadUrls({

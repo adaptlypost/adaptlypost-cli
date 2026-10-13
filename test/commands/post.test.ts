@@ -1195,6 +1195,66 @@ describe("per-platform options on create, update and bulk", () => {
     });
   });
 
+  it("creates a Pinterest post without --pinterest-board and sends the board when the flag is set", async () => {
+    vi.mocked(client.listSocialAccounts).mockResolvedValue({
+      accounts: [
+        ...accounts,
+        { id: "pin_3c1d", platform: "PINTEREST", displayName: "Acme", username: "acme", avatarUrl: "", status: "active" },
+      ],
+    });
+    const create = ["post", "create", "-t", "Pin", "-a", "pin_3c1d", "-m", "https://cdn/a.png", "--dry-run"];
+
+    await run(create);
+
+    expect(stdoutJson().data).toMatchObject({ platforms: ["PINTEREST"], pinterestConnectionIds: ["pin_3c1d"] });
+    expect(stdoutJson().data).not.toHaveProperty("pinterestConfigs");
+
+    written = [];
+    await run([...create, "--pinterest-board", "549755885175"]);
+
+    expect(stdoutJson().data).toMatchObject({
+      pinterestConfigs: [{ connectionId: "pin_3c1d", boardId: "549755885175" }],
+    });
+  });
+
+  it("resends a Pinterest title and link when the post has no board", async () => {
+    vi.mocked(client.getPost).mockResolvedValue({
+      id: "post_1",
+      status: "SCHEDULED",
+      contentType: "IMAGE",
+      text: "Pin",
+      timezone: "UTC",
+      mediaUrls: ["https://cdn/a.png"],
+      platforms: [
+        {
+          id: "pp_1",
+          platform: "PINTEREST",
+          status: "PENDING",
+          connectionId: "pin_3c1d",
+          pinterestTitle: "Recipe",
+          pinterestLink: "https://acme.example/recipe",
+          mediaUrls: [],
+          mediaAltTexts: [],
+          previewUrls: [],
+          createdAt: "",
+          updatedAt: "",
+        },
+      ],
+      createdAt: "",
+      updatedAt: "",
+      userId: "u",
+    });
+
+    await run(["post", "update", "post_1", "--alt", "A photo", "--dry-run"]);
+
+    expect(stdoutJson().data).toEqual({
+      mediaAltTexts: ["A photo"],
+      platforms: ["PINTEREST"],
+      pinterestConnectionIds: ["pin_3c1d"],
+      pinterestConfigs: [{ connectionId: "pin_3c1d", title: "Recipe", link: "https://acme.example/recipe" }],
+    });
+  });
+
   it("refuses to resend the targets of a post that also goes to Telegram", async () => {
     vi.mocked(client.getPost).mockResolvedValue({
       id: "post_1",

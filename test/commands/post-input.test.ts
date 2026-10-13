@@ -481,6 +481,28 @@ describe("buildPostBody", () => {
     ).toBe(true);
   });
 
+  it("sends Pinterest without a board, and the board when one is set", () => {
+    const withPinterest: SocialAccount[] = [
+      ...accounts,
+      { id: "pin_3c1d", platform: "PINTEREST", displayName: "Acme", username: "acme", avatarUrl: "", status: "active" },
+    ];
+    const pin = { text: "hi", accounts: ["pin_3c1d"], media: ["https://cdn/a.png"] };
+
+    const body = buildPostBody(pin, { accounts: withPinterest });
+    expect(body.pinterestConnectionIds).toEqual(["pin_3c1d"]);
+    expect(body.pinterestConfigs).toBeUndefined();
+
+    expect(
+      buildPostBody({ ...pin, platformConfigs: { PINTEREST: { title: "Recipe" } } }, { accounts: withPinterest })
+        .pinterestConfigs,
+    ).toEqual([{ connectionId: "pin_3c1d", title: "Recipe" }]);
+
+    expect(
+      buildPostBody({ ...pin, platformConfigs: { PINTEREST: { boardId: "549755885175" } } }, { accounts: withPinterest })
+        .pinterestConfigs,
+    ).toEqual([{ connectionId: "pin_3c1d", boardId: "549755885175" }]);
+  });
+
   it("refuses a post with neither text nor media", () => {
     expect(
       exitCodeOf(() => buildPostBody({ platforms: ["TWITTER"], accounts: ["tw_4d1b"] }, { accounts })),
@@ -817,6 +839,17 @@ describe("normalizeConfig", () => {
       textFormatPresetId: "106018623298955",
     });
     expect(exitCodeOf(() => normalizeConfig("FACEBOOK", { textFormatPresetId: "purple" }))).toBe(ExitCode.VALIDATION);
+  });
+
+  it("turns a numeric Pinterest board id into a string and refuses one too long to be a number", () => {
+    expect(normalizeConfig("PINTEREST", { boardId: 549755885175, title: "Recipes" })).toEqual({
+      boardId: "549755885175",
+      title: "Recipes",
+    });
+    expect(normalizeConfig("PINTEREST", { boardId: " ", link: "https://acme.test" })).toEqual({
+      link: "https://acme.test",
+    });
+    expect(exitCodeOf(() => normalizeConfig("PINTEREST", { boardId: 1125899906842624000 }))).toBe(ExitCode.VALIDATION);
   });
 });
 

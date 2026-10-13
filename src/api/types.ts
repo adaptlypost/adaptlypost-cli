@@ -301,6 +301,20 @@ export interface InstagramAudioResponse {
   audio: InstagramAudio[];
 }
 
+export type PinterestBoardPrivacy = 'PUBLIC' | 'PROTECTED' | 'SECRET';
+
+export interface PinterestBoard {
+  id: string;
+  name: string;
+  description?: string;
+  privacy?: PinterestBoardPrivacy;
+  pinCount?: number;
+}
+
+export interface PinterestBoardsResponse {
+  boards: PinterestBoard[];
+}
+
 export type TokenType = 'api_token' | 'oauth';
 
 export interface Me {
@@ -378,7 +392,7 @@ export interface PlatformExtras {
 
 export interface PinterestPostConfig {
   connectionId: string;
-  boardId: string;
+  boardId?: string;
   title?: string;
   link?: string;
 }

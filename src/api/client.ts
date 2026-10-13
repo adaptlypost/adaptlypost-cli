@@ -31,6 +31,7 @@ import type {
   ListRecurringPostsQuery,
   ListRecurringPostsResponse,
   Me,
+  PinterestBoardsResponse,
   PlatformBreakdownResponse,
   PostResultsResponse,
   PublishDraftRequest,
@@ -77,6 +78,14 @@ export const searchInstagramAudio = (
     method: 'GET',
     path: `/social-accounts/${segment(accountId)}/instagram-audio`,
     query: searchInstagramAudioQuery,
+  });
+
+export const listPinterestBoards = (
+  accountId: string,
+): Promise<PinterestBoardsResponse> =>
+  request<PinterestBoardsResponse>({
+    method: 'GET',
+    path: `/social-accounts/${segment(accountId)}/pinterest-boards`,
   });
 
 export const createUploadUrls = (

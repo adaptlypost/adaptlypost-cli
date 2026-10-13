@@ -775,9 +775,7 @@ function storedConfig(target: SocialPostPlatform): ConfigEntry | undefined {
             autoAddMusic: target.tiktokAutoAddMusic,
           });
     case "PINTEREST":
-      return target.pinterestBoardId === undefined
-        ? undefined
-        : definedOnly({ boardId: target.pinterestBoardId, title: target.pinterestTitle, link: target.pinterestLink });
+      return definedOnly({ boardId: target.pinterestBoardId, title: target.pinterestTitle, link: target.pinterestLink });
     case "YOUTUBE":
       return definedOnly({
         postType: target.youtubePostType,
@@ -1813,7 +1811,10 @@ const withContentOptions = (command: Command): Command =>
       `Publish an Instagram video reel as a trial reel: MANUAL (you share it from the app) or SS_PERFORMANCE (Instagram shares it if it performs well)`,
     )
     .option("--yt-title <title>", "YouTube video title")
-    .option("--pinterest-board <id>", "Pinterest board id")
+    .option(
+      "--pinterest-board <id>",
+      "Pinterest board id. Without it the pin goes to a board named AdaptlyPost. Find ids with: accounts pinterest-boards",
+    )
     .option(
       "--document-title <title>",
       "LinkedIn document title, max 100 characters. Defaults to the file name; ignored for non-DOCUMENT posts",

@@ -1462,6 +1462,13 @@ export function normalizeConfig(platform: PlatformType, config: FrontmatterMap):
     });
   }
 
+  if (platform === "PINTEREST") {
+    return definedEntries({
+      ...config,
+      boardId: configString(config.boardId, "PINTEREST boardId")?.trim() || undefined,
+    });
+  }
+
   return config;
 }
 
@@ -1574,16 +1581,6 @@ function validateRequiredConfigs(body: CreatePostRequest | UpdatePostRequest): v
       throw new CliError("TikTok needs a privacy level.", {
         exitCode: ExitCode.VALIDATION,
         hint: "Add --tiktok-privacy PUBLIC_TO_EVERYONE (or SELF_ONLY, MUTUAL_FOLLOW_FRIENDS, FOLLOWER_OF_CREATOR)",
-      });
-    }
-  }
-
-  if (platforms.includes("PINTEREST")) {
-    const missing = (body.pinterestConfigs ?? []).some((config) => !config.boardId);
-    if ((body.pinterestConfigs ?? []).length === 0 || missing) {
-      throw new CliError("Pinterest needs a board id.", {
-        exitCode: ExitCode.VALIDATION,
-        hint: "Add --pinterest-board <boardId>",
       });
     }
   }

@@ -1,6 +1,11 @@
 import type { Command } from 'commander';
 
-import { checkSocialAccount, listSocialAccounts, searchInstagramAudio } from '../api/client.js';
+import {
+  checkSocialAccount,
+  listPinterestBoards,
+  listSocialAccounts,
+  searchInstagramAudio,
+} from '../api/client.js';
 import {
   INSTAGRAM_AUDIO_SEARCH_MAX_LENGTH,
   INSTAGRAM_AUDIO_TYPES,
@@ -8,6 +13,7 @@ import {
   SOCIAL_ACCOUNT_STATUSES,
   type InstagramAudio,
   type InstagramAudioType,
+  type PinterestBoard,
   type PlatformType,
   type SocialAccount,
   type SocialAccountCheck,
@@ -329,6 +335,52 @@ const runInstagramAudio = async (id: string, options: InstagramAudioOptions): Pr
   hint('add one to a reel: adaptlypost post create --ig-type REEL --ig-audio <audioId> …');
 };
 
+const BOARD_COLUMNS: Column<PinterestBoard>[] = [
+  { header: 'BOARD ID', value: (board) => board.id, align: 'left' },
+  { header: 'NAME', value: (board) => board.name || '—' },
+  { header: 'PRIVACY', value: (board) => board.privacy?.toLowerCase() ?? '—' },
+  { header: 'PINS', value: (board) => board.pinCount ?? '—', align: 'right' },
+];
+
+const runPinterestBoards = async (id: string): Promise<void> => {
+  const account = findAccount(await fetchAccounts('Loading account…'), id);
+
+  if (!account) {
+    throw notFoundError(
+      `No account with id "${id}" in this workspace`,
+      'list them with: adaptlypost accounts list --platform PINTEREST',
+    );
+  }
+
+  if (account.platform !== 'PINTEREST') {
+    throw usageError(`${account.platform} accounts have no Pinterest boards`, 'pass a PINTEREST account id');
+  }
+
+  const progress = isQuiet() || isMachine() ? null : spinner('Asking Pinterest…');
+  let boards: PinterestBoard[];
+  try {
+    ({ boards } = await listPinterestBoards(account.id));
+  } finally {
+    progress?.stop();
+  }
+
+  if (isMachine()) {
+    printResult('accounts.pinterest-boards', boards, { total: boards.length, hasMore: false });
+    return;
+  }
+
+  if (boards.length === 0) {
+    print('This Pinterest account has no boards.');
+    hint('a post without --pinterest-board creates a public board named AdaptlyPost and pins to it');
+    return;
+  }
+
+  printTable(boards, BOARD_COLUMNS);
+  print();
+  print(`${boards.length} ${boards.length === 1 ? 'board' : 'boards'}`);
+  hint('pin to one: adaptlypost post create --pinterest-board <boardId> …');
+};
+
 export const registerAccountCommands = (program: Command): void => {
   const accounts = program
     .command('accounts')
@@ -379,5 +431,12 @@ export const registerAccountCommands = (program: Command): void => {
     .option('--search <query>', `keyword filter, up to ${INSTAGRAM_AUDIO_SEARCH_MAX_LENGTH} characters`)
     .action(async (id: string, options: InstagramAudioOptions) => {
       await runInstagramAudio(id, options);
+    });
+
+  accounts
+    .command('pinterest-boards <id>')
+    .description('list the boards a Pinterest account can pin to, secret boards included')
+    .action(async (id: string) => {
+      await runPinterestBoards(id);
     });
 };

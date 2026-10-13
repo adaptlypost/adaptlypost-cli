@@ -1,13 +1,19 @@
 import { Command } from 'commander';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { checkSocialAccount, listSocialAccounts, searchInstagramAudio } = vi.hoisted(() => ({
+const { checkSocialAccount, listPinterestBoards, listSocialAccounts, searchInstagramAudio } = vi.hoisted(() => ({
   checkSocialAccount: vi.fn(),
+  listPinterestBoards: vi.fn(),
   listSocialAccounts: vi.fn(),
   searchInstagramAudio: vi.fn(),
 }));
 
-vi.mock('../../src/api/client.js', () => ({ checkSocialAccount, listSocialAccounts, searchInstagramAudio }));
+vi.mock('../../src/api/client.js', () => ({
+  checkSocialAccount,
+  listPinterestBoards,
+  listSocialAccounts,
+  searchInstagramAudio,
+}));
 
 import {
   accountHandle,
@@ -51,9 +57,11 @@ const run = (args: string[]): Promise<unknown> =>
   buildProgram().parseAsync(['node', 'adaptlypost', 'accounts', ...args]);
 
 let stdout: string[];
+let stderr: string[];
 
 beforeEach(() => {
   checkSocialAccount.mockReset();
+  listPinterestBoards.mockReset();
   listSocialAccounts.mockReset();
   searchInstagramAudio.mockReset();
   setOutputMode('machine');
@@ -62,15 +70,21 @@ beforeEach(() => {
     stdout.push(String(chunk));
     return true;
   });
+  stderr = [];
+  vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+    stderr.push(String(chunk));
+    return true;
+  });
 });
 
 describe('registerAccountCommands', () => {
-  it('registers list, view, check and instagram-audio', () => {
+  it('registers list, view, check, instagram-audio and pinterest-boards', () => {
     expect(accountsCommand(buildProgram()).commands.map((command) => command.name())).toEqual([
       'list',
       'view',
       'check',
       'instagram-audio',
+      'pinterest-boards',
     ]);
   });
 });
@@ -120,6 +134,64 @@ describe('accounts instagram-audio', () => {
     expect(audioArtist({ audioId: '1', audioType: 'music', displayArtist: 'Ada' })).toBe('Ada');
     expect(formatAudioLength(65_400)).toBe('1:05');
     expect(formatAudioLength(undefined)).toBe('—');
+  });
+});
+
+describe('accounts pinterest-boards', () => {
+  const pinterest = (overrides: Partial<SocialAccount> = {}): SocialAccount =>
+    account({ id: 'pin_1', platform: 'PINTEREST', ...overrides });
+
+  const boards = [
+    { id: '549755885175', name: 'Recipes', description: 'Weeknight dinners', privacy: 'PUBLIC', pinCount: 42 },
+    { id: '549755885176', name: 'Drafts', privacy: 'SECRET' },
+  ];
+
+  it('lists the boards of the account and prints the API payload', async () => {
+    listSocialAccounts.mockResolvedValue({ accounts: [pinterest()] });
+    listPinterestBoards.mockResolvedValue({ boards });
+
+    await run(['pinterest-boards', 'pin_1']);
+
+    expect(listPinterestBoards).toHaveBeenCalledWith('pin_1');
+    expect(JSON.parse(stdout.join(''))).toMatchObject({
+      command: 'accounts.pinterest-boards',
+      data: boards,
+      meta: { total: 2, hasMore: false },
+    });
+  });
+
+  it('prints a table with the full board id, privacy and pin count', async () => {
+    listSocialAccounts.mockResolvedValue({ accounts: [pinterest()] });
+    listPinterestBoards.mockResolvedValue({ boards });
+    setOutputMode('human');
+
+    await run(['pinterest-boards', 'pin_1']);
+
+    const lines = stdout.join('').split('\n');
+    expect(lines[0]).toMatch(/^BOARD ID\s+NAME\s+PRIVACY\s+PINS$/);
+    expect(lines[1]).toMatch(/^549755885175\s+Recipes\s+public\s+42$/);
+    expect(lines[2]).toMatch(/^549755885176\s+Drafts\s+secret\s+—$/);
+    expect(stdout.join('')).toContain('2 boards');
+    expect(stderr.join('')).toContain('--pinterest-board <boardId>');
+  });
+
+  it('says what a post does when the account has no boards', async () => {
+    listSocialAccounts.mockResolvedValue({ accounts: [pinterest()] });
+    listPinterestBoards.mockResolvedValue({ boards: [] });
+    setOutputMode('human');
+
+    await run(['pinterest-boards', 'pin_1']);
+
+    expect(stdout.join('')).toContain('This Pinterest account has no boards.');
+    expect(stderr.join('')).toContain('board named AdaptlyPost');
+  });
+
+  it('refuses other platforms and unknown ids before calling the API', async () => {
+    listSocialAccounts.mockResolvedValue({ accounts: [account(), pinterest()] });
+
+    await expect(run(['pinterest-boards', 'acc_1'])).rejects.toThrow(/no Pinterest boards/);
+    await expect(run(['pinterest-boards', 'pin_missing'])).rejects.toThrow(/No account with id/);
+    expect(listPinterestBoards).not.toHaveBeenCalled();
   });
 });
 
