@@ -1,0 +1,41 @@
+README.md
+  s_b7d8d6d1e334ce::t_6061424889c349 143-165,180,186,203-215,230-232,240,262-293,299,328-329,334,367-368
+src/api/client.ts
+  s_b7d8d6d1e334ce::t_4d74e3fadba1e1 27,42,72-81
+src/api/types.ts
+  s_b7d8d6d1e334ce::t_ca52830d4d0dcc 12-13,45,132-187,240,274,281-303,356-378,401-408,412,414-415,421,423-436,466,476,493-496,500-504,523-529,532,544-553,589,602,649,660,714,728
+src/commands/account.ts
+  s_b7d8d6d1e334ce::t_9a3636ac062da3 3,5-6,9-10,108-130,201-206,269-331,371-382
+src/commands/analytics.ts
+  s_b7d8d6d1e334ce::t_75c1fc3682108a 702,708-714
+src/commands/post-input.ts
+  s_b7d8d6d1e334ce::t_f0bf051173aec4 7,9-16,19,23-25,89-92,96-106,117,120-130,138,142-143,171-181,184-185,255-257,261-262,367-386,704-785,883-886,910-911,954-966,1210-1211,1226,1257,1281,1290-1567,1632,1734-1738
+src/commands/post.ts
+  s_b7d8d6d1e334ce::t_9cffb80fb3ec03 21-23,83,85,90-91,99-101,197-220,366-411,414-446,626,631-633,638-652,731-735,740-744,746-760,796-809,828-838,842-852,854,856-858,860,863,867,926-929,973,1311-1322,1324,1329,1379,1384-1418,1422,1457-1460,1489-1495,1517-1520,1820-1887,1920
+src/commands/recurring.ts
+  s_b7d8d6d1e334ce::t_b6e258daabd20d 41
+test/commands/account.test.ts
+  s_b7d8d6d1e334ce::t_c53f2da3ee9918 4,7,10,15-17,58,68,73,78-125
+test/commands/post-input.test.ts
+  s_b7d8d6d1e334ce::t_05d80f30d9b02d 12,18,23,62-82,677-885
+test/commands/post.test.ts
+  s_b7d8d6d1e334ce::t_be389a3cafbb7b 332-337,900-1278
+test/commands/recurring.test.ts
+  s_b7d8d6d1e334ce::t_96278494ccde83 190-191
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a5a729877a068101d88dd18d2f35c2abb43439c3",
+  "prompts": {},
+  "sessions": {
+    "s_b7d8d6d1e334ce": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "617ac642-7097-4821-81a1-2d1931f0e965",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}
