@@ -173,6 +173,7 @@ describe('accounts pinterest-boards', () => {
     expect(lines[2]).toMatch(/^549755885176\s+Drafts\s+secret\s+—$/);
     expect(stdout.join('')).toContain('2 boards');
     expect(stderr.join('')).toContain('--pinterest-board <boardId>');
+    expect(stderr.join('')).toContain('--pinterest-board-name');
   });
 
   it('says what a post does when the account has no boards', async () => {

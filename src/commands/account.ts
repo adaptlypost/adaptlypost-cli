@@ -378,7 +378,7 @@ const runPinterestBoards = async (id: string): Promise<void> => {
   printTable(boards, BOARD_COLUMNS);
   print();
   print(`${boards.length} ${boards.length === 1 ? 'board' : 'boards'}`);
-  hint('pin to one: adaptlypost post create --pinterest-board <boardId> …');
+  hint('pin to one: adaptlypost post create --pinterest-board <boardId> or --pinterest-board-name "<name>" …');
 };
 
 export const registerAccountCommands = (program: Command): void => {
