@@ -19,6 +19,7 @@ vi.mock("../../src/api/client.js", () => ({
   retryFailedPlatforms: vi.fn(),
   bulkSchedulePosts: vi.fn(),
   listSocialAccounts: vi.fn(),
+  listPinterestBoards: vi.fn(),
   createUploadUrls: vi.fn(),
 }));
 
@@ -1333,6 +1334,161 @@ describe("per-platform options on create, update and bulk", () => {
     await expect(run(["post", "bulk", "--dir", dir, "-P", "TWITTER", "--dry-run"])).rejects.toMatchObject({
       exitCode: 5,
       message: expect.stringContaining("02.md"),
+    });
+  });
+});
+
+describe("Pinterest boards by name", () => {
+  const pinterest: SocialAccount = {
+    id: "pin_3c1d",
+    platform: "PINTEREST",
+    displayName: "Acme",
+    username: "acme",
+    avatarUrl: "",
+    status: "active",
+  };
+  const create = ["post", "create", "-t", "Pin", "-a", "pin_3c1d", "-m", "https://cdn/a.png"];
+
+  beforeEach(() => {
+    vi.mocked(client.listSocialAccounts).mockResolvedValue({ accounts: [...accounts, pinterest] });
+    vi.mocked(client.listPinterestBoards).mockResolvedValue({
+      boards: [
+        { id: "549755885175", name: "Small Living Room Ideas" },
+        { id: "549755885176", name: "Patio" },
+        { id: "549755885177", name: "patio" },
+        { id: "549755885178", name: "Kitchen" },
+        { id: "549755885179", name: "KITCHEN" },
+      ],
+    });
+  });
+
+  it("sends the name and shows the board it resolves to on a dry run", async () => {
+    await run([...create, "--pinterest-board-name", "small living room ideas", "--dry-run"]);
+
+    expect(client.listPinterestBoards).toHaveBeenCalledWith("pin_3c1d");
+    expect(stdoutJson()).toMatchObject({
+      data: { pinterestConfigs: [{ connectionId: "pin_3c1d", boardName: "small living room ideas" }] },
+      meta: {
+        dryRun: true,
+        pinterestBoards: [
+          {
+            connectionId: "pin_3c1d",
+            boardName: "small living room ideas",
+            boardId: "549755885175",
+            resolvedName: "Small Living Room Ideas",
+          },
+        ],
+      },
+    });
+    expect(client.createPost).not.toHaveBeenCalled();
+  });
+
+  it("leaves the name to the API on a real run", async () => {
+    vi.mocked(client.createPost).mockResolvedValue({ postId: "post_9", queuedPlatforms: ["PINTEREST"] } as never);
+
+    await run([...create, "--pinterest-board-name", "Small Living Room Ideas"]);
+
+    expect(client.listPinterestBoards).not.toHaveBeenCalled();
+    expect(client.createPost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pinterestConfigs: [{ connectionId: "pin_3c1d", boardName: "Small Living Room Ideas" }],
+      }),
+    );
+  });
+
+  it("refuses a missing or shared name on a dry run without falling back to another board", async () => {
+    await expect(run([...create, "--pinterest-board-name", "Bathroom", "--dry-run"])).rejects.toMatchObject({
+      exitCode: 5,
+      message: 'No board named "Bathroom" on this Pinterest account.',
+    });
+    await expect(run([...create, "--pinterest-board-name", " kitchen ", "--dry-run"])).rejects.toMatchObject({
+      exitCode: 5,
+      message: expect.stringContaining("549755885178, 549755885179"),
+    });
+    await run([...create, "--pinterest-board-name", "Patio", "--dry-run"]);
+    expect(stdoutJson()).toMatchObject({ meta: { pinterestBoards: [{ boardId: "549755885176" }] } });
+  });
+
+  it("refuses a board id and a board name together, from flags or from a config", async () => {
+    await expect(
+      run([...create, "--pinterest-board", "549755885175", "--pinterest-board-name", "Patio", "--dry-run"]),
+    ).rejects.toMatchObject({ exitCode: 5, message: "Pass --pinterest-board or --pinterest-board-name, not both." });
+
+    await expect(
+      run([...create, "--config", 'PINTEREST={"boardId":"549755885175","boardName":"Patio"}', "--dry-run"]),
+    ).rejects.toMatchObject({ exitCode: 5, message: "Pass boardId or boardName for a Pinterest account, not both." });
+    expect(client.listPinterestBoards).not.toHaveBeenCalled();
+  });
+
+  it("lets a flag replace the board a file names", async () => {
+    const file = join(workspace, "pin.md");
+    writeFileSync(
+      file,
+      ["---", "accounts: [pin_3c1d]", "media: [https://cdn/a.png]", "pinterest:", "  boardId: \"549755885176\"", "---", "Pin", ""].join(
+        "\n",
+      ),
+    );
+
+    await run(["post", "create", "--file", file, "--pinterest-board-name", "Small Living Room Ideas", "--dry-run"]);
+
+    expect(stdoutJson()).toMatchObject({
+      data: { pinterestConfigs: [{ connectionId: "pin_3c1d", boardName: "Small Living Room Ideas" }] },
+    });
+    expect((stdoutJson().data as { pinterestConfigs: object[] }).pinterestConfigs[0]).not.toHaveProperty("boardId");
+  });
+
+  it("resolves the name on post update with the account", async () => {
+    await run(["post", "update", "post_1", "-a", "pin_3c1d", "--pinterest-board-name", "Patio", "--dry-run"]);
+
+    expect(stdoutJson()).toMatchObject({
+      data: { pinterestConfigs: [{ connectionId: "pin_3c1d", boardName: "Patio" }] },
+      meta: { pinterestBoards: [{ boardId: "549755885176", resolvedName: "Patio" }] },
+    });
+    expect(client.updatePost).not.toHaveBeenCalled();
+  });
+
+  it("resolves boardName from a bulk CSV config column once per account", async () => {
+    const path = join(workspace, "pins.csv");
+    writeFileSync(
+      path,
+      [
+        "text,scheduledAt,media,config_PINTEREST",
+        'One,2026-10-19T09:00:00Z,https://cdn/a.png,"{""boardName"":""Patio""}"',
+        'Two,2026-10-20T09:00:00Z,https://cdn/b.png,"{""boardName"":""Patio""}"',
+        "",
+      ].join("\n"),
+    );
+
+    await run(["post", "bulk", "--csv", path, "-a", "pin_3c1d", "--dry-run"]);
+
+    expect(client.listPinterestBoards).toHaveBeenCalledTimes(1);
+    expect(stdoutJson()).toMatchObject({
+      data: [{ pinterestConfigs: [{ connectionId: "pin_3c1d", boardName: "Patio" }] }],
+      meta: { pinterestBoards: [{ connectionId: "pin_3c1d", boardName: "Patio", boardId: "549755885176" }] },
+    });
+  });
+
+  it("checks the names in a bulk JSON file on a dry run", async () => {
+    const path = join(workspace, "pins.json");
+    writeFileSync(
+      path,
+      JSON.stringify({
+        platforms: ["PINTEREST"],
+        pinterestConnectionIds: ["pin_3c1d"],
+        posts: [
+          {
+            contentType: "IMAGE",
+            scheduledAt: "2026-10-19T09:00:00Z",
+            mediaUrls: ["https://cdn/a.png"],
+            pinterestConfigs: [{ connectionId: "pin_3c1d", boardName: "Bathroom" }],
+          },
+        ],
+      }),
+    );
+
+    await expect(run(["post", "bulk", "--json-file", path, "--dry-run"])).rejects.toMatchObject({
+      exitCode: 5,
+      message: 'No board named "Bathroom" on this Pinterest account.',
     });
   });
 });

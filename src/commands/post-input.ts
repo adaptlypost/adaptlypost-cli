@@ -14,6 +14,7 @@ import {
   INSTAGRAM_COLLABORATORS_MAX,
   MEDIA_ASPECT_RATIOS,
   MEDIA_ASPECT_RATIO_FITS,
+  PINTEREST_BOARD_NAME_MAX_LENGTH,
   PLATFORM_TYPES,
   RECURRENCE_FREQUENCIES,
   THUMBNAIL_KIND_BY_PLATFORM,
@@ -22,6 +23,7 @@ import {
   type CreatePostRequest,
   type MediaAspectRatio,
   type MediaAspectRatioFit,
+  type PinterestBoard,
   type PlatformExtras,
   type PlatformText,
   type PlatformType,
@@ -154,7 +156,7 @@ export const CONFIG_KEYS: Partial<Record<PlatformType, readonly string[]>> = {
     "brandedContentOwnBrand",
     "autoAddMusic",
   ],
-  PINTEREST: ["boardId", "title", "link"],
+  PINTEREST: ["boardId", "boardName", "title", "link"],
   YOUTUBE: [
     "postType",
     "videoTitle",
@@ -1435,6 +1437,46 @@ function normalizeGoogleBusinessConfig(config: FrontmatterMap): FrontmatterMap {
   return normalized;
 }
 
+function normalizePinterestBoardName(value: FrontmatterValue | undefined): string | undefined {
+  const raw = configString(value, "PINTEREST boardName");
+  if (raw === undefined) return undefined;
+  const name = raw.trim();
+  if (name === "") {
+    throw configError("The Pinterest board name is empty.", "Give the board's name, or leave boardName out");
+  }
+  if (name.length > PINTEREST_BOARD_NAME_MAX_LENGTH) {
+    throw configError(
+      `The Pinterest board name is ${name.length} characters; the limit is ${PINTEREST_BOARD_NAME_MAX_LENGTH}.`,
+    );
+  }
+  return name;
+}
+
+/** Picks the board a name means: one exact match, else one match ignoring case. */
+export function pickPinterestBoard(boards: readonly PinterestBoard[], name: string, accountId: string): PinterestBoard {
+  const wanted = name.trim();
+  const exact = boards.filter((board) => board.name.trim() === wanted);
+  const matches =
+    exact.length > 0
+      ? exact
+      : boards.filter((board) => board.name.trim().toLowerCase() === wanted.toLowerCase());
+
+  const [only] = matches;
+  if (matches.length === 1 && only) return only;
+
+  if (matches.length === 0) {
+    throw configError(
+      `No board named "${wanted}" on this Pinterest account.`,
+      `List its boards with: adaptlypost accounts pinterest-boards ${accountId}`,
+    );
+  }
+
+  throw configError(
+    `${matches.length} boards on this Pinterest account are named "${wanted}". Pass boardId instead, one of: ${matches.map((board) => board.id).join(", ")}`,
+    "Pick one with --pinterest-board <id>",
+  );
+}
+
 export function normalizeConfig(platform: PlatformType, config: FrontmatterMap): FrontmatterMap {
   if (platform === "GOOGLE_BUSINESS") return normalizeGoogleBusinessConfig(config);
 
@@ -1463,10 +1505,15 @@ export function normalizeConfig(platform: PlatformType, config: FrontmatterMap):
   }
 
   if (platform === "PINTEREST") {
-    return definedEntries({
-      ...config,
-      boardId: configString(config.boardId, "PINTEREST boardId")?.trim() || undefined,
-    });
+    const boardId = configString(config.boardId, "PINTEREST boardId")?.trim() || undefined;
+    const boardName = normalizePinterestBoardName(config.boardName);
+    if (boardId !== undefined && boardName !== undefined) {
+      throw configError(
+        "Pass boardId or boardName for a Pinterest account, not both.",
+        "Keep boardId to pick the board by id, or boardName to pick it by name",
+      );
+    }
+    return definedEntries({ ...config, boardId, boardName });
   }
 
   return config;

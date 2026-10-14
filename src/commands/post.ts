@@ -8,6 +8,7 @@ import {
   createPost,
   deletePost,
   getPost,
+  listPinterestBoards,
   listPostResults,
   listPosts,
   listSocialAccounts,
@@ -29,6 +30,8 @@ import {
   type BulkPostInput,
   type BulkSchedulePostsRequest,
   type ContentType,
+  type PinterestBoard,
+  type PinterestPostConfig,
   type PlatformText,
   type PlatformType,
   type PostResult,
@@ -94,6 +97,7 @@ import {
   normalizePlatformName,
   normalizeWeekday,
   parsePostInput,
+  pickPinterestBoard,
   readSource,
   readStdin,
   setFirstComment,
@@ -193,6 +197,7 @@ interface ContentOptions {
   igTrial?: string;
   ytTitle?: string;
   pinterestBoard?: string;
+  pinterestBoardName?: string;
   documentTitle?: string;
   firstComment: string[];
   thumbnailFor: string[];
@@ -356,8 +361,17 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
   }
 
   if (options.ytTitle !== undefined) mergeConfig("YOUTUBE", { videoTitle: options.ytTitle });
+  if (options.pinterestBoard !== undefined && options.pinterestBoardName !== undefined) {
+    throw new CliError("Pass --pinterest-board or --pinterest-board-name, not both.", {
+      exitCode: ExitCode.VALIDATION,
+      hint: "--pinterest-board picks the board by id, --pinterest-board-name by its name",
+    });
+  }
   if (options.pinterestBoard !== undefined) {
-    mergeConfig("PINTEREST", { boardId: options.pinterestBoard });
+    mergeConfig("PINTEREST", { boardId: options.pinterestBoard, boardName: undefined });
+  }
+  if (options.pinterestBoardName !== undefined) {
+    mergeConfig("PINTEREST", { boardName: options.pinterestBoardName, boardId: undefined });
   }
   if (options.documentTitle !== undefined) {
     mergeConfig("LINKEDIN", { documentTitle: options.documentTitle });
@@ -476,6 +490,60 @@ async function resolveInput(
   }
 
   return merged;
+}
+
+interface PinterestBoardChoice {
+  connectionId: string;
+  boardName: string;
+  boardId: string;
+  resolvedName: string;
+}
+
+async function resolvePinterestBoardNames(
+  configs: readonly PinterestPostConfig[],
+  quiet: boolean,
+): Promise<PinterestBoardChoice[]> {
+  if (!configs.some((config) => config.boardName !== undefined)) return [];
+
+  const progress = quiet || isMachine() ? null : spinner("Looking up Pinterest boards…");
+  const boardsByAccount = new Map<string, Promise<PinterestBoard[]>>();
+  const choices: PinterestBoardChoice[] = [];
+
+  try {
+    for (const { connectionId, boardId, boardName } of configs) {
+      if (boardName === undefined) continue;
+      if (boardId !== undefined) {
+        throw new CliError("Pass boardId or boardName for a Pinterest account, not both.", {
+          exitCode: ExitCode.VALIDATION,
+        });
+      }
+      if (choices.some((choice) => choice.connectionId === connectionId && choice.boardName === boardName)) continue;
+
+      let boards = boardsByAccount.get(connectionId);
+      if (!boards) {
+        boards = listPinterestBoards(connectionId).then((response) => response.boards);
+        boardsByAccount.set(connectionId, boards);
+      }
+      const board = pickPinterestBoard(await boards, boardName, connectionId);
+      choices.push({ connectionId, boardName, boardId: board.id, resolvedName: board.name });
+    }
+  } finally {
+    progress?.stop();
+  }
+
+  return choices;
+}
+
+const pinterestConfigsOf = (targets: { pinterestConfigs?: PinterestPostConfig[] }): PinterestPostConfig[] =>
+  targets.pinterestConfigs ?? [];
+
+const dryRunMeta = (choices: PinterestBoardChoice[]): Record<string, unknown> =>
+  choices.length > 0 ? { dryRun: true, pinterestBoards: choices } : { dryRun: true };
+
+function printPinterestBoardChoices(choices: PinterestBoardChoice[]): void {
+  for (const choice of choices) {
+    hint(`Pinterest board on ${choice.connectionId}: ${choice.resolvedName} (${choice.boardId})`);
+  }
 }
 
 async function resolveMedia(input: PostInput, quiet: boolean): Promise<string[]> {
@@ -665,11 +733,13 @@ async function runCreate(options: CreateOptions): Promise<void> {
   const body = buildPostBody(input, { accounts, mediaUrls });
 
   if (options.dryRun) {
+    const boards = await resolvePinterestBoardNames(pinterestConfigsOf(body), quiet);
     if (isMachine()) {
-      printResult("post.create", body, { dryRun: true });
+      printResult("post.create", body, dryRunMeta(boards));
       return;
     }
     print(JSON.stringify(body, null, 2));
+    printPinterestBoardChoices(boards);
     const local = mediaUrls.filter((url) => !/^https?:\/\//i.test(url));
     hint(
       local.length > 0
@@ -973,11 +1043,13 @@ async function runUpdate(id: string, options: UpdateOptions): Promise<void> {
   }
 
   if (options.dryRun) {
+    const boards = await resolvePinterestBoardNames(pinterestConfigsOf(body), quiet);
     if (isMachine()) {
-      printResult("post.update", body, { dryRun: true });
+      printResult("post.update", body, dryRunMeta(boards));
       return;
     }
     print(JSON.stringify(body, null, 2));
+    printPinterestBoardChoices(boards);
     hint("dry run: nothing was sent");
     return;
   }
@@ -1636,11 +1708,16 @@ async function runBulk(options: BulkOptions): Promise<void> {
   }
 
   if (options.dryRun) {
+    const boards = await resolvePinterestBoardNames(
+      batches.flatMap((batch) => pinterestConfigsOf(batch.request)),
+      quiet,
+    );
     if (isMachine()) {
-      printResult("post.bulk", batches.map((batch) => batch.request), { dryRun: true });
+      printResult("post.bulk", batches.map((batch) => batch.request), dryRunMeta(boards));
       return;
     }
     print(JSON.stringify(batches.map((batch) => batch.request), null, 2));
+    printPinterestBoardChoices(boards);
     hint(`dry run: ${batches.length} request(s), ${rows.length} posts, nothing was sent`);
     return;
   }
@@ -1745,11 +1822,16 @@ async function runBulkFromJson(path: string, options: BulkOptions): Promise<void
   }
 
   if (options.dryRun) {
+    const boards = await resolvePinterestBoardNames(
+      [...pinterestConfigsOf(request), ...request.posts.flatMap(pinterestConfigsOf)],
+      Boolean(options.quiet) || isQuiet(),
+    );
     if (isMachine()) {
-      printResult("post.bulk", chunks, { dryRun: true });
+      printResult("post.bulk", chunks, dryRunMeta(boards));
       return;
     }
     print(JSON.stringify(chunks, null, 2));
+    printPinterestBoardChoices(boards);
     hint(`dry run: ${chunks.length} request(s), nothing was sent`);
     return;
   }
@@ -1813,7 +1895,11 @@ const withContentOptions = (command: Command): Command =>
     .option("--yt-title <title>", "YouTube video title")
     .option(
       "--pinterest-board <id>",
-      "Pinterest board id. Without it the pin goes to a board named AdaptlyPost. Find ids with: accounts pinterest-boards",
+      "Pinterest board id. Without it or --pinterest-board-name the pin goes to a board named AdaptlyPost. Find ids with: accounts pinterest-boards",
+    )
+    .option(
+      "--pinterest-board-name <name>",
+      "Pinterest board name, looked up on the account: an exact match first, then one ignoring case. Not with --pinterest-board",
     )
     .option(
       "--document-title <title>",

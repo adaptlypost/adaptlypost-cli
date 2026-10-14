@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { ExitCode } from "../../src/core/exit-codes.js";
-import type { SocialAccount } from "../../src/api/types.js";
+import type { PinterestBoard, SocialAccount } from "../../src/api/types.js";
 import {
   CONFIG_KEYS,
   assertConfigKeys,
@@ -19,6 +19,7 @@ import {
   parseFrontmatter,
   parsePostInput,
   parseScalar,
+  pickPinterestBoard,
   sniffMimeType,
   type FrontmatterMap,
 } from "../../src/commands/post-input.js";
@@ -501,6 +502,13 @@ describe("buildPostBody", () => {
       buildPostBody({ ...pin, platformConfigs: { PINTEREST: { boardId: "549755885175" } } }, { accounts: withPinterest })
         .pinterestConfigs,
     ).toEqual([{ connectionId: "pin_3c1d", boardId: "549755885175" }]);
+
+    expect(
+      buildPostBody(
+        { ...pin, platformConfigs: { PINTEREST: { boardName: "  Small Living Room Ideas " } } },
+        { accounts: withPinterest },
+      ).pinterestConfigs,
+    ).toEqual([{ connectionId: "pin_3c1d", boardName: "Small Living Room Ideas" }]);
   });
 
   it("refuses a post with neither text nor media", () => {
@@ -850,6 +858,64 @@ describe("normalizeConfig", () => {
       link: "https://acme.test",
     });
     expect(exitCodeOf(() => normalizeConfig("PINTEREST", { boardId: 1125899906842624000 }))).toBe(ExitCode.VALIDATION);
+  });
+
+  it("trims a Pinterest board name and refuses it empty, too long, or next to a board id", () => {
+    expect(normalizeConfig("PINTEREST", { boardName: " Recipes ", title: "Soup" })).toEqual({
+      boardName: "Recipes",
+      title: "Soup",
+    });
+    expect(normalizeConfig("PINTEREST", { boardId: " ", boardName: "Recipes" })).toEqual({ boardName: "Recipes" });
+    expect(exitCodeOf(() => normalizeConfig("PINTEREST", { boardName: "  " }))).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => normalizeConfig("PINTEREST", { boardName: "x".repeat(181) }))).toBe(ExitCode.VALIDATION);
+    expect(() => normalizeConfig("PINTEREST", { boardId: "549755885175", boardName: "Recipes" })).toThrow(
+      "Pass boardId or boardName for a Pinterest account, not both.",
+    );
+  });
+});
+
+describe("pickPinterestBoard", () => {
+  const board = (id: string, name: string): PinterestBoard => ({ id, name });
+  const boards = [
+    board("b1", "Small Living Room Ideas"),
+    board("b2", "small living room ideas"),
+    board("b3", "Kitchen"),
+    board("b4", " Garden "),
+    board("b5", "Patio"),
+    board("b6", "PATIO"),
+  ];
+
+  it("takes the one exact match, even when another board matches ignoring case", () => {
+    expect(pickPinterestBoard(boards, "Small Living Room Ideas", "pin_1").id).toBe("b1");
+    expect(pickPinterestBoard(boards, "small living room ideas", "pin_1").id).toBe("b2");
+  });
+
+  it("trims both names and falls back to the one match ignoring case", () => {
+    expect(pickPinterestBoard(boards, "  Garden", "pin_1").id).toBe("b4");
+    expect(pickPinterestBoard(boards, "KITCHEN", "pin_1").id).toBe("b3");
+  });
+
+  it("refuses a name no board has, pointing at the board list", () => {
+    let thrown: unknown;
+    try {
+      pickPinterestBoard(boards, "Bathroom", "pin_1");
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toMatchObject({
+      exitCode: ExitCode.VALIDATION,
+      message: 'No board named "Bathroom" on this Pinterest account.',
+      hint: "List its boards with: adaptlypost accounts pinterest-boards pin_1",
+    });
+  });
+
+  it("refuses a name several boards share, listing their ids", () => {
+    expect(() => pickPinterestBoard(boards, "patio", "pin_1")).toThrow(
+      '2 boards on this Pinterest account are named "patio". Pass boardId instead, one of: b5, b6',
+    );
+    expect(exitCodeOf(() => pickPinterestBoard([board("a", "Same"), board("b", "Same")], "Same", "pin_1"))).toBe(
+      ExitCode.VALIDATION,
+    );
   });
 });
 

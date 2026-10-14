@@ -228,7 +228,7 @@ Grammar is noun then verb, space-separated. `ls` works wherever `list` does, `rm
 | `accounts view <id>` | | One account by its id or Facebook page id |
 | `accounts check <id>` | | Facebook pages only. Takes the account id or the Facebook page id |
 | `accounts instagram-audio <id>` | `--type music\|original_sound`, `--search` | Music and original sounds the Instagram account can add to a reel. `--type` defaults to `music`; without `--search` it lists what is trending. Pass the `AUDIO ID` to `post create --ig-audio`. Only accounts connected through Facebook can add audio, which `accounts view` shows as `reel audio` |
-| `accounts pinterest-boards <id>` | | Every board the Pinterest account can pin to, secret boards included, with its privacy and pin count. Pass the `BOARD ID` to `post create --pinterest-board`. A board belongs to one Pinterest account, so list the boards of each account you post to. The API answers 400 when Pinterest refuses the request, usually because the account must be reconnected |
+| `accounts pinterest-boards <id>` | | Every board the Pinterest account can pin to, secret boards included, with its privacy and pin count. Pass the `BOARD ID` to `post create --pinterest-board`, or the `NAME` to `--pinterest-board-name`. A board belongs to one Pinterest account, so list the boards of each account you post to. The API answers 400 when Pinterest refuses the request, usually because the account must be reconnected |
 
 Google Business Profile locations show up as `GOOGLE_BUSINESS` accounts, named after the location and with no handle. Telegram chats are not listed: the API cannot post to Telegram, so the CLI refuses `TELEGRAM` as a target. It still accepts `TELEGRAM` as a filter on `post list`.
 
@@ -259,6 +259,7 @@ Per-platform flags on `post create` and `post update`:
 | `--ig-trial <graduation>` | `instagramConfigs[].trialGraduation`: `MANUAL` (you share it to followers from the Instagram app) or `SS_PERFORMANCE` (Instagram shares it if it performs well). Video reels only; a story, image or carousel is rejected |
 | `--yt-title <title>` | `youtubeConfigs[].videoTitle` |
 | `--pinterest-board <id>` | `pinterestConfigs[].boardId`, the board the pin goes to. Optional. Without it the pin goes to a public board named AdaptlyPost, which AdaptlyPost creates on the Pinterest account the first time it is needed. Find ids with `accounts pinterest-boards` |
+| `--pinterest-board-name <name>` | `pinterestConfigs[].boardName`, the board picked by its name on each Pinterest account of the post. The API trims the name, takes the one board with exactly that name, and otherwise the one board with that name in any case. No match, or several, is a 400, and the pin never goes to another board. `--dry-run` looks the name up and shows the board's name and id, and exits 5 when no board or several boards match. Not with `--pinterest-board` |
 | `--document-title <title>` | `linkedinConfigs[].documentTitle`, the title LinkedIn shows on a DOCUMENT post. Max 100 characters, defaults to the file name, ignored for other content types |
 | `--first-comment <PLATFORM=text>` | `firstComments`, a comment posted from the same account about 10 seconds after the post goes out (60 on YouTube). One flag per platform: LINKEDIN (1250 characters), TWITTER (280), THREADS (500), BLUESKY (300), MASTODON (500), YOUTUBE (10000). A comment that fails never fails the post; `post get` shows its status. On `post update` the flags replace every stored first comment |
 | `--thumbnail-for <PLATFORM=url>` | `platformThumbnails[].thumbnailUrl`, a thumbnail image for one platform of a VIDEO post. YOUTUBE, FACEBOOK, LINKEDIN, INSTAGRAM, PINTEREST |
@@ -329,7 +330,7 @@ Per-platform config keys, for `--config`, frontmatter platform blocks and `confi
 | `FACEBOOK` | `postType`, `shareToStory`, `videoTitle`, `textFormatPresetId` |
 | `INSTAGRAM` | `postType`, `shareToStory`, `trialGraduation`, `collaborators`, `audio` (an audio id, or a block with `audioId`, `title`, `artist`, `audioVolume`, `videoVolume`) |
 | `TIKTOK` | `privacyLevel`, `title`, `caption`, `allowComments`, `allowDuet`, `allowStitch`, `sendAsDraft`, `aiGenerated`, `brandedContent`, `brandedContentOwnBrand`, `autoAddMusic` |
-| `PINTEREST` | `boardId`, `title`, `link`. `boardId` is optional; without it the pin goes to a board named AdaptlyPost |
+| `PINTEREST` | `boardId`, `boardName`, `title`, `link`. Set `boardId` or `boardName`, not both. `boardName` picks the board by its name, the same way `--pinterest-board-name` does. With neither, the pin goes to a board named AdaptlyPost |
 | `YOUTUBE` | `postType`, `videoTitle`, `tags`, `privacyStatus`, `license`, `notifySubscribers`, `allowEmbedding`, `madeForKids`, `categoryId`, `playlistId` |
 | `LINKEDIN` | `documentTitle` |
 | `GOOGLE_BUSINESS` | `topicType`, `callToActionType`, `callToActionUrl`, `eventTitle`, `eventStart`, `eventEnd`, `offerCouponCode`, `offerRedeemUrl`, `offerTerms`. `topicType` defaults to `STANDARD` |

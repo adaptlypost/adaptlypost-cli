@@ -133,6 +133,7 @@ export const INSTAGRAM_COLLABORATORS_MAX = 3;
 export const INSTAGRAM_AUDIO_VOLUME_MIN = 1;
 export const INSTAGRAM_AUDIO_VOLUME_MAX = 100;
 export const INSTAGRAM_AUDIO_SEARCH_MAX_LENGTH = 100;
+export const PINTEREST_BOARD_NAME_MAX_LENGTH = 180;
 
 export const INSTAGRAM_AUDIO_TYPES = ['music', 'original_sound'] as const;
 export type InstagramAudioType = (typeof INSTAGRAM_AUDIO_TYPES)[number];
@@ -393,6 +394,7 @@ export interface PlatformExtras {
 export interface PinterestPostConfig {
   connectionId: string;
   boardId?: string;
+  boardName?: string;
   title?: string;
   link?: string;
 }
