@@ -268,6 +268,7 @@ Per-platform flags on `post create` and `post update`:
 | `--fit <PLATFORM=fit>` | `platformAspectRatios[].fit`: `CROP` (the default, cut from the center) or `PAD` (keep the whole image on a blurred fill) |
 | `--ig-share-to-story` | `instagramConfigs[].shareToStory`: also publish the media as a story next to the feed post or reel. The story is its own platform entry and skips the caption, first comment, cover, collaborators, trial and audio. Videos up to 60 seconds |
 | `--ig-collaborator <username>` | `instagramConfigs[].collaborators`, repeatable, up to 3. A leading `@` is dropped. Feed images, carousels and reels; each collaborator accepts the invite in Instagram |
+| `--ig-ai-generated` | `instagramConfigs[].aiGenerated`: disclose that the post was made or edited with AI. Instagram shows its "AI info" label on the post. Works on images, carousels, reels and stories, and a story made with `shareToStory` carries the label too. |
 | `--ig-audio <audioId>` | `instagramConfigs[].audio.audioId`, music or an original sound for a reel. Find ids with `accounts instagram-audio`. `--ig-audio-title` and `--ig-audio-artist` are stored for display; `--ig-audio-volume` and `--ig-video-volume` take 1 to 100 and default to 100 |
 | `--fb-share-to-story` | `facebookConfigs[].shareToStory`, the same as `--ig-share-to-story` for a Facebook page |
 | `--fb-text-background <presetId>` | `facebookConfigs[].textFormatPresetId`, a colored background such as `106018623298955` (solid purple) or `249307305544279` (red to blue). TEXT posts with no media and up to 130 characters only |
@@ -328,7 +329,7 @@ Per-platform config keys, for `--config`, frontmatter platform blocks and `confi
 | Platform | Keys |
 |---|---|
 | `FACEBOOK` | `postType`, `shareToStory`, `videoTitle`, `textFormatPresetId` |
-| `INSTAGRAM` | `postType`, `shareToStory`, `trialGraduation`, `collaborators`, `audio` (an audio id, or a block with `audioId`, `title`, `artist`, `audioVolume`, `videoVolume`) |
+| `INSTAGRAM` | `postType`, `shareToStory`, `trialGraduation`, `collaborators`, `aiGenerated`, `audio` (an audio id, or a block with `audioId`, `title`, `artist`, `audioVolume`, `videoVolume`) |
 | `TIKTOK` | `privacyLevel`, `title`, `caption`, `allowComments`, `allowDuet`, `allowStitch`, `sendAsDraft`, `aiGenerated`, `brandedContent`, `brandedContentOwnBrand`, `autoAddMusic` |
 | `PINTEREST` | `boardId`, `boardName`, `title`, `link`. Set `boardId` or `boardName`, not both. `boardName` picks the board by its name, the same way `--pinterest-board-name` does. With neither, the pin goes to a board named AdaptlyPost |
 | `YOUTUBE` | `postType`, `videoTitle`, `tags`, `privacyStatus`, `license`, `notifySubscribers`, `allowEmbedding`, `madeForKids`, `categoryId`, `playlistId` |

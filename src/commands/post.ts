@@ -206,6 +206,7 @@ interface ContentOptions {
   fit: string[];
   igShareToStory?: boolean;
   igCollaborator: string[];
+  igAiGenerated?: boolean;
   igAudio?: string;
   igAudioTitle?: string;
   igAudioArtist?: string;
@@ -379,6 +380,7 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
 
   if (options.igShareToStory !== undefined) mergeConfig("INSTAGRAM", { shareToStory: options.igShareToStory });
   if (options.igCollaborator.length > 0) mergeConfig("INSTAGRAM", { collaborators: options.igCollaborator });
+  if (options.igAiGenerated !== undefined) mergeConfig("INSTAGRAM", { aiGenerated: options.igAiGenerated });
 
   const audioDetails = [options.igAudioTitle, options.igAudioArtist, options.igAudioVolume, options.igVideoVolume];
   if (options.igAudio === undefined && audioDetails.some((value) => value !== undefined)) {
@@ -817,6 +819,7 @@ function storedConfig(target: SocialPostPlatform): ConfigEntry | undefined {
         postType: target.instagramPostType,
         trialGraduation: target.instagramTrialGraduation,
         collaborators: target.instagramCollaborators,
+        aiGenerated: target.instagramAiGenerated,
         audio:
           target.instagramAudioId === undefined
             ? undefined
@@ -1942,6 +1945,7 @@ const withContentOptions = (command: Command): Command =>
       collect,
       [],
     )
+    .option("--ig-ai-generated", "Disclose that the Instagram post was made or edited with AI, so Instagram shows its AI info label")
     .option("--ig-audio <audioId>", "Add music or an original sound to an Instagram reel. Find ids with: accounts instagram-audio")
     .option("--ig-audio-title <title>", "Track title stored with --ig-audio, for display only")
     .option("--ig-audio-artist <artist>", "Artist stored with --ig-audio, for display only")

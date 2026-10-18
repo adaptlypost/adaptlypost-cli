@@ -993,6 +993,7 @@ describe("per-platform options on create, update and bulk", () => {
       "@ada",
       "--ig-collaborator",
       "grace",
+      "--ig-ai-generated",
       "--ig-audio",
       "901",
       "--ig-audio-volume",
@@ -1008,6 +1009,7 @@ describe("per-platform options on create, update and bulk", () => {
           postType: "REEL",
           shareToStory: true,
           collaborators: ["ada", "grace"],
+          aiGenerated: true,
           audio: { audioId: "901", audioVolume: 40 },
         },
       ],
@@ -1121,7 +1123,7 @@ describe("per-platform options on create, update and bulk", () => {
     });
   });
 
-  it("resends one Instagram target with shareToStory, collaborators and audio when the post has a story sibling", async () => {
+  it("resends one Instagram target with shareToStory, collaborators, the AI label and audio when the post has a story sibling", async () => {
     vi.mocked(client.getPost).mockResolvedValue({
       id: "post_1",
       status: "SCHEDULED",
@@ -1137,6 +1139,7 @@ describe("per-platform options on create, update and bulk", () => {
           connectionId: "ig_7c3e",
           instagramPostType: "REEL",
           instagramCollaborators: ["ada"],
+          instagramAiGenerated: true,
           instagramAudioId: "901",
           instagramAudioVolume: 40,
           mediaUrls: [],
@@ -1187,6 +1190,7 @@ describe("per-platform options on create, update and bulk", () => {
           connectionId: "ig_7c3e",
           postType: "REEL",
           collaborators: ["ada"],
+          aiGenerated: true,
           audio: { audioId: "901", audioVolume: 40 },
           shareToStory: true,
         },

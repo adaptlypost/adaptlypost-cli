@@ -428,6 +428,7 @@ export interface InstagramPostConfig {
   shareToStory?: boolean;
   trialGraduation?: InstagramTrialGraduation;
   collaborators?: string[];
+  aiGenerated?: boolean;
   audio?: InstagramAudioConfig;
 }
 
@@ -537,6 +538,7 @@ export interface SocialPostPlatform {
   instagramPostType?: MetaPostType;
   instagramTrialGraduation?: InstagramTrialGraduation;
   instagramCollaborators?: string[];
+  instagramAiGenerated?: boolean;
   instagramUsername?: string;
   instagramAudioId?: string;
   instagramAudioTitle?: string;

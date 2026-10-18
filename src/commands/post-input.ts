@@ -142,7 +142,7 @@ export const CONFIG_FIELD: Partial<Record<PlatformType, keyof PostTargets>> = {
 
 export const CONFIG_KEYS: Partial<Record<PlatformType, readonly string[]>> = {
   FACEBOOK: ["postType", "shareToStory", "videoTitle", "textFormatPresetId"],
-  INSTAGRAM: ["postType", "shareToStory", "trialGraduation", "collaborators", "audio"],
+  INSTAGRAM: ["postType", "shareToStory", "trialGraduation", "collaborators", "aiGenerated", "audio"],
   TIKTOK: [
     "privacyLevel",
     "title",
@@ -1485,6 +1485,7 @@ export function normalizeConfig(platform: PlatformType, config: FrontmatterMap):
       ...config,
       shareToStory: configBoolean(config.shareToStory, "INSTAGRAM shareToStory"),
       collaborators: normalizeCollaborators(config.collaborators),
+      aiGenerated: configBoolean(config.aiGenerated, "INSTAGRAM aiGenerated"),
       audio: normalizeInstagramAudio(config.audio),
     });
   }
