@@ -19,6 +19,8 @@ import {
 } from "../api/client.js";
 import {
   CONTENT_TYPES,
+  FACEBOOK_CAROUSEL_CARDS_MAX,
+  FACEBOOK_IMAGE_LAYOUTS,
   FIRST_COMMENT_MAX_LENGTH,
   GOOGLE_BUSINESS_CALL_TO_ACTION_TYPES,
   GOOGLE_BUSINESS_TOPIC_TYPES,
@@ -214,6 +216,8 @@ interface ContentOptions {
   igVideoVolume?: string;
   fbShareToStory?: boolean;
   fbTextBackground?: string;
+  fbLayout?: string;
+  fbCard: string[];
   xKeepLinks?: boolean;
   gbpTopic?: string;
   gbpCta?: string;
@@ -229,6 +233,21 @@ interface ContentOptions {
   on?: Weekday[];
   until?: string;
   count?: string;
+}
+
+function facebookCardFromFlag(value: string): Record<string, string> {
+  const [link = "", title = "", ...description] = value.split("|");
+  if (link.trim() === "") {
+    throw new CliError(`--fb-card "${value}" has no link.`, {
+      exitCode: ExitCode.USAGE,
+      hint: 'Write --fb-card "<link>|<title>|<description>", title and description optional',
+    });
+  }
+  return Object.fromEntries(
+    Object.entries({ link: link.trim(), title: title.trim(), description: description.join("|").trim() }).filter(
+      ([, field]) => field !== "",
+    ),
+  );
 }
 
 function recurrenceFromOptions(options: ContentOptions): PostInput["recurrence"] {
@@ -408,6 +427,24 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
   if (options.fbShareToStory !== undefined) mergeConfig("FACEBOOK", { shareToStory: options.fbShareToStory });
   if (options.fbTextBackground !== undefined) {
     mergeConfig("FACEBOOK", { textFormatPresetId: options.fbTextBackground });
+  }
+  if (options.fbLayout !== undefined) {
+    const imageLayout = options.fbLayout.trim().toUpperCase();
+    if (!(FACEBOOK_IMAGE_LAYOUTS as readonly string[]).includes(imageLayout)) {
+      throw new CliError(`Unknown Facebook layout "${options.fbLayout}". Expected grid or carousel.`, {
+        exitCode: ExitCode.USAGE,
+      });
+    }
+    if (imageLayout === "GRID" && options.fbCard.length > 0) {
+      throw new CliError("--fb-card makes a carousel, so it cannot go with --fb-layout grid.", {
+        exitCode: ExitCode.USAGE,
+        hint: "Drop --fb-layout, or drop the cards for a photo grid",
+      });
+    }
+    mergeConfig("FACEBOOK", { imageLayout });
+  }
+  if (options.fbCard.length > 0) {
+    mergeConfig("FACEBOOK", { carouselCards: options.fbCard.map(facebookCardFromFlag) });
   }
 
   const googleBusiness = Object.fromEntries(
@@ -813,6 +850,11 @@ function storedConfig(target: SocialPostPlatform): ConfigEntry | undefined {
         postType: target.facebookPostType,
         videoTitle: target.facebookVideoTitle,
         textFormatPresetId: target.facebookTextFormatPresetId,
+        imageLayout: target.facebookImageLayout,
+        carouselCards:
+          target.facebookImageLayout === "CAROUSEL"
+            ? target.facebookCarouselCards?.map((card) => definedOnly({ ...card }))
+            : undefined,
       });
     case "INSTAGRAM":
       return definedOnly({
@@ -1955,6 +1997,16 @@ const withContentOptions = (command: Command): Command =>
     .option(
       "--fb-text-background <presetId>",
       "Facebook colored text background id, for example 106018623298955. TEXT posts up to 130 characters, no media",
+    )
+    .option(
+      "--fb-layout <layout>",
+      "Facebook image layout: grid (the default, a photo grid) or carousel (swipeable cards, each opening its own link)",
+    )
+    .option(
+      "--fb-card <link|title|description>",
+      `Facebook carousel card, repeatable, one per image in media order, up to ${FACEBOOK_CAROUSEL_CARDS_MAX}. Fields are split on |; title and description are optional. Implies --fb-layout carousel`,
+      collect,
+      [],
     )
     .option(
       "--x-keep-links",

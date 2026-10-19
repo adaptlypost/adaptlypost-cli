@@ -152,6 +152,37 @@ describe("parseFrontmatter", () => {
     expect(body.trim()).toBe("Body text.");
   });
 
+  it("reads a dash list of key blocks, and keeps a URL item a string", () => {
+    const source = [
+      "---",
+      "facebook:",
+      "  carouselCards:",
+      "    - link: https://acme.test/shoes",
+      "      title: Shoes",
+      "      description: \"Spring range: 20% off\"",
+      "    - link: https://acme.test/bags",
+      "    - https://acme.test/hats",
+      "  imageLayout: CAROUSEL",
+      "---",
+      "Body",
+    ].join("\n");
+
+    expect(parseFrontmatter(source).data.facebook).toEqual({
+      carouselCards: [
+        { link: "https://acme.test/shoes", title: "Shoes", description: "Spring range: 20% off" },
+        { link: "https://acme.test/bags" },
+        "https://acme.test/hats",
+      ],
+      imageLayout: "CAROUSEL",
+    });
+  });
+
+  it("keeps every other dash list item a string, even when it looks like a key", () => {
+    const source = ["---", "altTexts:", "  - Before: a dog", "  - After: a cat", "---", "Body"].join("\n");
+
+    expect(parseFrontmatter(source).data.altTexts).toEqual(["Before: a dog", "After: a cat"]);
+  });
+
   it("refuses frontmatter that is never closed", () => {
     expect(exitCodeOf(() => parseFrontmatter("---\nplatforms: [TWITTER]\nno end"))).toBe(
       ExitCode.VALIDATION,
@@ -744,6 +775,30 @@ describe("per-platform options in frontmatter", () => {
     });
   });
 
+  it("keeps Facebook carousel cards from a facebook block as config keys", () => {
+    const input = parsePostInput(
+      [
+        "---",
+        "facebook:",
+        "  imageLayout: CAROUSEL",
+        "  carouselCards:",
+        "    - link: https://acme.test/a",
+        "      title: Shoes",
+        "    - link: https://acme.test/b",
+        "---",
+        "Hi",
+      ].join("\n"),
+    );
+
+    expect(input.platformConfigs).toEqual({
+      FACEBOOK: {
+        imageLayout: "CAROUSEL",
+        carouselCards: [{ link: "https://acme.test/a", title: "Shoes" }, { link: "https://acme.test/b" }],
+      },
+    });
+    expect(() => assertConfigKeys("FACEBOOK", input.platformConfigs?.FACEBOOK ?? {})).not.toThrow();
+  });
+
   it("reads a top-level twitterKeepLinks key and refuses keepLinks outside the X block", () => {
     expect(parsePostInput("---\ntwitterKeepLinks: false\n---\nHi").twitterKeepLinks).toBe(false);
     expect(exitCodeOf(() => parsePostInput("---\nlinkedin:\n  keepLinks: true\n---\nHi"))).toBe(ExitCode.VALIDATION);
@@ -852,6 +907,31 @@ describe("normalizeConfig", () => {
       textFormatPresetId: "106018623298955",
     });
     expect(exitCodeOf(() => normalizeConfig("FACEBOOK", { textFormatPresetId: "purple" }))).toBe(ExitCode.VALIDATION);
+  });
+
+  it("reads a Facebook carousel layout and its cards, implying CAROUSEL from the cards", () => {
+    expect(
+      normalizeConfig("FACEBOOK", {
+        carouselCards: [{ link: " https://acme.test/a ", title: "A", description: "" }, "https://acme.test/b"],
+      }),
+    ).toEqual({
+      imageLayout: "CAROUSEL",
+      carouselCards: [{ link: "https://acme.test/a", title: "A" }, { link: "https://acme.test/b" }],
+    });
+    expect(normalizeConfig("FACEBOOK", { imageLayout: "grid" })).toEqual({ imageLayout: "GRID" });
+  });
+
+  it("refuses a Facebook layout it does not know, cards on a grid, more than 5 cards, or a card without a link", () => {
+    const card = { link: "https://acme.test" };
+    expect(exitCodeOf(() => normalizeConfig("FACEBOOK", { imageLayout: "STACK" }))).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => normalizeConfig("FACEBOOK", { imageLayout: "GRID", carouselCards: [card] }))).toBe(
+      ExitCode.VALIDATION,
+    );
+    expect(exitCodeOf(() => normalizeConfig("FACEBOOK", { carouselCards: Array(6).fill(card) }))).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => normalizeConfig("FACEBOOK", { carouselCards: [{ title: "No link" }] }))).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => normalizeConfig("FACEBOOK", { carouselCards: [{ url: "https://acme.test" }] }))).toBe(
+      ExitCode.VALIDATION,
+    );
   });
 
   it("turns a numeric Pinterest board id into a string and refuses one too long to be a number", () => {

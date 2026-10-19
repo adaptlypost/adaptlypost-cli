@@ -1017,6 +1017,58 @@ describe("per-platform options on create, update and bulk", () => {
     });
   });
 
+  it("builds a Facebook link carousel from --fb-card, implying the carousel layout", async () => {
+    await run([
+      "post",
+      "create",
+      "-t",
+      "New arrivals",
+      "-a",
+      "fb_1",
+      "-m",
+      "https://cdn/a.png",
+      "-m",
+      "https://cdn/b.png",
+      "--fb-card",
+      "https://acme.test/shoes|Shoes|Spring range, 20% off",
+      "--fb-card",
+      "https://acme.test/bags||Leather | canvas",
+      "--dry-run",
+    ]);
+
+    expect(stdoutJson().data).toMatchObject({
+      facebookConfigs: [
+        {
+          pageId: "fb_1",
+          imageLayout: "CAROUSEL",
+          carouselCards: [
+            { link: "https://acme.test/shoes", title: "Shoes", description: "Spring range, 20% off" },
+            { link: "https://acme.test/bags", description: "Leather | canvas" },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("sends --fb-layout grid and refuses it next to --fb-card, an unknown layout, or a card with no link", async () => {
+    await run(["post", "create", "-t", "Hi", "-a", "fb_1", "-m", "https://cdn/a.png", "--fb-layout", "grid", "--dry-run"]);
+    expect(stdoutJson().data).toMatchObject({ facebookConfigs: [{ pageId: "fb_1", imageLayout: "GRID" }] });
+
+    const base = ["post", "create", "-t", "Hi", "-a", "fb_1", "--dry-run"];
+    await expect(run([...base, "--fb-layout", "grid", "--fb-card", "https://acme.test"])).rejects.toMatchObject({
+      exitCode: 2,
+    });
+    await expect(run([...base, "--fb-layout", "stack"])).rejects.toMatchObject({ exitCode: 2 });
+    await expect(run([...base, "--fb-card", "|Title only"])).rejects.toMatchObject({ exitCode: 2 });
+  });
+
+  it("refuses more than 5 Facebook carousel cards", async () => {
+    const cards = Array.from({ length: 6 }, (_, index) => ["--fb-card", `https://acme.test/${index}`]).flat();
+    await expect(run(["post", "create", "-t", "Hi", "-a", "fb_1", ...cards, "--dry-run"])).rejects.toMatchObject({
+      exitCode: 5,
+    });
+  });
+
   it("refuses audio details without --ig-audio", async () => {
     await expect(
       run(["post", "create", "-t", "Hi", "-a", "ig_7c3e", "--ig-audio-title", "Sunrise", "--dry-run"]),
@@ -1200,6 +1252,50 @@ describe("per-platform options on create, update and bulk", () => {
     });
   });
 
+  it("resends a Facebook carousel layout and its cards", async () => {
+    vi.mocked(client.getPost).mockResolvedValue({
+      id: "post_1",
+      status: "SCHEDULED",
+      contentType: "CAROUSEL",
+      text: "New arrivals",
+      timezone: "UTC",
+      mediaUrls: ["https://cdn/a.png", "https://cdn/b.png"],
+      platforms: [
+        {
+          id: "pp_1",
+          platform: "FACEBOOK",
+          status: "PENDING",
+          pageId: "fb_1",
+          facebookPostType: "FEED",
+          facebookImageLayout: "CAROUSEL",
+          facebookCarouselCards: [{ link: "https://acme.test/shoes", title: "Shoes" }, { link: "https://acme.test/bags" }],
+          mediaUrls: [],
+          mediaAltTexts: [],
+          previewUrls: [],
+          createdAt: "",
+          updatedAt: "",
+        },
+      ],
+      createdAt: "",
+      updatedAt: "",
+      userId: "u",
+    });
+
+    await run(["post", "update", "post_1", "--alt", "Shoes", "--dry-run"]);
+
+    expect(stdoutJson().data).toMatchObject({
+      platforms: ["FACEBOOK"],
+      facebookConfigs: [
+        {
+          pageId: "fb_1",
+          postType: "FEED",
+          imageLayout: "CAROUSEL",
+          carouselCards: [{ link: "https://acme.test/shoes", title: "Shoes" }, { link: "https://acme.test/bags" }],
+        },
+      ],
+    });
+  });
+
   it("creates a Pinterest post without --pinterest-board and sends the board when the flag is set", async () => {
     vi.mocked(client.listSocialAccounts).mockResolvedValue({
       accounts: [
@@ -1303,6 +1399,29 @@ describe("per-platform options on create, update and bulk", () => {
       platformTexts: [{ platform: "GOOGLE_BUSINESS", text: "Shorter" }],
       firstComments: [{ platform: "TWITTER", text: "Reply, with a comma" }],
       platformAspectRatios: [{ platform: "INSTAGRAM", aspectRatio: "SQUARE", fit: "PAD" }],
+    });
+  });
+
+  it("reads a Facebook carousel from a config_FACEBOOK column", async () => {
+    const path = csvPath(
+      [
+        "text,scheduledAt,media,config_FACEBOOK",
+        'Arrivals,2026-10-19T09:00:00Z,https://cdn/a.png;https://cdn/b.png,"{""carouselCards"":[{""link"":""https://acme.test/a""},{""link"":""https://acme.test/b"",""title"":""Bags""}]}"',
+        "",
+      ].join("\n"),
+    );
+
+    await run(["post", "bulk", "--csv", path, "-a", "fb_1", "--dry-run"]);
+
+    const [batch] = stdoutJson().data as Record<string, unknown>[];
+    expect(batch).toMatchObject({
+      facebookConfigs: [
+        {
+          pageId: "fb_1",
+          imageLayout: "CAROUSEL",
+          carouselCards: [{ link: "https://acme.test/a" }, { link: "https://acme.test/b", title: "Bags" }],
+        },
+      ],
     });
   });
 

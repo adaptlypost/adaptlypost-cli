@@ -6,6 +6,8 @@ import { createUploadUrls } from "../api/client.js";
 import {
   ASPECT_RATIOS_BY_PLATFORM,
   CONTENT_TYPES,
+  FACEBOOK_CAROUSEL_CARDS_MAX,
+  FACEBOOK_IMAGE_LAYOUTS,
   FIRST_COMMENT_MAX_LENGTH,
   GOOGLE_BUSINESS_CALL_TO_ACTION_TYPES,
   GOOGLE_BUSINESS_TOPIC_TYPES,
@@ -141,7 +143,7 @@ export const CONFIG_FIELD: Partial<Record<PlatformType, keyof PostTargets>> = {
 };
 
 export const CONFIG_KEYS: Partial<Record<PlatformType, readonly string[]>> = {
-  FACEBOOK: ["postType", "shareToStory", "videoTitle", "textFormatPresetId"],
+  FACEBOOK: ["postType", "shareToStory", "videoTitle", "textFormatPresetId", "imageLayout", "carouselCards"],
   INSTAGRAM: ["postType", "shareToStory", "trialGraduation", "collaborators", "aiGenerated", "audio"],
   TIKTOK: [
     "privacyLevel",
@@ -184,6 +186,7 @@ export const CONFIG_KEYS: Partial<Record<PlatformType, readonly string[]>> = {
 };
 
 const INSTAGRAM_AUDIO_KEYS = ["audioId", "title", "artist", "audioVolume", "videoVolume"] as const;
+const FACEBOOK_CARD_KEYS = ["link", "title", "description"] as const;
 
 const squash = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, "");
 
@@ -310,6 +313,8 @@ const CALENDAR_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$/;
 const NUMBER = /^-?\d+(\.\d+)?$/;
 const KEY_LINE = /^([A-Za-z0-9_.-]+)\s*:\s*(.*)$/;
+const LIST_ITEM_KEY = /^[A-Za-z0-9_.-]+\s*:(\s|$)/;
+const BLOCK_LIST_KEY = "carouselCards";
 
 export function normalizePlatformName(value: string): PlatformType {
   const raw = value.trim();
@@ -607,7 +612,17 @@ function parseMap(lines: string[], start: number, baseIndent: number): { value: 
           continue;
         }
         if (indentOf(item) < childIndent || !item.trim().startsWith("-")) break;
-        items.push(parseScalar(item.trim().replace(/^-\s*/, "")));
+        const entry = item.trim().replace(/^-\s*/, "");
+        if (key === BLOCK_LIST_KEY && LIST_ITEM_KEY.test(entry)) {
+          const entryIndent = indentOf(item) + item.trim().length - entry.length;
+          const shifted = [...lines];
+          shifted[index] = `${" ".repeat(entryIndent)}${entry}`;
+          const nested = parseMap(shifted, index, entryIndent);
+          items.push(nested.value);
+          index = nested.next;
+          continue;
+        }
+        items.push(parseScalar(entry));
         index += 1;
       }
       map[key] = items;
@@ -1376,6 +1391,45 @@ function normalizeInstagramAudio(value: FrontmatterValue | undefined): Frontmatt
   });
 }
 
+function normalizeCarouselCards(value: FrontmatterValue | undefined): FrontmatterMap[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  const list = Array.isArray(value) ? value : [value];
+
+  if (list.length > FACEBOOK_CAROUSEL_CARDS_MAX) {
+    throw configError(
+      `A Facebook carousel takes up to ${FACEBOOK_CAROUSEL_CARDS_MAX} cards, got ${list.length}.`,
+      "Give one card per image, 2 to 5 images",
+    );
+  }
+
+  return list.map((entry, index) => {
+    const label = `FACEBOOK carouselCards card ${index + 1}`;
+    const card = typeof entry === "string" ? { link: entry } : entry;
+    if (card === null || typeof card !== "object" || Array.isArray(card)) {
+      throw configError(`${label} must be a link or a block with link, title and description.`);
+    }
+
+    for (const key of Object.keys(card)) {
+      if (!(FACEBOOK_CARD_KEYS as readonly string[]).includes(key)) {
+        const suggestion = closestConfigKey(key, FACEBOOK_CARD_KEYS);
+        throw configError(
+          `Unknown ${label} key "${key}".${suggestion ? ` Did you mean "${suggestion}"?` : ""}`,
+          `card keys: ${FACEBOOK_CARD_KEYS.join(", ")}`,
+        );
+      }
+    }
+
+    const link = configString(card.link, `${label} link`)?.trim();
+    if (!link) throw configError(`${label} needs a link.`, "Every card opens its own link, for example https://acme.example/shoes");
+
+    return definedEntries({
+      link,
+      title: configString(card.title, `${label} title`)?.trim() || undefined,
+      description: configString(card.description, `${label} description`)?.trim() || undefined,
+    });
+  });
+}
+
 function definedEntries(entries: Record<string, FrontmatterValue | undefined>): FrontmatterMap {
   return Object.fromEntries(
     Object.entries(entries).filter((entry): entry is [string, FrontmatterValue] => entry[1] !== undefined),
@@ -1498,10 +1552,26 @@ export function normalizeConfig(platform: PlatformType, config: FrontmatterMap):
         "For example 106018623298955 (solid purple)",
       );
     }
+    const carouselCards = normalizeCarouselCards(config.carouselCards);
+    const rawLayout = configString(config.imageLayout, "FACEBOOK imageLayout");
+    const imageLayout =
+      rawLayout === undefined
+        ? carouselCards?.length
+          ? "CAROUSEL"
+          : undefined
+        : pickEnum(rawLayout, FACEBOOK_IMAGE_LAYOUTS, "Facebook image layout", ExitCode.VALIDATION);
+    if (imageLayout === "GRID" && carouselCards?.length) {
+      throw configError(
+        "Facebook carousel cards need imageLayout CAROUSEL, not GRID.",
+        "Drop the cards for a photo grid, or set imageLayout to CAROUSEL",
+      );
+    }
     return definedEntries({
       ...config,
       shareToStory: configBoolean(config.shareToStory, "FACEBOOK shareToStory"),
       textFormatPresetId,
+      imageLayout,
+      carouselCards,
     });
   }
 

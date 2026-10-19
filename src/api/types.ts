@@ -126,6 +126,17 @@ export type TikTokPrivacyLevel = (typeof TIKTOK_PRIVACY_LEVELS)[number];
 export const META_POST_TYPES = ['FEED', 'REEL', 'STORY'] as const;
 export type MetaPostType = (typeof META_POST_TYPES)[number];
 
+export const FACEBOOK_IMAGE_LAYOUTS = ['GRID', 'CAROUSEL'] as const;
+export type FacebookImageLayout = (typeof FACEBOOK_IMAGE_LAYOUTS)[number];
+
+export const FACEBOOK_CAROUSEL_CARDS_MAX = 5;
+
+export interface FacebookCarouselCard {
+  link: string;
+  title?: string;
+  description?: string;
+}
+
 export const INSTAGRAM_TRIAL_GRADUATIONS = ['MANUAL', 'SS_PERFORMANCE'] as const;
 export type InstagramTrialGraduation = (typeof INSTAGRAM_TRIAL_GRADUATIONS)[number];
 
@@ -438,6 +449,8 @@ export interface FacebookPostConfig {
   shareToStory?: boolean;
   videoTitle?: string;
   textFormatPresetId?: string;
+  imageLayout?: FacebookImageLayout;
+  carouselCards?: FacebookCarouselCard[];
 }
 
 export interface GoogleBusinessPostConfig {
@@ -548,6 +561,8 @@ export interface SocialPostPlatform {
   facebookPostType?: MetaPostType;
   facebookVideoTitle?: string;
   facebookTextFormatPresetId?: string;
+  facebookImageLayout?: FacebookImageLayout;
+  facebookCarouselCards?: FacebookCarouselCard[];
   facebookPageExternalId?: string;
   youtubePostType?: YouTubePostType;
   youtubeVideoTitle?: string;

@@ -163,6 +163,23 @@ google_business:
 Open day on Saturday. Come and taste the new bread.
 ```
 
+A Facebook link carousel takes one card per image, in the same order as `media:`:
+
+```markdown
+---
+accounts: [fb_1]
+media: [./shoes.png, ./bags.png]
+facebook:
+  imageLayout: CAROUSEL
+  carouselCards:
+    - link: https://acme.example/shoes
+      title: Shoes
+      description: The spring range
+    - link: https://acme.example/bags
+---
+New in this week.
+```
+
 **LinkedIn document posts.** `--type DOCUMENT` publishes one PDF, PPT, PPTX, DOC or DOCX file (max 100 MB, 300 pages) as a LinkedIn document post. DOCUMENT is LinkedIn only, and `--media` must hold exactly that one file. A single document file with no `--type` is inferred as DOCUMENT. `--document-title` sets the title LinkedIn shows (max 100 characters, defaults to the uploaded file name, ignored for non-DOCUMENT posts); it is sent as `linkedinConfigs` for every LinkedIn account on the post. In frontmatter use `documentTitle:` (or `document-title:`, `linkedinDocumentTitle:`), or `documentTitle` inside a `linkedin:` block.
 
 ```bash
@@ -272,6 +289,8 @@ Per-platform flags on `post create` and `post update`:
 | `--ig-audio <audioId>` | `instagramConfigs[].audio.audioId`, music or an original sound for a reel. Find ids with `accounts instagram-audio`. `--ig-audio-title` and `--ig-audio-artist` are stored for display; `--ig-audio-volume` and `--ig-video-volume` take 1 to 100 and default to 100 |
 | `--fb-share-to-story` | `facebookConfigs[].shareToStory`, the same as `--ig-share-to-story` for a Facebook page |
 | `--fb-text-background <presetId>` | `facebookConfigs[].textFormatPresetId`, a colored background such as `106018623298955` (solid purple) or `249307305544279` (red to blue). TEXT posts with no media and up to 130 characters only |
+| `--fb-layout <layout>` | `facebookConfigs[].imageLayout`: `grid` (the default, a photo grid) or `carousel` (swipeable cards, each opening its own link). `grid` cannot go with `--fb-card` |
+| `--fb-card <link\|title\|description>` | `facebookConfigs[].carouselCards`, repeatable, one card per image in the order of `--media`, up to 5. The fields are split on `\|`, so the title cannot hold one; title (max 100 characters) and description (max 200) are optional, as in `--fb-card "https://acme.example/shoes\|Shoes"`. A card implies `--fb-layout carousel`. A carousel needs 2 to 5 images, no videos and a FEED post, or the API answers 400. Facebook shows the card's image and title only for links to a website the Page owns; any other link fails the post with a message saying so |
 | `--x-keep-links`, `--no-x-keep-links` | `twitterKeepLinks`. By default links in X text are broken (`example. com`), because X charges over 10 times more for a post with a link. Only AppSumo lifetime deals can keep them, and a kept link costs 20 credits instead of 2; any other plan gets a 400 |
 | `--gbp-topic <type>` | `googleBusinessConfigs[].topicType`: `STANDARD` (an update, the default), `EVENT` or `OFFER`. EVENT and OFFER need `--gbp-event-title`, `--gbp-event-start` and `--gbp-event-end` |
 | `--gbp-cta <type>`, `--gbp-cta-url <url>` | `callToActionType` and `callToActionUrl`: `BOOK`, `ORDER`, `SHOP`, `LEARN_MORE`, `SIGN_UP` or `CALL`. Every button except CALL needs the URL; CALL dials the phone number on the profile |
@@ -328,7 +347,7 @@ Per-platform config keys, for `--config`, frontmatter platform blocks and `confi
 
 | Platform | Keys |
 |---|---|
-| `FACEBOOK` | `postType`, `shareToStory`, `videoTitle`, `textFormatPresetId` |
+| `FACEBOOK` | `postType`, `shareToStory`, `videoTitle`, `textFormatPresetId`, `imageLayout` (`GRID` or `CAROUSEL`), `carouselCards` (a list of blocks with `link`, `title` and `description`, or bare links; cards without `imageLayout` mean `CAROUSEL`) |
 | `INSTAGRAM` | `postType`, `shareToStory`, `trialGraduation`, `collaborators`, `aiGenerated`, `audio` (an audio id, or a block with `audioId`, `title`, `artist`, `audioVolume`, `videoVolume`) |
 | `TIKTOK` | `privacyLevel`, `title`, `caption`, `allowComments`, `allowDuet`, `allowStitch`, `sendAsDraft`, `aiGenerated`, `brandedContent`, `brandedContentOwnBrand`, `autoAddMusic` |
 | `PINTEREST` | `boardId`, `boardName`, `title`, `link`. Set `boardId` or `boardName`, not both. `boardName` picks the board by its name, the same way `--pinterest-board-name` does. With neither, the pin goes to a board named AdaptlyPost |
