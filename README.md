@@ -360,7 +360,7 @@ Per-platform config keys, for `--config`, frontmatter platform blocks and `confi
 
 | Command | Key flags | Notes |
 |---|---|---|
-| `connect create` | | A link a client opens to connect their own accounts to this workspace. Prints the url, the token and when it expires |
+| `connect create` | `--name`, `--private`, `--platform`, `--max-accounts`, `--expires`, `--never-expires`, `--timezone` | A link a client opens to connect their own accounts to this workspace. Prints the url, the token and when it expires. With no flags it is a quick link: every platform, every account in the workspace visible, no limit, 7 days. `--private` shows the client only the accounts they connect through the link. `--platform` is repeatable and limits the platforms offered. `--max-accounts` stops the link once that many accounts are connected through it. `--expires` takes the same times as `post create --at` (`2026-11-30 18:00`, `+30d`, an ISO date-time) and must be 1 hour to 365 days away. `--never-expires` keeps the link working until you revoke it |
 | `connect revoke <token>` | `--yes` | Confirms first. The link stops working at once |
 
 ### webhook

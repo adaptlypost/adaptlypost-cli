@@ -185,8 +185,12 @@ describe('endpoint mapping', () => {
     ],
     [
       'createConnectLink',
-      () => client.createConnectLink(),
-      { method: 'POST', path: '/connect-links' },
+      () => client.createConnectLink({ name: 'Acme', neverExpires: true }),
+      {
+        method: 'POST',
+        path: '/connect-links',
+        body: { name: 'Acme', neverExpires: true },
+      },
     ],
     [
       'revokeConnectLink',

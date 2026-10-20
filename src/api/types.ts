@@ -789,10 +789,26 @@ export interface BulkSchedulePostsResponse {
   results: BulkPostResult[];
 }
 
+export const CONNECT_LINK_VISIBILITIES = ['PUBLIC', 'PRIVATE'] as const;
+export type ConnectLinkVisibility = (typeof CONNECT_LINK_VISIBILITIES)[number];
+
+export interface CreateConnectLinkRequest {
+  name?: string;
+  visibility?: ConnectLinkVisibility;
+  allowedPlatforms?: PlatformType[];
+  maxAccounts?: number;
+  expiresAt?: string;
+  neverExpires?: boolean;
+}
+
 export interface ConnectLink {
   url: string;
   token: string;
-  expiresAt: string;
+  expiresAt: string | null;
+  name?: string | null;
+  visibility?: ConnectLinkVisibility;
+  allowedPlatforms?: PlatformType[];
+  maxAccounts?: number | null;
 }
 
 export interface RevokeConnectLinkResponse {

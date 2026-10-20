@@ -13,6 +13,7 @@ import type {
   BulkSchedulePostsResponse,
   CaptionResponse,
   ConnectLink,
+  CreateConnectLinkRequest,
   CreatePostRequest,
   CreatePostResponse,
   CreateUploadUrlsRequest,
@@ -220,8 +221,14 @@ export const deleteRecurringPost = (recurringPostId: string): Promise<DeletedRes
     path: `/recurring-posts/${segment(recurringPostId)}`,
   });
 
-export const createConnectLink = (): Promise<ConnectLink> =>
-  request<ConnectLink>({ method: 'POST', path: '/connect-links' });
+export const createConnectLink = (
+  createConnectLinkRequest: CreateConnectLinkRequest = {},
+): Promise<ConnectLink> =>
+  request<ConnectLink>({
+    method: 'POST',
+    path: '/connect-links',
+    body: createConnectLinkRequest,
+  });
 
 export const revokeConnectLink = (
   token: string,

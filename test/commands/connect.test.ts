@@ -43,8 +43,59 @@ describe('connect create', () => {
 
     await run(['connect', 'create']);
 
-    expect(client.createConnectLink).toHaveBeenCalledWith();
+    expect(client.createConnectLink).toHaveBeenCalledWith({});
     expect(stdoutJson()).toEqual({ ok: true, command: 'connect.create', data: link });
+  });
+
+  it('sends every option it was given', async () => {
+    vi.mocked(client.createConnectLink).mockResolvedValue({
+      url: 'https://adaptlypost.com/connect/tok_2',
+      token: 'tok_2',
+      expiresAt: '2026-11-30T17:00:00.000Z',
+    });
+
+    await run([
+      'connect', 'create',
+      '--name', 'Acme onboarding',
+      '--private',
+      '--platform', 'instagram',
+      '--platform', 'TIKTOK',
+      '--max-accounts', '3',
+      '--expires', '2026-11-30 18:00',
+      '--timezone', 'Europe/Warsaw',
+    ]);
+
+    expect(client.createConnectLink).toHaveBeenCalledWith({
+      name: 'Acme onboarding',
+      visibility: 'PRIVATE',
+      allowedPlatforms: ['INSTAGRAM', 'TIKTOK'],
+      maxAccounts: 3,
+      expiresAt: '2026-11-30T17:00:00.000Z',
+    });
+  });
+
+  it('asks for a link that never expires and prints its null expiry', async () => {
+    const link = { url: 'https://adaptlypost.com/connect/tok_3', token: 'tok_3', expiresAt: null };
+    vi.mocked(client.createConnectLink).mockResolvedValue(link);
+
+    await run(['connect', 'create', '--never-expires']);
+
+    expect(client.createConnectLink).toHaveBeenCalledWith({ neverExpires: true });
+    expect(stdoutJson()).toMatchObject({ data: { expiresAt: null } });
+  });
+
+  it.each([
+    [['--expires', '+30d', '--never-expires'], 'either --expires or --never-expires'],
+    [['--max-accounts', '0'], '--max-accounts'],
+    [['--max-accounts', '2.5'], '--max-accounts'],
+    [['--expires', 'someday'], '--expires'],
+    [['--platform', 'myspace'], 'Unknown platform'],
+  ])('refuses %j with exit 2 before calling the API', async (flags, message) => {
+    await expect(run(['connect', 'create', ...flags])).rejects.toMatchObject({
+      exitCode: 2,
+      message: expect.stringContaining(message),
+    });
+    expect(client.createConnectLink).not.toHaveBeenCalled();
   });
 });
 
