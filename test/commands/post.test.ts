@@ -919,6 +919,14 @@ describe("per-platform options on create, update and bulk", () => {
       status: "active",
       pageId: "102938",
     },
+    {
+      id: "yt_1",
+      platform: "YOUTUBE",
+      displayName: "Acme Channel",
+      username: "acme",
+      avatarUrl: "",
+      status: "active",
+    },
   ];
 
   const csvPath = (contents: string): string => {
@@ -1014,6 +1022,27 @@ describe("per-platform options on create, update and bulk", () => {
         },
       ],
       facebookConfigs: [{ pageId: "fb_1", shareToStory: true }],
+    });
+  });
+
+  it("sends the YouTube altered or synthetic content label from --yt-ai-generated", async () => {
+    await run([
+      "post",
+      "create",
+      "-t",
+      "Launch video",
+      "-a",
+      "yt_1",
+      "-m",
+      "https://cdn/launch.mp4",
+      "--yt-title",
+      "Launch",
+      "--yt-ai-generated",
+      "--dry-run",
+    ]);
+
+    expect(stdoutJson().data).toMatchObject({
+      youtubeConfigs: [{ connectionId: "yt_1", videoTitle: "Launch", aiGenerated: true }],
     });
   });
 
@@ -1249,6 +1278,44 @@ describe("per-platform options on create, update and bulk", () => {
       ],
       googleBusinessConnectionIds: ["gbp_1"],
       googleBusinessConfigs: [{ connectionId: "gbp_1", topicType: "STANDARD", callToActionType: "CALL" }],
+    });
+  });
+
+  it("resends the YouTube altered or synthetic content label a post already has", async () => {
+    vi.mocked(client.getPost).mockResolvedValue({
+      id: "post_1",
+      status: "SCHEDULED",
+      contentType: "VIDEO",
+      text: "Launch video",
+      timezone: "UTC",
+      mediaUrls: ["https://cdn/launch.mp4"],
+      platforms: [
+        {
+          id: "pp_1",
+          platform: "YOUTUBE",
+          status: "PENDING",
+          connectionId: "yt_1",
+          youtubeVideoTitle: "Launch",
+          youtubeMadeForKids: false,
+          youtubeAiGenerated: true,
+          mediaUrls: [],
+          mediaAltTexts: [],
+          previewUrls: [],
+          createdAt: "",
+          updatedAt: "",
+        },
+      ],
+      createdAt: "",
+      updatedAt: "",
+      userId: "u",
+    });
+
+    await run(["post", "update", "post_1", "--alt", "Launch", "--dry-run"]);
+
+    expect(stdoutJson().data).toMatchObject({
+      platforms: ["YOUTUBE"],
+      youtubeConnectionIds: ["yt_1"],
+      youtubeConfigs: [{ connectionId: "yt_1", videoTitle: "Launch", madeForKids: false, aiGenerated: true }],
     });
   });
 

@@ -168,6 +168,7 @@ export const CONFIG_KEYS: Partial<Record<PlatformType, readonly string[]>> = {
     "notifySubscribers",
     "allowEmbedding",
     "madeForKids",
+    "aiGenerated",
     "categoryId",
     "playlistId",
   ],
@@ -1541,6 +1542,13 @@ export function normalizeConfig(platform: PlatformType, config: FrontmatterMap):
       collaborators: normalizeCollaborators(config.collaborators),
       aiGenerated: configBoolean(config.aiGenerated, "INSTAGRAM aiGenerated"),
       audio: normalizeInstagramAudio(config.audio),
+    });
+  }
+
+  if (platform === "YOUTUBE") {
+    return definedEntries({
+      ...config,
+      aiGenerated: configBoolean(config.aiGenerated, "YOUTUBE aiGenerated"),
     });
   }
 

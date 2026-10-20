@@ -484,6 +484,7 @@ export interface YouTubePostConfig {
   notifySubscribers?: boolean;
   allowEmbedding?: boolean;
   madeForKids?: boolean;
+  aiGenerated?: boolean;
   categoryId?: string;
   playlistId?: string;
 }
@@ -580,6 +581,7 @@ export interface SocialPostPlatform {
   youtubeNotifySubscribers?: boolean;
   youtubeAllowEmbedding?: boolean;
   youtubeMadeForKids?: boolean;
+  youtubeAiGenerated?: boolean;
   youtubeCategoryId?: string;
   youtubePlaylistId?: string;
   twitterKeepLinks?: boolean;

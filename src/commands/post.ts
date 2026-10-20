@@ -198,6 +198,7 @@ interface ContentOptions {
   igType?: string;
   igTrial?: string;
   ytTitle?: string;
+  ytAiGenerated?: boolean;
   pinterestBoard?: string;
   pinterestBoardName?: string;
   documentTitle?: string;
@@ -381,6 +382,7 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
   }
 
   if (options.ytTitle !== undefined) mergeConfig("YOUTUBE", { videoTitle: options.ytTitle });
+  if (options.ytAiGenerated !== undefined) mergeConfig("YOUTUBE", { aiGenerated: options.ytAiGenerated });
   if (options.pinterestBoard !== undefined && options.pinterestBoardName !== undefined) {
     throw new CliError("Pass --pinterest-board or --pinterest-board-name, not both.", {
       exitCode: ExitCode.VALIDATION,
@@ -901,6 +903,7 @@ function storedConfig(target: SocialPostPlatform): ConfigEntry | undefined {
         notifySubscribers: target.youtubeNotifySubscribers,
         allowEmbedding: target.youtubeAllowEmbedding,
         madeForKids: target.youtubeMadeForKids,
+        aiGenerated: target.youtubeAiGenerated,
         categoryId: target.youtubeCategoryId,
         playlistId: target.youtubePlaylistId,
       });
@@ -1938,6 +1941,7 @@ const withContentOptions = (command: Command): Command =>
       `Publish an Instagram video reel as a trial reel: MANUAL (you share it from the app) or SS_PERFORMANCE (Instagram shares it if it performs well)`,
     )
     .option("--yt-title <title>", "YouTube video title")
+    .option("--yt-ai-generated", "Disclose altered or synthetic content on the YouTube video, so YouTube shows its label")
     .option(
       "--pinterest-board <id>",
       "Pinterest board id. Without it or --pinterest-board-name the pin goes to a board named AdaptlyPost. Find ids with: accounts pinterest-boards",

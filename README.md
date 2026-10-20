@@ -276,6 +276,7 @@ Per-platform flags on `post create` and `post update`:
 | `--ig-type <type>` | `instagramConfigs[].postType` |
 | `--ig-trial <graduation>` | `instagramConfigs[].trialGraduation`: `MANUAL` (you share it to followers from the Instagram app) or `SS_PERFORMANCE` (Instagram shares it if it performs well). Video reels only; a story, image or carousel is rejected |
 | `--yt-title <title>` | `youtubeConfigs[].videoTitle` |
+| `--yt-ai-generated` | `youtubeConfigs[].aiGenerated`: disclose altered or synthetic content, such as an AI voice, an AI avatar or realistic footage that was generated or edited. YouTube shows its "Altered or synthetic content" label on the video. Works on videos and Shorts |
 | `--pinterest-board <id>` | `pinterestConfigs[].boardId`, the board the pin goes to. Optional. Without it the pin goes to a public board named AdaptlyPost, which AdaptlyPost creates on the Pinterest account the first time it is needed. Find ids with `accounts pinterest-boards` |
 | `--pinterest-board-name <name>` | `pinterestConfigs[].boardName`, the board picked by its name on each Pinterest account of the post. The API trims the name, takes the one board with exactly that name, and otherwise the one board with that name in any case. No match, or several, is a 400, and the pin never goes to another board. `--dry-run` looks the name up and shows the board's name and id, and exits 5 when no board or several boards match. Not with `--pinterest-board` |
 | `--document-title <title>` | `linkedinConfigs[].documentTitle`, the title LinkedIn shows on a DOCUMENT post. Max 100 characters, defaults to the file name, ignored for other content types |
@@ -352,7 +353,7 @@ Per-platform config keys, for `--config`, frontmatter platform blocks and `confi
 | `INSTAGRAM` | `postType`, `shareToStory`, `trialGraduation`, `collaborators`, `aiGenerated`, `audio` (an audio id, or a block with `audioId`, `title`, `artist`, `audioVolume`, `videoVolume`) |
 | `TIKTOK` | `privacyLevel`, `title`, `caption`, `allowComments`, `allowDuet`, `allowStitch`, `sendAsDraft`, `aiGenerated`, `brandedContent`, `brandedContentOwnBrand`, `autoAddMusic` |
 | `PINTEREST` | `boardId`, `boardName`, `title`, `link`. Set `boardId` or `boardName`, not both. `boardName` picks the board by its name, the same way `--pinterest-board-name` does. With neither, the pin goes to a board named AdaptlyPost |
-| `YOUTUBE` | `postType`, `videoTitle`, `tags`, `privacyStatus`, `license`, `notifySubscribers`, `allowEmbedding`, `madeForKids`, `categoryId`, `playlistId` |
+| `YOUTUBE` | `postType`, `videoTitle`, `tags`, `privacyStatus`, `license`, `notifySubscribers`, `allowEmbedding`, `madeForKids`, `aiGenerated`, `categoryId`, `playlistId` |
 | `LINKEDIN` | `documentTitle` |
 | `GOOGLE_BUSINESS` | `topicType`, `callToActionType`, `callToActionUrl`, `eventTitle`, `eventStart`, `eventEnd`, `offerCouponCode`, `offerRedeemUrl`, `offerTerms`. `topicType` defaults to `STANDARD` |
 
