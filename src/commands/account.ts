@@ -4,6 +4,7 @@ import {
   checkSocialAccount,
   listPinterestBoards,
   listSocialAccounts,
+  removeSocialAccount,
   searchInstagramAudio,
 } from '../api/client.js';
 import {
@@ -17,9 +18,12 @@ import {
   type PlatformType,
   type SocialAccount,
   type SocialAccountCheck,
+  type SocialAccountRemoval,
   type SocialAccountStatus,
 } from '../api/types.js';
 import {
+  CliError,
+  ExitCode,
   formatId,
   hint,
   isMachine,
@@ -29,10 +33,13 @@ import {
   printKeyValues,
   printResult,
   printTable,
+  promptConfirm,
   spinner,
+  success,
   usageError,
   yellow,
   type Column,
+  type GlobalOptions,
 } from '../core/index.js';
 
 export interface AccountListOptions {
@@ -272,6 +279,44 @@ const runCheck = async (id: string): Promise<void> => {
   }
 };
 
+const runRemove = async (id: string, options: GlobalOptions): Promise<void> => {
+  const account = findAccount(await fetchAccounts('Loading account…'), id);
+
+  if (!account) {
+    throw notFoundError(
+      `No account with id "${id}" in this workspace`,
+      'list them with: adaptlypost accounts list',
+    );
+  }
+
+  if (!options.yes) {
+    const proceed = await promptConfirm(
+      `Remove ${account.platform} account ${account.displayName || formatId(account.id)} from the workspace? ` +
+        'Pending posts stop publishing to it.',
+      { assumeYes: false },
+    );
+    if (!proceed) {
+      throw new CliError('Cancelled.', { exitCode: ExitCode.CANCELLED });
+    }
+  }
+
+  const progress = isQuiet() || isMachine() ? null : spinner('Removing account…');
+  let removed: SocialAccountRemoval;
+  try {
+    removed = await removeSocialAccount(account.id);
+  } finally {
+    progress?.stop();
+  }
+
+  if (isMachine()) {
+    printResult('accounts.remove', removed);
+    return;
+  }
+
+  success(`Removed  ${removed.displayName || formatId(removed.id)}`);
+  hint('connect it again: adaptlypost connect create');
+};
+
 interface InstagramAudioOptions {
   type: InstagramAudioType;
   search?: string;
@@ -419,6 +464,14 @@ export const registerAccountCommands = (program: Command): void => {
     .description('ask Facebook whether a page token still works (Facebook pages only)')
     .action(async (id: string) => {
       await runCheck(id);
+    });
+
+  accounts
+    .command('remove <id>')
+    .alias('rm')
+    .description('disconnect an account from the workspace by its id or Facebook page id')
+    .action(async (id: string, _options: GlobalOptions, command: Command) => {
+      await runRemove(id, command.optsWithGlobals() as GlobalOptions);
     });
 
   accounts

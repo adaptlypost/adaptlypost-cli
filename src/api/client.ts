@@ -42,6 +42,7 @@ import type {
   RevokeConnectLinkResponse,
   SearchInstagramAudioQuery,
   SocialAccountCheck,
+  SocialAccountRemoval,
   SocialAccountsResponse,
   SocialPost,
   TopPostsResponse,
@@ -68,6 +69,14 @@ export const checkSocialAccount = (
     method: 'POST',
     path: `/social-accounts/${segment(accountId)}/check`,
     idempotent: true,
+  });
+
+export const removeSocialAccount = (
+  accountId: string,
+): Promise<SocialAccountRemoval> =>
+  request<SocialAccountRemoval>({
+    method: 'DELETE',
+    path: `/social-accounts/${segment(accountId)}`,
   });
 
 export const searchInstagramAudio = (

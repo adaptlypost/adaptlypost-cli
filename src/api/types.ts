@@ -353,6 +353,14 @@ export interface SocialAccountCheck {
   checkedAt: string;
 }
 
+export interface SocialAccountRemoval {
+  id: string;
+  platform: PlatformType;
+  displayName: string;
+  pageId?: string;
+  removed: true;
+}
+
 export interface UploadFileRequest {
   fileName: string;
   mimeType: UploadMimeType;

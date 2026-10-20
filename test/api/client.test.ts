@@ -31,6 +31,11 @@ describe('endpoint mapping', () => {
       },
     ],
     [
+      'removeSocialAccount',
+      () => client.removeSocialAccount('fb_page_91c'),
+      { method: 'DELETE', path: '/social-accounts/fb_page_91c' },
+    ],
+    [
       'listPinterestBoards',
       () => client.listPinterestBoards('pin_3c1d'),
       { method: 'GET', path: '/social-accounts/pin_3c1d/pinterest-boards' },

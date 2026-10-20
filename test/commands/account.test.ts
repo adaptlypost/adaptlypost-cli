@@ -1,17 +1,20 @@
 import { Command } from 'commander';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { checkSocialAccount, listPinterestBoards, listSocialAccounts, searchInstagramAudio } = vi.hoisted(() => ({
-  checkSocialAccount: vi.fn(),
-  listPinterestBoards: vi.fn(),
-  listSocialAccounts: vi.fn(),
-  searchInstagramAudio: vi.fn(),
-}));
+const { checkSocialAccount, listPinterestBoards, listSocialAccounts, removeSocialAccount, searchInstagramAudio } =
+  vi.hoisted(() => ({
+    checkSocialAccount: vi.fn(),
+    listPinterestBoards: vi.fn(),
+    listSocialAccounts: vi.fn(),
+    removeSocialAccount: vi.fn(),
+    searchInstagramAudio: vi.fn(),
+  }));
 
 vi.mock('../../src/api/client.js', () => ({
   checkSocialAccount,
   listPinterestBoards,
   listSocialAccounts,
+  removeSocialAccount,
   searchInstagramAudio,
 }));
 
@@ -28,6 +31,7 @@ import {
 } from '../../src/commands/account.js';
 import type { SocialAccount } from '../../src/api/types.js';
 import { setOutputMode } from '../../src/core/index.js';
+import { setInteractive } from '../../src/core/prompt.js';
 
 const account = (overrides: Partial<SocialAccount> = {}): SocialAccount =>
   ({
@@ -46,6 +50,7 @@ const page = (overrides: Partial<SocialAccount> = {}): SocialAccount =>
 const buildProgram = (): Command => {
   const program = new Command();
   program.exitOverride();
+  program.option('-y, --yes');
   registerAccountCommands(program);
   return program;
 };
@@ -63,8 +68,10 @@ beforeEach(() => {
   checkSocialAccount.mockReset();
   listPinterestBoards.mockReset();
   listSocialAccounts.mockReset();
+  removeSocialAccount.mockReset();
   searchInstagramAudio.mockReset();
   setOutputMode('machine');
+  setInteractive(false);
   stdout = [];
   vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
     stdout.push(String(chunk));
@@ -78,11 +85,12 @@ beforeEach(() => {
 });
 
 describe('registerAccountCommands', () => {
-  it('registers list, view, check, instagram-audio and pinterest-boards', () => {
+  it('registers list, view, check, remove, instagram-audio and pinterest-boards', () => {
     expect(accountsCommand(buildProgram()).commands.map((command) => command.name())).toEqual([
       'list',
       'view',
       'check',
+      'remove',
       'instagram-audio',
       'pinterest-boards',
     ]);
@@ -229,6 +237,41 @@ describe('accounts check', () => {
 
     await expect(run(['check', 'acc_missing'])).rejects.toThrow(/No account with id/);
     expect(checkSocialAccount).not.toHaveBeenCalled();
+  });
+});
+
+describe('accounts remove', () => {
+  it('removes a Facebook page by its page id under --yes', async () => {
+    listSocialAccounts.mockResolvedValue({ accounts: [page()] });
+    removeSocialAccount.mockResolvedValue({
+      id: 'acc_fb',
+      platform: 'FACEBOOK',
+      displayName: 'Ada Lovelace',
+      pageId: 'fb_page_91c',
+      removed: true,
+    });
+
+    await run(['rm', 'fb_page_91c', '--yes']);
+
+    expect(removeSocialAccount).toHaveBeenCalledWith('acc_fb');
+    expect(JSON.parse(stdout.join(''))).toMatchObject({
+      command: 'accounts.remove',
+      data: { id: 'acc_fb', removed: true },
+    });
+  });
+
+  it('asks first, and fails with exit 2 when it cannot ask', async () => {
+    listSocialAccounts.mockResolvedValue({ accounts: [account()] });
+
+    await expect(run(['remove', 'acc_1'])).rejects.toMatchObject({ exitCode: 2 });
+    expect(removeSocialAccount).not.toHaveBeenCalled();
+  });
+
+  it('fails before calling the API when the id is unknown', async () => {
+    listSocialAccounts.mockResolvedValue({ accounts: [account()] });
+
+    await expect(run(['remove', 'acc_missing', '--yes'])).rejects.toThrow(/No account with id/);
+    expect(removeSocialAccount).not.toHaveBeenCalled();
   });
 });
 

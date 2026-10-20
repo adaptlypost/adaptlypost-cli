@@ -244,6 +244,7 @@ Grammar is noun then verb, space-separated. `ls` works wherever `list` does, `rm
 | `accounts list` | `--platform`, `--status` | Connected accounts and which need reconnecting |
 | `accounts view <id>` | | One account by its id or Facebook page id |
 | `accounts check <id>` | | Facebook pages only. Takes the account id or the Facebook page id |
+| `accounts remove <id>` | `--yes` | Disconnects the account from the workspace, the same as removing it on the Connectors page. Works on accounts that need reconnecting too. Pending and recurring posts stop publishing to it. For Facebook only that page goes, other pages from the same login stay. Takes the account id or the Facebook page id. Asks first unless you pass `--yes`. Alias `rm` |
 | `accounts instagram-audio <id>` | `--type music\|original_sound`, `--search` | Music and original sounds the Instagram account can add to a reel. `--type` defaults to `music`; without `--search` it lists what is trending. Pass the `AUDIO ID` to `post create --ig-audio`. Only accounts connected through Facebook can add audio, which `accounts view` shows as `reel audio` |
 | `accounts pinterest-boards <id>` | | Every board the Pinterest account can pin to, secret boards included, with its privacy and pin count. Pass the `BOARD ID` to `post create --pinterest-board`, or the `NAME` to `--pinterest-board-name`. A board belongs to one Pinterest account, so list the boards of each account you post to. The API answers 400 when Pinterest refuses the request, usually because the account must be reconnected |
 
