@@ -16,6 +16,8 @@ import {
   retryFailedPlatforms,
   unschedulePost,
   updatePost,
+  validateBulkPosts,
+  validatePost,
 } from "../api/client.js";
 import {
   CONTENT_TYPES,
@@ -36,10 +38,13 @@ import {
   type PinterestPostConfig,
   type PlatformText,
   type PlatformType,
+  type PostAccountStatus,
+  type PostIssue,
   type PostResult,
   type PostResultsResponse,
   type PostStatus,
   type PostTargets,
+  type PostValidationReport,
   type SocialAccount,
   type SocialPost,
   type SocialPostPlatform,
@@ -50,11 +55,13 @@ import {
   CliError,
   ExitCode,
   assertTimeZone,
+  dim,
   failure,
   formatAbsolute,
   formatDuration,
   formatId,
   formatRelative,
+  green,
   hint,
   isMachine,
   isQuiet,
@@ -65,16 +72,19 @@ import {
   print,
   printFieldHints,
   printKeyValues,
+  printLines,
   printResult,
   printTable,
   profileDefaults,
   promptConfirm,
   readCsv,
+  red,
   spinner,
   success,
   toIso,
   validateLimit,
   validateOffset,
+  yellow,
   type Cursor,
 } from "../core/index.js";
 import {
@@ -581,6 +591,102 @@ const pinterestConfigsOf = (targets: { pinterestConfigs?: PinterestPostConfig[] 
 const dryRunMeta = (choices: PinterestBoardChoice[]): Record<string, unknown> =>
   choices.length > 0 ? { dryRun: true, pinterestBoards: choices } : { dryRun: true };
 
+async function withProgress<T>(label: string, quiet: boolean, work: () => Promise<T>): Promise<T> {
+  const progress = quiet || isMachine() ? null : spinner(label);
+  try {
+    return await work();
+  } finally {
+    progress?.stop();
+  }
+}
+
+function statusMark(status: PostAccountStatus): string {
+  if (status === "BLOCKED") return red("✗");
+  return status === "WARNING" ? yellow("⚠") : green("✓");
+}
+
+const issueLine = (issue: PostIssue, prefix = ""): string =>
+  `    ${issue.severity === "ERROR" ? red("•") : yellow("•")} ${prefix}${issue.message} ${dim(`[${issue.code}]`)}`;
+
+const errorCount = (report: PostValidationReport): number =>
+  [...report.issues, ...report.accounts.flatMap((account) => account.issues)].filter(
+    (issue) => issue.severity === "ERROR",
+  ).length;
+
+function outcomeLabel(report: PostValidationReport, timezone?: string): string {
+  if (report.outcome === "DRAFT") return "saved as a draft";
+  if (report.outcome === "SCHEDULED" && report.scheduledAt) {
+    return `scheduled for ${formatAbsolute(new Date(report.scheduledAt), { timezone })}`;
+  }
+  return "published now";
+}
+
+function printValidationReport(report: PostValidationReport, timezone?: string): void {
+  if (report.valid) {
+    success(`Would be ${outcomeLabel(report, timezone)}`);
+  } else {
+    const errors = errorCount(report);
+    failure(`Would be refused: ${errors} problem${errors === 1 ? "" : "s"}`);
+  }
+
+  for (const account of report.accounts) {
+    print(`  ${statusMark(account.status)} ${account.platform}  ${account.accountName ?? formatId(account.connectionId)}`);
+    printLines(account.issues.map((issue) => issueLine(issue)));
+  }
+  if (report.issues.length > 0) {
+    print("  Post");
+    printLines(report.issues.map((issue) => issueLine(issue)));
+  }
+  for (const gap of report.notChecked) {
+    hint(`not checked: ${gap.message}`);
+  }
+}
+
+function reportValidation(command: string, report: PostValidationReport, timezone?: string): void {
+  if (isMachine()) {
+    printResult(command, report, { dryRun: true });
+  } else {
+    printValidationReport(report, timezone);
+  }
+  if (!report.valid) process.exitCode = ExitCode.VALIDATION;
+}
+
+interface BulkRowValidation {
+  line: number;
+  report: PostValidationReport;
+}
+
+function reportBulkValidation(rows: BulkRowValidation[]): void {
+  const invalid = rows.filter((row) => !row.report.valid).length;
+
+  if (isMachine()) {
+    printResult("post.bulk", rows, {
+      dryRun: true,
+      total: rows.length,
+      valid: rows.length - invalid,
+      invalid,
+    });
+  } else {
+    for (const { line, report } of rows) {
+      const lines = [
+        ...report.accounts.flatMap((account) =>
+          account.issues.map((issue) =>
+            issueLine(issue, `${account.platform} ${account.accountName ?? formatId(account.connectionId)}: `),
+          ),
+        ),
+        ...report.issues.map((issue) => issueLine(issue)),
+      ];
+      if (lines.length === 0) continue;
+      print(`${report.valid ? yellow("⚠") : red("✗")} row ${line}`);
+      printLines(lines);
+    }
+    print("");
+    print(`${rows.length - invalid} of ${rows.length} posts would go through`);
+  }
+
+  if (invalid > 0) process.exitCode = ExitCode.VALIDATION;
+}
+
 function printPinterestBoardChoices(choices: PinterestBoardChoice[]): void {
   for (const choice of choices) {
     hint(`Pinterest board on ${choice.connectionId}: ${choice.resolvedName} (${choice.boardId})`);
@@ -762,6 +868,7 @@ const firstCommentCell = (target: SocialPostPlatform): string => {
 interface CreateOptions extends ContentOptions, GlobalOptions {
   watch?: boolean;
   dryRun?: boolean;
+  printBody?: boolean;
   timeout: string;
 }
 
@@ -769,11 +876,11 @@ async function runCreate(options: CreateOptions): Promise<void> {
   const quiet = Boolean(options.quiet) || isQuiet();
   const input = await resolveInput(options);
   const accounts = (input.accounts ?? []).length > 0 ? await loadAccounts(quiet) : [];
-  const mediaUrls = options.dryRun ? (input.media ?? []) : await resolveMedia(input, quiet);
+  const mediaUrls = options.printBody ? (input.media ?? []) : await resolveMedia(input, quiet);
 
   const body = buildPostBody(input, { accounts, mediaUrls });
 
-  if (options.dryRun) {
+  if (options.printBody) {
     const boards = await resolvePinterestBoardNames(pinterestConfigsOf(body), quiet);
     if (isMachine()) {
       printResult("post.create", body, dryRunMeta(boards));
@@ -784,9 +891,15 @@ async function runCreate(options: CreateOptions): Promise<void> {
     const local = mediaUrls.filter((url) => !/^https?:\/\//i.test(url));
     hint(
       local.length > 0
-        ? `dry run: nothing was sent; ${local.length} local file(s) would be uploaded first`
-        : "dry run: nothing was sent",
+        ? `nothing was sent; ${local.length} local file(s) would be uploaded first`
+        : "nothing was sent",
     );
+    return;
+  }
+
+  if (options.dryRun) {
+    const report = await withProgress("Checking the post…", quiet, () => validatePost(body));
+    reportValidation("post.create", report, body.timezone);
     return;
   }
 
@@ -834,6 +947,7 @@ async function runCreate(options: CreateOptions): Promise<void> {
 
 interface UpdateOptions extends ContentOptions, GlobalOptions {
   dryRun?: boolean;
+  printBody?: boolean;
 }
 
 type ConfigEntry = Record<string, unknown>;
@@ -1090,7 +1204,7 @@ async function runUpdate(id: string, options: UpdateOptions): Promise<void> {
     });
   }
 
-  if (options.dryRun) {
+  if (options.dryRun || options.printBody) {
     const boards = await resolvePinterestBoardNames(pinterestConfigsOf(body), quiet);
     if (isMachine()) {
       printResult("post.update", body, dryRunMeta(boards));
@@ -1098,7 +1212,7 @@ async function runUpdate(id: string, options: UpdateOptions): Promise<void> {
     }
     print(JSON.stringify(body, null, 2));
     printPinterestBoardChoices(boards);
-    hint("dry run: nothing was sent");
+    hint("nothing was sent");
     return;
   }
 
@@ -1654,6 +1768,7 @@ interface BulkOptions extends GlobalOptions {
   platform: PlatformType[];
   account: string[];
   dryRun?: boolean;
+  printBody?: boolean;
 }
 
 async function runBulk(options: BulkOptions): Promise<void> {
@@ -1696,7 +1811,7 @@ async function runBulk(options: BulkOptions): Promise<void> {
 
   const references = [...new Set(rows.flatMap((row) => row.mediaRefs))];
   const uploaded =
-    references.length === 0 || options.dryRun
+    references.length === 0 || options.printBody
       ? new Map<string, string>()
       : await (async () => {
           const progress = quiet || isMachine() ? null : spinner(`Uploading ${references.length} file(s)…`);
@@ -1755,7 +1870,7 @@ async function runBulk(options: BulkOptions): Promise<void> {
     }
   }
 
-  if (options.dryRun) {
+  if (options.printBody) {
     const boards = await resolvePinterestBoardNames(
       batches.flatMap((batch) => pinterestConfigsOf(batch.request)),
       quiet,
@@ -1766,7 +1881,21 @@ async function runBulk(options: BulkOptions): Promise<void> {
     }
     print(JSON.stringify(batches.map((batch) => batch.request), null, 2));
     printPinterestBoardChoices(boards);
-    hint(`dry run: ${batches.length} request(s), ${rows.length} posts, nothing was sent`);
+    hint(`${batches.length} request(s), ${rows.length} posts, nothing was sent`);
+    return;
+  }
+
+  if (options.dryRun) {
+    const checked: BulkRowValidation[] = [];
+    for (const batch of batches) {
+      const response = await withProgress(`Checking ${batch.request.posts.length} posts…`, quiet, () =>
+        validateBulkPosts(batch.request),
+      );
+      for (const { index, report } of response.results) {
+        checked.push({ line: batch.rows[index]?.line ?? index + 1, report });
+      }
+    }
+    reportBulkValidation(checked);
     return;
   }
 
@@ -1869,7 +1998,7 @@ async function runBulkFromJson(path: string, options: BulkOptions): Promise<void
     chunks.push({ ...request, posts: request.posts.slice(start, start + BULK_CHUNK) });
   }
 
-  if (options.dryRun) {
+  if (options.printBody) {
     const boards = await resolvePinterestBoardNames(
       [...pinterestConfigsOf(request), ...request.posts.flatMap(pinterestConfigsOf)],
       Boolean(options.quiet) || isQuiet(),
@@ -1880,7 +2009,22 @@ async function runBulkFromJson(path: string, options: BulkOptions): Promise<void
     }
     print(JSON.stringify(chunks, null, 2));
     printPinterestBoardChoices(boards);
-    hint(`dry run: ${chunks.length} request(s), nothing was sent`);
+    hint(`${chunks.length} request(s), nothing was sent`);
+    return;
+  }
+
+  if (options.dryRun) {
+    const quiet = Boolean(options.quiet) || isQuiet();
+    const checked: BulkRowValidation[] = [];
+    for (const [chunkIndex, chunk] of chunks.entries()) {
+      const response = await withProgress(`Checking ${chunk.posts.length} posts…`, quiet, () =>
+        validateBulkPosts(chunk),
+      );
+      for (const { index, report } of response.results) {
+        checked.push({ line: chunkIndex * BULK_CHUNK + index + 1, report });
+      }
+    }
+    reportBulkValidation(checked);
     return;
   }
 
@@ -2070,7 +2214,11 @@ export function registerPostCommands(program: Command): void {
     .option("--count <n>", `Total posts in the series, ${RECURRENCE_MIN_OCCURRENCES} to ${RECURRENCE_MAX_OCCURRENCES}. Cannot be combined with --until`)
     .option("--watch", "Follow the post until every platform is done")
     .option("--timeout <duration>", "How long --watch waits", "30m")
-    .option("--dry-run", "Print the request body and exit")
+    .option(
+      "--dry-run",
+      "Check the post with the server without creating it. Exits 5 when it would be refused. Local media is uploaded so it can be checked",
+    )
+    .option("--print-body", "Print the request body and exit without contacting the server")
     .action(async (_options: CreateOptions, command: Command) => {
       await runCreate(command.optsWithGlobals() as CreateOptions);
     });
@@ -2078,6 +2226,7 @@ export function registerPostCommands(program: Command): void {
   withContentOptions(post.command("update <id>"))
     .description("Update a draft or scheduled post. A scheduled post cannot move into the past")
     .option("--dry-run", "Print the request body and exit")
+    .option("--print-body", "Print the request body and exit")
     .action(async (id: string, _options: UpdateOptions, command: Command) => {
       await runUpdate(id, command.optsWithGlobals() as UpdateOptions);
     });
@@ -2132,7 +2281,11 @@ export function registerPostCommands(program: Command): void {
     .option("-P, --platform <platform>", "Batch platform, repeatable", collectPlatform, [])
     .option("-a, --account <id>", "Batch account id, repeatable", collect, [])
     .option("--timezone <tz>", "IANA timezone stored with every post")
-    .option("--dry-run", "Print the request bodies and exit")
+    .option(
+      "--dry-run",
+      "Check every post with the server without scheduling any. Exits 5 when one would be refused. Local media is uploaded so it can be checked",
+    )
+    .option("--print-body", "Print the request bodies and exit without contacting the server")
     .action(async (_options: BulkOptions, command: Command) => {
       await runBulk(command.optsWithGlobals() as BulkOptions);
     });

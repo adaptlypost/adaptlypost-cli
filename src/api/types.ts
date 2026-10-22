@@ -717,6 +717,50 @@ export interface CreatePostResponse {
   recurringPostId?: string;
 }
 
+export type PostIssueSeverity = 'ERROR' | 'WARNING';
+
+export interface PostIssue {
+  code: string;
+  severity: PostIssueSeverity;
+  message: string;
+  platform?: PlatformType;
+  connectionId?: string;
+}
+
+export type PostAccountStatus = 'READY' | 'WARNING' | 'BLOCKED';
+
+export interface PostAccountCheck {
+  platform: PlatformType;
+  connectionId: string;
+  accountName?: string;
+  status: PostAccountStatus;
+  issues: PostIssue[];
+}
+
+export interface PostCheckGapNote {
+  code: string;
+  message: string;
+}
+
+export type PostValidationOutcome = 'DRAFT' | 'SCHEDULED' | 'PUBLISH_NOW';
+
+export interface PostValidationReport {
+  valid: boolean;
+  outcome: PostValidationOutcome;
+  scheduledAt?: string;
+  requiredPermissions: string[];
+  issues: PostIssue[];
+  accounts: PostAccountCheck[];
+  notChecked: PostCheckGapNote[];
+}
+
+export interface BulkPostValidationReport {
+  valid: boolean;
+  totalValid: number;
+  totalInvalid: number;
+  results: { index: number; report: PostValidationReport }[];
+}
+
 export interface PublishResponse {
   postId: string;
   queuedPlatforms: PlatformType[];

@@ -9,6 +9,7 @@ import type {
   AnalyticsTimeseriesQuery,
   AnalyticsTimeseriesResponse,
   AnalyticsTopPostsQuery,
+  BulkPostValidationReport,
   BulkSchedulePostsRequest,
   BulkSchedulePostsResponse,
   CaptionResponse,
@@ -35,6 +36,7 @@ import type {
   PinterestBoardsResponse,
   PlatformBreakdownResponse,
   PostResultsResponse,
+  PostValidationReport,
   PublishDraftRequest,
   PublishResponse,
   RecurringPost,
@@ -131,6 +133,15 @@ export const createPost = (
     body: createPostRequest,
   });
 
+export const validatePost = (
+  createPostRequest: CreatePostRequest,
+): Promise<PostValidationReport> =>
+  request<PostValidationReport>({
+    method: 'POST',
+    path: '/social-posts/validate',
+    body: createPostRequest,
+  });
+
 export const updatePost = (
   postId: string,
   updatePostRequest: UpdatePostRequest,
@@ -185,6 +196,15 @@ export const bulkSchedulePosts = (
   request<BulkSchedulePostsResponse>({
     method: 'POST',
     path: '/social-posts/bulk',
+    body: bulkSchedulePostsRequest,
+  });
+
+export const validateBulkPosts = (
+  bulkSchedulePostsRequest: BulkSchedulePostsRequest,
+): Promise<BulkPostValidationReport> =>
+  request<BulkPostValidationReport>({
+    method: 'POST',
+    path: '/social-posts/bulk/validate',
     body: bulkSchedulePostsRequest,
   });
 

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { SocialAccount } from "../../src/api/types.js";
+import type { PostValidationReport, SocialAccount } from "../../src/api/types.js";
 
 vi.mock("../../src/api/client.js", () => ({
   listPosts: vi.fn(),
@@ -21,11 +21,13 @@ vi.mock("../../src/api/client.js", () => ({
   listSocialAccounts: vi.fn(),
   listPinterestBoards: vi.fn(),
   createUploadUrls: vi.fn(),
+  validatePost: vi.fn(),
+  validateBulkPosts: vi.fn(),
 }));
 
 const client = await import("../../src/api/client.js");
 const { registerPostCommands } = await import("../../src/commands/post.js");
-const { initOutput } = await import("../../src/core/output.js");
+const { initOutput, setOutputMode } = await import("../../src/core/output.js");
 
 const workspace = mkdtempSync(join(tmpdir(), "adaptlypost-cli-post-"));
 
@@ -214,7 +216,7 @@ describe("post create", () => {
       ].join("\n"),
     );
 
-    await run(["post", "create", "--file", file, "--timezone", "UTC", "--dry-run"]);
+    await run(["post", "create", "--file", file, "--timezone", "UTC", "--print-body"]);
 
     const body = stdoutJson().data as Record<string, unknown>;
     expect(body).toMatchObject({
@@ -241,7 +243,7 @@ describe("post create", () => {
       "https://cdn.example.com/q3.pdf",
       "--document-title",
       "Q3 report",
-      "--dry-run",
+      "--print-body",
     ]);
 
     const body = stdoutJson().data as Record<string, unknown>;
@@ -269,7 +271,7 @@ describe("post create", () => {
       "reel",
       "--ig-trial",
       "ss_performance",
-      "--dry-run",
+      "--print-body",
     ]);
 
     expect(stdoutJson().data).toMatchObject({
@@ -287,7 +289,7 @@ describe("post create", () => {
   });
 
   it("infers DOCUMENT from a single document file", async () => {
-    await run(["post", "create", "-t", "Deck", "-a", "li_22aa", "-m", "https://cdn/deck.pptx", "--dry-run"]);
+    await run(["post", "create", "-t", "Deck", "-a", "li_22aa", "-m", "https://cdn/deck.pptx", "--print-body"]);
 
     expect((stdoutJson().data as Record<string, unknown>).contentType).toBe("DOCUMENT");
   });
@@ -319,7 +321,7 @@ describe("post create", () => {
       "THURSDAY",
       "--until",
       "2027-06-30",
-      "--dry-run",
+      "--print-body",
     ]);
 
     expect((stdoutJson().data as Record<string, unknown>).recurrence).toEqual({
@@ -331,7 +333,7 @@ describe("post create", () => {
   });
 
   it("sends a yearly recurrence", async () => {
-    await run(["post", "create", "-t", "Happy birthday, Acme", "-a", "tw_4d1b", "--at", "2027-03-01T09:00:00Z", "--repeat", "yearly", "--count", "5", "--dry-run"]);
+    await run(["post", "create", "-t", "Happy birthday, Acme", "-a", "tw_4d1b", "--at", "2027-03-01T09:00:00Z", "--repeat", "yearly", "--count", "5", "--print-body"]);
 
     expect((stdoutJson().data as Record<string, unknown>).recurrence).toEqual({ frequency: "YEARLY", maxOccurrences: 5 });
   });
@@ -361,7 +363,7 @@ describe("post create", () => {
       ["---", "accounts: [tw_4d1b]", "at: 2027-01-04T09:00:00Z", "repeat: WEEKLY", "until: 2027-06-30", "---", "Tip", ""].join("\n"),
     );
 
-    await run(["post", "create", "--file", file, "--count", "5", "--dry-run"]);
+    await run(["post", "create", "--file", file, "--count", "5", "--print-body"]);
 
     expect((stdoutJson().data as Record<string, unknown>).recurrence).toEqual({
       frequency: "WEEKLY",
@@ -403,7 +405,7 @@ describe("post create", () => {
 
   it("refuses a misnamed --config key instead of letting the API drop it", async () => {
     await expect(
-      run(["post", "create", "-t", "hi", "-a", "ig_7c3e", "--config", 'INSTAGRAM={"post_type":"REEL"}', "--dry-run"]),
+      run(["post", "create", "-t", "hi", "-a", "ig_7c3e", "--config", 'INSTAGRAM={"post_type":"REEL"}', "--print-body"]),
     ).rejects.toMatchObject({ exitCode: 5, message: expect.stringContaining('Did you mean "postType"') });
     expect(client.listSocialAccounts).not.toHaveBeenCalled();
   });
@@ -412,13 +414,13 @@ describe("post create", () => {
     const file = join(workspace, "bad-config.md");
     writeFileSync(file, ["---", "accounts: [ig_7c3e]", "instagram:", "  trial: MANUAL", "---", "Reel", ""].join("\n"));
 
-    await expect(run(["post", "create", "--file", file, "--dry-run"])).rejects.toMatchObject({ exitCode: 5 });
+    await expect(run(["post", "create", "--file", file, "--print-body"])).rejects.toMatchObject({ exitCode: 5 });
     expect(client.createPost).not.toHaveBeenCalled();
   });
 
   it("refuses a connection id inside a platform config", async () => {
     await expect(
-      run(["post", "create", "-t", "hi", "--config", 'YOUTUBE={"connectionId":"yt_1"}', "--dry-run"]),
+      run(["post", "create", "-t", "hi", "--config", 'YOUTUBE={"connectionId":"yt_1"}', "--print-body"]),
     ).rejects.toMatchObject({ exitCode: 5 });
   });
 
@@ -459,7 +461,7 @@ describe("post update", () => {
   it("carries --document-title into linkedinConfigs with the LinkedIn account", async () => {
     vi.mocked(client.listSocialAccounts).mockResolvedValue({ accounts });
 
-    await run(["post", "update", "post_1", "-a", "li_22aa", "--document-title", "Renamed deck", "--dry-run"]);
+    await run(["post", "update", "post_1", "-a", "li_22aa", "--document-title", "Renamed deck", "--print-body"]);
 
     expect(stdoutJson().data).toEqual({
       linkedinConnectionIds: ["li_22aa"],
@@ -486,7 +488,7 @@ describe("post update", () => {
       userId: "u",
     });
 
-    await run(["post", "update", "post_1", "--alt", "The CLI in a dark terminal", "--dry-run"]);
+    await run(["post", "update", "post_1", "--alt", "The CLI in a dark terminal", "--print-body"]);
 
     expect(client.getPost).toHaveBeenCalledWith("post_1");
     expect(stdoutJson().data).toEqual({
@@ -519,7 +521,7 @@ describe("post update", () => {
     const file = join(workspace, "update-alt.md");
     writeFileSync(file, ["---", 'alt: ["A chart going up"]', "---", ""].join("\n"));
 
-    await run(["post", "update", "post_1", "--file", file, "--dry-run"]);
+    await run(["post", "update", "post_1", "--file", file, "--print-body"]);
 
     expect(stdoutJson().data).toMatchObject({
       mediaAltTexts: ["A chart going up"],
@@ -531,7 +533,7 @@ describe("post update", () => {
   it("keeps --alt with a new target set instead of fetching the post", async () => {
     vi.mocked(client.listSocialAccounts).mockResolvedValue({ accounts });
 
-    await run(["post", "update", "post_1", "-P", "TWITTER", "-a", "tw_4d1b", "--alt", "Hero", "--yes", "--dry-run"]);
+    await run(["post", "update", "post_1", "-P", "TWITTER", "-a", "tw_4d1b", "--alt", "Hero", "--yes", "--print-body"]);
 
     expect(client.getPost).not.toHaveBeenCalled();
     expect(stdoutJson().data).toMatchObject({
@@ -545,7 +547,7 @@ describe("post update", () => {
     vi.mocked(client.listSocialAccounts).mockResolvedValue({ accounts });
 
     await expect(
-      run(["post", "update", "post_1", "-a", "tw_4d1b", "--alt", "Hero", "--dry-run"]),
+      run(["post", "update", "post_1", "-a", "tw_4d1b", "--alt", "Hero", "--print-body"]),
     ).rejects.toMatchObject({ exitCode: 2 });
     expect(client.updatePost).not.toHaveBeenCalled();
   });
@@ -682,7 +684,7 @@ describe("post bulk", () => {
       ].join("\n"),
     );
 
-    await run(["post", "bulk", "--csv", path, "-P", "TWITTER", "--dry-run"]);
+    await run(["post", "bulk", "--csv", path, "-P", "TWITTER", "--print-body"]);
 
     const batches = stdoutJson().data as Record<string, unknown>[];
     expect(batches).toHaveLength(1);
@@ -728,7 +730,7 @@ describe("post bulk", () => {
     );
     writeFileSync(join(dir, "03.md"), ["---", "at: 2026-09-21T09:00:00Z", "---", "Words", ""].join("\n"));
 
-    await run(["post", "bulk", "--dir", dir, "-P", "TWITTER", "--dry-run"]);
+    await run(["post", "bulk", "--dir", dir, "-P", "TWITTER", "--print-body"]);
 
     const [batch] = stdoutJson().data as { posts: { contentType: string }[] }[];
     expect(batch?.posts.map((item) => item.contentType)).toEqual(["VIDEO", "CAROUSEL", "TEXT"]);
@@ -752,7 +754,7 @@ describe("post bulk", () => {
       ["text,scheduledAt,media,alt", "Pair,2026-09-19T09:00:00Z,https://cdn/a.png;https://cdn/b.png,First;Second", ""].join("\n"),
     );
 
-    await run(["post", "bulk", "--csv", path, "-P", "TWITTER", "--dry-run"]);
+    await run(["post", "bulk", "--csv", path, "-P", "TWITTER", "--print-body"]);
 
     const [batch] = stdoutJson().data as { posts: Record<string, unknown>[] }[];
     expect(batch?.posts[0]).toMatchObject({
@@ -961,7 +963,7 @@ describe("per-platform options on create, update and bulk", () => {
       "2026-10-27",
       "--gbp-coupon",
       "AUTUMN20",
-      "--dry-run",
+      "--print-body",
     ]);
 
     expect(stdoutJson().data).toMatchObject({
@@ -1007,7 +1009,7 @@ describe("per-platform options on create, update and bulk", () => {
       "--ig-audio-volume",
       "40",
       "--fb-share-to-story",
-      "--dry-run",
+      "--print-body",
     ]);
 
     expect(stdoutJson().data).toMatchObject({
@@ -1038,7 +1040,7 @@ describe("per-platform options on create, update and bulk", () => {
       "--yt-title",
       "Launch",
       "--yt-ai-generated",
-      "--dry-run",
+      "--print-body",
     ]);
 
     expect(stdoutJson().data).toMatchObject({
@@ -1062,7 +1064,7 @@ describe("per-platform options on create, update and bulk", () => {
       "https://acme.test/shoes|Shoes|Spring range, 20% off",
       "--fb-card",
       "https://acme.test/bags||Leather | canvas",
-      "--dry-run",
+      "--print-body",
     ]);
 
     expect(stdoutJson().data).toMatchObject({
@@ -1080,10 +1082,10 @@ describe("per-platform options on create, update and bulk", () => {
   });
 
   it("sends --fb-layout grid and refuses it next to --fb-card, an unknown layout, or a card with no link", async () => {
-    await run(["post", "create", "-t", "Hi", "-a", "fb_1", "-m", "https://cdn/a.png", "--fb-layout", "grid", "--dry-run"]);
+    await run(["post", "create", "-t", "Hi", "-a", "fb_1", "-m", "https://cdn/a.png", "--fb-layout", "grid", "--print-body"]);
     expect(stdoutJson().data).toMatchObject({ facebookConfigs: [{ pageId: "fb_1", imageLayout: "GRID" }] });
 
-    const base = ["post", "create", "-t", "Hi", "-a", "fb_1", "--dry-run"];
+    const base = ["post", "create", "-t", "Hi", "-a", "fb_1", "--print-body"];
     await expect(run([...base, "--fb-layout", "grid", "--fb-card", "https://acme.test"])).rejects.toMatchObject({
       exitCode: 2,
     });
@@ -1093,14 +1095,14 @@ describe("per-platform options on create, update and bulk", () => {
 
   it("refuses more than 5 Facebook carousel cards", async () => {
     const cards = Array.from({ length: 6 }, (_, index) => ["--fb-card", `https://acme.test/${index}`]).flat();
-    await expect(run(["post", "create", "-t", "Hi", "-a", "fb_1", ...cards, "--dry-run"])).rejects.toMatchObject({
+    await expect(run(["post", "create", "-t", "Hi", "-a", "fb_1", ...cards, "--print-body"])).rejects.toMatchObject({
       exitCode: 5,
     });
   });
 
   it("refuses audio details without --ig-audio", async () => {
     await expect(
-      run(["post", "create", "-t", "Hi", "-a", "ig_7c3e", "--ig-audio-title", "Sunrise", "--dry-run"]),
+      run(["post", "create", "-t", "Hi", "-a", "ig_7c3e", "--ig-audio-title", "Sunrise", "--print-body"]),
     ).rejects.toMatchObject({ exitCode: 2 });
   });
 
@@ -1119,7 +1121,7 @@ describe("per-platform options on create, update and bulk", () => {
       "--first-comment",
       "li=Questions welcome",
       "--x-keep-links",
-      "--dry-run",
+      "--print-body",
     ]);
 
     expect(stdoutJson().data).toMatchObject({
@@ -1146,7 +1148,7 @@ describe("per-platform options on create, update and bulk", () => {
       "LINKEDIN=https://cdn/li.png",
       "--thumbnail-ms-for",
       "INSTAGRAM=2500",
-      "--dry-run",
+      "--print-body",
     ]);
 
     expect(stdoutJson().data).toMatchObject({
@@ -1170,7 +1172,7 @@ describe("per-platform options on create, update and bulk", () => {
       "INSTAGRAM=portrait",
       "--fit",
       "INSTAGRAM=pad",
-      "--dry-run",
+      "--print-body",
     ]);
 
     expect(stdoutJson().data).toMatchObject({
@@ -1180,9 +1182,9 @@ describe("per-platform options on create, update and bulk", () => {
 
   it("refuses a first comment on a platform without one, and a TELEGRAM target", async () => {
     await expect(
-      run(["post", "create", "-t", "Hi", "-a", "ig_7c3e", "--first-comment", "INSTAGRAM=hi", "--dry-run"]),
+      run(["post", "create", "-t", "Hi", "-a", "ig_7c3e", "--first-comment", "INSTAGRAM=hi", "--print-body"]),
     ).rejects.toMatchObject({ exitCode: 5 });
-    await expect(run(["post", "create", "-t", "Hi", "-P", "TELEGRAM", "--dry-run"])).rejects.toMatchObject({
+    await expect(run(["post", "create", "-t", "Hi", "-P", "TELEGRAM", "--print-body"])).rejects.toMatchObject({
       exitCode: 5,
     });
   });
@@ -1195,7 +1197,7 @@ describe("per-platform options on create, update and bulk", () => {
       "--first-comment",
       "TWITTER=Updated reply",
       "--no-x-keep-links",
-      "--dry-run",
+      "--print-body",
     ]);
 
     expect(stdoutJson().data).toEqual({
@@ -1260,7 +1262,7 @@ describe("per-platform options on create, update and bulk", () => {
       userId: "u",
     });
 
-    await run(["post", "update", "post_1", "--alt", "A reel", "--dry-run"]);
+    await run(["post", "update", "post_1", "--alt", "A reel", "--print-body"]);
 
     expect(stdoutJson().data).toEqual({
       mediaAltTexts: ["A reel"],
@@ -1310,7 +1312,7 @@ describe("per-platform options on create, update and bulk", () => {
       userId: "u",
     });
 
-    await run(["post", "update", "post_1", "--alt", "Launch", "--dry-run"]);
+    await run(["post", "update", "post_1", "--alt", "Launch", "--print-body"]);
 
     expect(stdoutJson().data).toMatchObject({
       platforms: ["YOUTUBE"],
@@ -1348,7 +1350,7 @@ describe("per-platform options on create, update and bulk", () => {
       userId: "u",
     });
 
-    await run(["post", "update", "post_1", "--alt", "Shoes", "--dry-run"]);
+    await run(["post", "update", "post_1", "--alt", "Shoes", "--print-body"]);
 
     expect(stdoutJson().data).toMatchObject({
       platforms: ["FACEBOOK"],
@@ -1370,7 +1372,7 @@ describe("per-platform options on create, update and bulk", () => {
         { id: "pin_3c1d", platform: "PINTEREST", displayName: "Acme", username: "acme", avatarUrl: "", status: "active" },
       ],
     });
-    const create = ["post", "create", "-t", "Pin", "-a", "pin_3c1d", "-m", "https://cdn/a.png", "--dry-run"];
+    const create = ["post", "create", "-t", "Pin", "-a", "pin_3c1d", "-m", "https://cdn/a.png", "--print-body"];
 
     await run(create);
 
@@ -1413,7 +1415,7 @@ describe("per-platform options on create, update and bulk", () => {
       userId: "u",
     });
 
-    await run(["post", "update", "post_1", "--alt", "A photo", "--dry-run"]);
+    await run(["post", "update", "post_1", "--alt", "A photo", "--print-body"]);
 
     expect(stdoutJson().data).toEqual({
       mediaAltTexts: ["A photo"],
@@ -1439,7 +1441,7 @@ describe("per-platform options on create, update and bulk", () => {
       userId: "u",
     });
 
-    await expect(run(["post", "update", "post_1", "--alt", "A photo", "--dry-run"])).rejects.toMatchObject({
+    await expect(run(["post", "update", "post_1", "--alt", "A photo", "--print-body"])).rejects.toMatchObject({
       exitCode: 5,
       message: expect.stringContaining("TELEGRAM"),
     });
@@ -1454,7 +1456,7 @@ describe("per-platform options on create, update and bulk", () => {
       ].join("\n"),
     );
 
-    await run(["post", "bulk", "--csv", path, "-a", "tw_4d1b", "-a", "ig_7c3e", "-a", "gbp_1", "--dry-run"]);
+    await run(["post", "bulk", "--csv", path, "-a", "tw_4d1b", "-a", "ig_7c3e", "-a", "gbp_1", "--print-body"]);
 
     const [batch] = stdoutJson().data as Record<string, unknown>[];
     expect(batch).toMatchObject({
@@ -1478,7 +1480,7 @@ describe("per-platform options on create, update and bulk", () => {
       ].join("\n"),
     );
 
-    await run(["post", "bulk", "--csv", path, "-a", "fb_1", "--dry-run"]);
+    await run(["post", "bulk", "--csv", path, "-a", "fb_1", "--print-body"]);
 
     const [batch] = stdoutJson().data as Record<string, unknown>[];
     expect(batch).toMatchObject({
@@ -1497,7 +1499,7 @@ describe("per-platform options on create, update and bulk", () => {
       ["text,scheduledAt,thumbnail_TIKTOK", "Clip,2026-10-19T09:00:00Z,https://cdn/t.png", ""].join("\n"),
     );
 
-    await expect(run(["post", "bulk", "--csv", path, "-P", "TIKTOK", "--dry-run"])).rejects.toMatchObject({
+    await expect(run(["post", "bulk", "--csv", path, "-P", "TIKTOK", "--print-body"])).rejects.toMatchObject({
       exitCode: 5,
       message: expect.stringContaining("Row 2"),
     });
@@ -1510,7 +1512,7 @@ describe("per-platform options on create, update and bulk", () => {
       ["---", "at: 2026-10-19T09:00:00Z", "linkedin:", "  firstComment: Slides in the comments", "---", "Talk", ""].join("\n"),
     );
 
-    await run(["post", "bulk", "--dir", dir, "-P", "LINKEDIN", "--dry-run"]);
+    await run(["post", "bulk", "--dir", dir, "-P", "LINKEDIN", "--print-body"]);
 
     const [batch] = stdoutJson().data as { posts: Record<string, unknown>[] }[];
     expect(batch?.posts[0]).toMatchObject({
@@ -1521,7 +1523,7 @@ describe("per-platform options on create, update and bulk", () => {
       join(dir, "02.md"),
       ["---", "at: 2026-10-20T09:00:00Z", "twitter:", "  keepLinks: true", "---", "example.com", ""].join("\n"),
     );
-    await expect(run(["post", "bulk", "--dir", dir, "-P", "TWITTER", "--dry-run"])).rejects.toMatchObject({
+    await expect(run(["post", "bulk", "--dir", dir, "-P", "TWITTER", "--print-body"])).rejects.toMatchObject({
       exitCode: 5,
       message: expect.stringContaining("02.md"),
     });
@@ -1552,8 +1554,8 @@ describe("Pinterest boards by name", () => {
     });
   });
 
-  it("sends the name and shows the board it resolves to on a dry run", async () => {
-    await run([...create, "--pinterest-board-name", "small living room ideas", "--dry-run"]);
+  it("sends the name and shows the board it resolves to with --print-body", async () => {
+    await run([...create, "--pinterest-board-name", "small living room ideas", "--print-body"]);
 
     expect(client.listPinterestBoards).toHaveBeenCalledWith("pin_3c1d");
     expect(stdoutJson()).toMatchObject({
@@ -1586,26 +1588,26 @@ describe("Pinterest boards by name", () => {
     );
   });
 
-  it("refuses a missing or shared name on a dry run without falling back to another board", async () => {
-    await expect(run([...create, "--pinterest-board-name", "Bathroom", "--dry-run"])).rejects.toMatchObject({
+  it("refuses a missing or shared name with --print-body without falling back to another board", async () => {
+    await expect(run([...create, "--pinterest-board-name", "Bathroom", "--print-body"])).rejects.toMatchObject({
       exitCode: 5,
       message: 'No board named "Bathroom" on this Pinterest account.',
     });
-    await expect(run([...create, "--pinterest-board-name", " kitchen ", "--dry-run"])).rejects.toMatchObject({
+    await expect(run([...create, "--pinterest-board-name", " kitchen ", "--print-body"])).rejects.toMatchObject({
       exitCode: 5,
       message: expect.stringContaining("549755885178, 549755885179"),
     });
-    await run([...create, "--pinterest-board-name", "Patio", "--dry-run"]);
+    await run([...create, "--pinterest-board-name", "Patio", "--print-body"]);
     expect(stdoutJson()).toMatchObject({ meta: { pinterestBoards: [{ boardId: "549755885176" }] } });
   });
 
   it("refuses a board id and a board name together, from flags or from a config", async () => {
     await expect(
-      run([...create, "--pinterest-board", "549755885175", "--pinterest-board-name", "Patio", "--dry-run"]),
+      run([...create, "--pinterest-board", "549755885175", "--pinterest-board-name", "Patio", "--print-body"]),
     ).rejects.toMatchObject({ exitCode: 5, message: "Pass --pinterest-board or --pinterest-board-name, not both." });
 
     await expect(
-      run([...create, "--config", 'PINTEREST={"boardId":"549755885175","boardName":"Patio"}', "--dry-run"]),
+      run([...create, "--config", 'PINTEREST={"boardId":"549755885175","boardName":"Patio"}', "--print-body"]),
     ).rejects.toMatchObject({ exitCode: 5, message: "Pass boardId or boardName for a Pinterest account, not both." });
     expect(client.listPinterestBoards).not.toHaveBeenCalled();
   });
@@ -1619,7 +1621,7 @@ describe("Pinterest boards by name", () => {
       ),
     );
 
-    await run(["post", "create", "--file", file, "--pinterest-board-name", "Small Living Room Ideas", "--dry-run"]);
+    await run(["post", "create", "--file", file, "--pinterest-board-name", "Small Living Room Ideas", "--print-body"]);
 
     expect(stdoutJson()).toMatchObject({
       data: { pinterestConfigs: [{ connectionId: "pin_3c1d", boardName: "Small Living Room Ideas" }] },
@@ -1628,7 +1630,7 @@ describe("Pinterest boards by name", () => {
   });
 
   it("resolves the name on post update with the account", async () => {
-    await run(["post", "update", "post_1", "-a", "pin_3c1d", "--pinterest-board-name", "Patio", "--dry-run"]);
+    await run(["post", "update", "post_1", "-a", "pin_3c1d", "--pinterest-board-name", "Patio", "--print-body"]);
 
     expect(stdoutJson()).toMatchObject({
       data: { pinterestConfigs: [{ connectionId: "pin_3c1d", boardName: "Patio" }] },
@@ -1649,7 +1651,7 @@ describe("Pinterest boards by name", () => {
       ].join("\n"),
     );
 
-    await run(["post", "bulk", "--csv", path, "-a", "pin_3c1d", "--dry-run"]);
+    await run(["post", "bulk", "--csv", path, "-a", "pin_3c1d", "--print-body"]);
 
     expect(client.listPinterestBoards).toHaveBeenCalledTimes(1);
     expect(stdoutJson()).toMatchObject({
@@ -1658,7 +1660,7 @@ describe("Pinterest boards by name", () => {
     });
   });
 
-  it("checks the names in a bulk JSON file on a dry run", async () => {
+  it("checks the names in a bulk JSON file with --print-body", async () => {
     const path = join(workspace, "pins.json");
     writeFileSync(
       path,
@@ -1676,9 +1678,160 @@ describe("Pinterest boards by name", () => {
       }),
     );
 
-    await expect(run(["post", "bulk", "--json-file", path, "--dry-run"])).rejects.toMatchObject({
+    await expect(run(["post", "bulk", "--json-file", path, "--print-body"])).rejects.toMatchObject({
       exitCode: 5,
       message: 'No board named "Bathroom" on this Pinterest account.',
     });
+  });
+});
+
+describe("post create --dry-run", () => {
+  const report = (overrides: Partial<PostValidationReport> = {}): PostValidationReport => ({
+    valid: true,
+    outcome: "PUBLISH_NOW",
+    requiredPermissions: ["posts.publish"],
+    issues: [],
+    accounts: [{ platform: "TWITTER", connectionId: "tw_4d1b", accountName: "@acme", status: "READY", issues: [] }],
+    notChecked: [{ code: "DUPLICATE_CONTENT", message: "Duplicates are only checked at publish time" }],
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    vi.mocked(client.validatePost).mockReset();
+    vi.mocked(client.createPost).mockReset();
+    vi.mocked(client.listSocialAccounts).mockResolvedValue({ accounts } as never);
+    process.exitCode = undefined;
+  });
+
+  afterEach(() => {
+    process.exitCode = undefined;
+  });
+
+  it("asks the server to check the post and never creates it", async () => {
+    vi.mocked(client.validatePost).mockResolvedValue(report());
+
+    await run(["post", "create", "-t", "Hello", "-a", "tw_4d1b", "--dry-run"]);
+
+    expect(client.validatePost).toHaveBeenCalledWith(
+      expect.objectContaining({ text: "Hello", platforms: ["TWITTER"], twitterConnectionIds: ["tw_4d1b"] }),
+    );
+    expect(client.createPost).not.toHaveBeenCalled();
+    expect(stdoutJson()).toMatchObject({ ok: true, command: "post.create", data: report(), meta: { dryRun: true } });
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it("exits 5 with the report when the post would be refused", async () => {
+    vi.mocked(client.validatePost).mockResolvedValue(
+      report({
+        valid: false,
+        accounts: [
+          {
+            platform: "TWITTER",
+            connectionId: "tw_4d1b",
+            status: "BLOCKED",
+            issues: [{ code: "TEXT_TOO_LONG", severity: "ERROR", message: "Too long for X", platform: "TWITTER" }],
+          },
+        ],
+      }),
+    );
+
+    await run(["post", "create", "-t", "x".repeat(400), "-a", "tw_4d1b", "--dry-run"]);
+
+    expect((stdoutJson().data as PostValidationReport).accounts[0].issues[0].code).toBe("TEXT_TOO_LONG");
+    expect(process.exitCode).toBe(5);
+  });
+
+  it("prints each account with its problems in a terminal", async () => {
+    setOutputMode("human");
+    vi.mocked(client.validatePost).mockResolvedValue(
+      report({
+        valid: false,
+        issues: [{ code: "MEDIA_NOT_UPLOADED", severity: "ERROR", message: "Media was never uploaded" }],
+        accounts: [
+          {
+            platform: "TWITTER",
+            connectionId: "tw_4d1b",
+            accountName: "@acme",
+            status: "WARNING",
+            issues: [{ code: "X_CREDITS_INSUFFICIENT", severity: "WARNING", message: "Credits are low" }],
+          },
+        ],
+      }),
+    );
+
+    await run(["post", "create", "-t", "Hello", "-a", "tw_4d1b", "--dry-run"]);
+
+    const out = written.join("");
+    expect(out).toContain("Would be refused: 1 problem");
+    expect(out).toContain("TWITTER  @acme");
+    expect(out).toContain("Credits are low");
+    expect(out).toContain("[MEDIA_NOT_UPLOADED]");
+    expect(process.exitCode).toBe(5);
+  });
+
+  it("still prints the body offline with --print-body", async () => {
+    await run(["post", "create", "-t", "Hello", "-a", "tw_4d1b", "--print-body"]);
+
+    expect(client.validatePost).not.toHaveBeenCalled();
+    expect(stdoutJson().data).toMatchObject({ text: "Hello" });
+  });
+});
+
+describe("post bulk --dry-run", () => {
+  beforeEach(() => {
+    vi.mocked(client.validateBulkPosts).mockReset();
+    vi.mocked(client.bulkSchedulePosts).mockReset();
+    process.exitCode = undefined;
+  });
+
+  afterEach(() => {
+    process.exitCode = undefined;
+  });
+
+  it("checks every row with the server, names the refused ones by line and exits 5", async () => {
+    const file = join(workspace, "bulk-dry-run.json");
+    writeFileSync(
+      file,
+      JSON.stringify({
+        platforms: ["TWITTER"],
+        twitterConnectionIds: ["tw_4d1b"],
+        posts: [
+          { contentType: "TEXT", text: "one", scheduledAt: "2030-01-01T09:00:00Z" },
+          { contentType: "TEXT", text: "", scheduledAt: "2030-01-02T09:00:00Z" },
+        ],
+      }),
+    );
+    const valid = {
+      valid: true,
+      outcome: "SCHEDULED",
+      requiredPermissions: [],
+      issues: [],
+      accounts: [],
+      notChecked: [],
+    } as PostValidationReport;
+    vi.mocked(client.validateBulkPosts).mockResolvedValue({
+      valid: false,
+      totalValid: 1,
+      totalInvalid: 1,
+      results: [
+        { index: 0, report: valid },
+        {
+          index: 1,
+          report: {
+            ...valid,
+            valid: false,
+            issues: [{ code: "TEXT_REQUIRED", severity: "ERROR", message: "Text is required" }],
+          },
+        },
+      ],
+    });
+
+    await run(["post", "bulk", "--json-file", file, "--timezone", "UTC", "--dry-run"]);
+
+    expect(client.bulkSchedulePosts).not.toHaveBeenCalled();
+    const result = stdoutJson();
+    expect(result.meta).toMatchObject({ dryRun: true, total: 2, valid: 1, invalid: 1 });
+    expect((result.data as { line: number }[]).map((row) => row.line)).toEqual([1, 2]);
+    expect(process.exitCode).toBe(5);
   });
 });
