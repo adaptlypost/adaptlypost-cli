@@ -14,6 +14,7 @@ import {
   INSTAGRAM_AUDIO_VOLUME_MAX,
   INSTAGRAM_AUDIO_VOLUME_MIN,
   INSTAGRAM_COLLABORATORS_MAX,
+  INSTAGRAM_USER_TAGS_MAX,
   MEDIA_ASPECT_RATIOS,
   MEDIA_ASPECT_RATIO_FITS,
   PINTEREST_BOARD_NAME_MAX_LENGTH,
@@ -144,7 +145,7 @@ export const CONFIG_FIELD: Partial<Record<PlatformType, keyof PostTargets>> = {
 
 export const CONFIG_KEYS: Partial<Record<PlatformType, readonly string[]>> = {
   FACEBOOK: ["postType", "shareToStory", "videoTitle", "textFormatPresetId", "imageLayout", "carouselCards"],
-  INSTAGRAM: ["postType", "shareToStory", "trialGraduation", "collaborators", "aiGenerated", "audio"],
+  INSTAGRAM: ["postType", "shareToStory", "trialGraduation", "collaborators", "userTags", "aiGenerated", "audio"],
   TIKTOK: [
     "privacyLevel",
     "title",
@@ -187,6 +188,7 @@ export const CONFIG_KEYS: Partial<Record<PlatformType, readonly string[]>> = {
 };
 
 const INSTAGRAM_AUDIO_KEYS = ["audioId", "title", "artist", "audioVolume", "videoVolume"] as const;
+const INSTAGRAM_USER_TAG_KEYS = ["username", "x", "y"] as const;
 const FACEBOOK_CARD_KEYS = ["link", "title", "description"] as const;
 
 const squash = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -315,7 +317,7 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2
 const NUMBER = /^-?\d+(\.\d+)?$/;
 const KEY_LINE = /^([A-Za-z0-9_.-]+)\s*:\s*(.*)$/;
 const LIST_ITEM_KEY = /^[A-Za-z0-9_.-]+\s*:(\s|$)/;
-const BLOCK_LIST_KEY = "carouselCards";
+const BLOCK_LIST_KEYS: readonly string[] = ["carouselCards", "userTags"];
 
 export function normalizePlatformName(value: string): PlatformType {
   const raw = value.trim();
@@ -614,7 +616,7 @@ function parseMap(lines: string[], start: number, baseIndent: number): { value: 
         }
         if (indentOf(item) < childIndent || !item.trim().startsWith("-")) break;
         const entry = item.trim().replace(/^-\s*/, "");
-        if (key === BLOCK_LIST_KEY && LIST_ITEM_KEY.test(entry)) {
+        if (BLOCK_LIST_KEYS.includes(key) && LIST_ITEM_KEY.test(entry)) {
           const entryIndent = indentOf(item) + item.trim().length - entry.length;
           const shifted = [...lines];
           shifted[index] = `${" ".repeat(entryIndent)}${entry}`;
@@ -1327,20 +1329,24 @@ function configBoolean(value: FrontmatterValue | undefined, label: string): bool
   return value;
 }
 
+function instagramUsername(value: FrontmatterValue | undefined, label: string): string {
+  const raw = configString(value, label)?.trim() ?? "";
+  if (!INSTAGRAM_USERNAME.test(raw)) {
+    throw configError(
+      `"${raw}" is not an Instagram username.`,
+      "Use 1 to 30 letters, digits, dots or underscores, with or without a leading @",
+    );
+  }
+  return raw.replace(/^@/, "");
+}
+
 function normalizeCollaborators(value: FrontmatterValue | undefined): string[] | undefined {
   if (value === undefined || value === null) return undefined;
   const list = Array.isArray(value) ? value : [value];
   const usernames: string[] = [];
 
   for (const entry of list) {
-    const raw = configString(entry, "INSTAGRAM collaborators")?.trim() ?? "";
-    if (!INSTAGRAM_USERNAME.test(raw)) {
-      throw configError(
-        `"${raw}" is not an Instagram username.`,
-        "Use 1 to 30 letters, digits, dots or underscores, with or without a leading @",
-      );
-    }
-    const username = raw.replace(/^@/, "");
+    const username = instagramUsername(entry, "INSTAGRAM collaborators");
     if (!usernames.some((known) => known.toLowerCase() === username.toLowerCase())) usernames.push(username);
   }
 
@@ -1348,6 +1354,57 @@ function normalizeCollaborators(value: FrontmatterValue | undefined): string[] |
     throw configError(`Instagram takes up to ${INSTAGRAM_COLLABORATORS_MAX} collaborators, got ${usernames.length}.`);
   }
   return usernames;
+}
+
+function normalizeTagPosition(value: FrontmatterValue | undefined, label: string): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  const position = typeof value === "string" && value.trim() !== "" ? Number(value) : value;
+  if (typeof position !== "number" || !Number.isFinite(position) || position < 0 || position > 1) {
+    throw configError(
+      `${label} must be a number from 0 to 1, got ${JSON.stringify(value)}.`,
+      "Measure from the top-left corner: x from left to right, y from top to bottom",
+    );
+  }
+  return position;
+}
+
+function normalizeUserTags(value: FrontmatterValue | undefined): FrontmatterMap[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  const list = Array.isArray(value) ? value : [value];
+  const tags: FrontmatterMap[] = [];
+
+  for (const [index, entry] of list.entries()) {
+    const label = `INSTAGRAM userTags tag ${index + 1}`;
+    const tag = typeof entry === "string" ? { username: entry } : entry;
+    if (tag === null || typeof tag !== "object" || Array.isArray(tag)) {
+      throw configError(`${label} must be a username or a block with username, x and y.`);
+    }
+
+    for (const key of Object.keys(tag)) {
+      if (!(INSTAGRAM_USER_TAG_KEYS as readonly string[]).includes(key)) {
+        const suggestion = closestConfigKey(key, INSTAGRAM_USER_TAG_KEYS);
+        throw configError(
+          `Unknown ${label} key "${key}".${suggestion ? ` Did you mean "${suggestion}"?` : ""}`,
+          `tag keys: ${INSTAGRAM_USER_TAG_KEYS.join(", ")}`,
+        );
+      }
+    }
+
+    const username = instagramUsername(tag.username, `${label} username`);
+    const x = normalizeTagPosition(tag.x, `${label} x`);
+    const y = normalizeTagPosition(tag.y, `${label} y`);
+    if ((x === undefined) !== (y === undefined)) {
+      throw configError(`${label} has only one of x and y.`, "Give both, or neither on a story or a video");
+    }
+    if (!tags.some((known) => String(known.username).toLowerCase() === username.toLowerCase())) {
+      tags.push(definedEntries({ username, x, y }));
+    }
+  }
+
+  if (tags.length > INSTAGRAM_USER_TAGS_MAX) {
+    throw configError(`Instagram takes up to ${INSTAGRAM_USER_TAGS_MAX} user tags, got ${tags.length}.`);
+  }
+  return tags;
 }
 
 function normalizeAudioVolume(value: FrontmatterValue | undefined, label: string): number | undefined {
@@ -1540,6 +1597,7 @@ export function normalizeConfig(platform: PlatformType, config: FrontmatterMap):
       ...config,
       shareToStory: configBoolean(config.shareToStory, "INSTAGRAM shareToStory"),
       collaborators: normalizeCollaborators(config.collaborators),
+      userTags: normalizeUserTags(config.userTags),
       aiGenerated: configBoolean(config.aiGenerated, "INSTAGRAM aiGenerated"),
       audio: normalizeInstagramAudio(config.audio),
     });

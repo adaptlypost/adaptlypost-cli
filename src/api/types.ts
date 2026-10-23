@@ -141,6 +141,7 @@ export const INSTAGRAM_TRIAL_GRADUATIONS = ['MANUAL', 'SS_PERFORMANCE'] as const
 export type InstagramTrialGraduation = (typeof INSTAGRAM_TRIAL_GRADUATIONS)[number];
 
 export const INSTAGRAM_COLLABORATORS_MAX = 3;
+export const INSTAGRAM_USER_TAGS_MAX = 20;
 export const INSTAGRAM_AUDIO_VOLUME_MIN = 1;
 export const INSTAGRAM_AUDIO_VOLUME_MAX = 100;
 export const INSTAGRAM_AUDIO_SEARCH_MAX_LENGTH = 100;
@@ -441,12 +442,19 @@ export interface InstagramAudioConfig {
   videoVolume?: number;
 }
 
+export interface InstagramUserTag {
+  username: string;
+  x?: number;
+  y?: number;
+}
+
 export interface InstagramPostConfig {
   connectionId: string;
   postType?: MetaPostType;
   shareToStory?: boolean;
   trialGraduation?: InstagramTrialGraduation;
   collaborators?: string[];
+  userTags?: InstagramUserTag[];
   aiGenerated?: boolean;
   audio?: InstagramAudioConfig;
 }
@@ -560,6 +568,8 @@ export interface SocialPostPlatform {
   instagramPostType?: MetaPostType;
   instagramTrialGraduation?: InstagramTrialGraduation;
   instagramCollaborators?: string[];
+  instagramUserTags?: InstagramUserTag[] | null;
+  instagramUntaggedUsernames?: string[] | null;
   instagramAiGenerated?: boolean;
   instagramUsername?: string;
   instagramAudioId?: string;

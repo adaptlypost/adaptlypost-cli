@@ -152,6 +152,10 @@ instagram:
   aspectRatio: PORTRAIT
   fit: PAD
   collaborators: [acme.bakery]
+  userTags:
+    - username: ada.bakes
+      x: 0.42
+      y: 0.61
 google_business:
   topicType: EVENT
   eventTitle: Open day
@@ -287,6 +291,7 @@ Per-platform flags on `post create` and `post update`:
 | `--fit <PLATFORM=fit>` | `platformAspectRatios[].fit`: `CROP` (the default, cut from the center) or `PAD` (keep the whole image on a blurred fill) |
 | `--ig-share-to-story` | `instagramConfigs[].shareToStory`: also publish the media as a story next to the feed post or reel. The story is its own platform entry and skips the caption, first comment, cover, collaborators, trial and audio. Videos up to 60 seconds |
 | `--ig-collaborator <username>` | `instagramConfigs[].collaborators`, repeatable, up to 3. A leading `@` is dropped. Feed images, carousels and reels; each collaborator accepts the invite in Instagram |
+| `--ig-user-tag <username[:x,y]>` | `instagramConfigs[].userTags`, repeatable, up to 20, as in `--ig-user-tag ada.bakes:0.42,0.61`. A leading `@` is dropped and a repeated username keeps its first entry. `x` and `y` run from 0 to 1 from the top-left corner (x left to right, y top to bottom): needed on a feed image, optional on a story, ignored on a video, where the person is tagged on the video as a whole. Works on one image or one video; a carousel or several stories with tags is a 400. Tagged accounts must be public. The story `--ig-share-to-story` adds does not carry the tags. `post get` shows them as `instagramUserTags` |
 | `--ig-ai-generated` | `instagramConfigs[].aiGenerated`: disclose that the post was made or edited with AI. Instagram shows its "AI info" label on the post. Works on images, carousels, reels and stories, and a story made with `shareToStory` carries the label too. |
 | `--ig-audio <audioId>` | `instagramConfigs[].audio.audioId`, music or an original sound for a reel. Find ids with `accounts instagram-audio`. `--ig-audio-title` and `--ig-audio-artist` are stored for display; `--ig-audio-volume` and `--ig-video-volume` take 1 to 100 and default to 100 |
 | `--fb-share-to-story` | `facebookConfigs[].shareToStory`, the same as `--ig-share-to-story` for a Facebook page |
@@ -350,7 +355,7 @@ Per-platform config keys, for `--config`, frontmatter platform blocks and `confi
 | Platform | Keys |
 |---|---|
 | `FACEBOOK` | `postType`, `shareToStory`, `videoTitle`, `textFormatPresetId`, `imageLayout` (`GRID` or `CAROUSEL`), `carouselCards` (a list of blocks with `link`, `title` and `description`, or bare links; cards without `imageLayout` mean `CAROUSEL`) |
-| `INSTAGRAM` | `postType`, `shareToStory`, `trialGraduation`, `collaborators`, `aiGenerated`, `audio` (an audio id, or a block with `audioId`, `title`, `artist`, `audioVolume`, `videoVolume`) |
+| `INSTAGRAM` | `postType`, `shareToStory`, `trialGraduation`, `collaborators`, `userTags` (a list of blocks with `username`, `x` and `y`, or bare usernames), `aiGenerated`, `audio` (an audio id, or a block with `audioId`, `title`, `artist`, `audioVolume`, `videoVolume`) |
 | `TIKTOK` | `privacyLevel`, `title`, `caption`, `allowComments`, `allowDuet`, `allowStitch`, `sendAsDraft`, `aiGenerated`, `brandedContent`, `brandedContentOwnBrand`, `autoAddMusic` |
 | `PINTEREST` | `boardId`, `boardName`, `title`, `link`. Set `boardId` or `boardName`, not both. `boardName` picks the board by its name, the same way `--pinterest-board-name` does. With neither, the pin goes to a board named AdaptlyPost |
 | `YOUTUBE` | `postType`, `videoTitle`, `tags`, `privacyStatus`, `license`, `notifySubscribers`, `allowEmbedding`, `madeForKids`, `aiGenerated`, `categoryId`, `playlistId` |

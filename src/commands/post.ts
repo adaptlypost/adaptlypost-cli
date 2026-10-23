@@ -219,6 +219,7 @@ interface ContentOptions {
   fit: string[];
   igShareToStory?: boolean;
   igCollaborator: string[];
+  igUserTag: string[];
   igAiGenerated?: boolean;
   igAudio?: string;
   igAudioTitle?: string;
@@ -259,6 +260,20 @@ function facebookCardFromFlag(value: string): Record<string, string> {
       ([, field]) => field !== "",
     ),
   );
+}
+
+function instagramUserTagFromFlag(value: string): Record<string, unknown> {
+  const [username = "", position, ...rest] = value.split(":");
+  if (position === undefined) return { username };
+  const coordinates = position.split(",");
+  const [x, y] = coordinates.map((coordinate) => (coordinate.trim() === "" ? Number.NaN : Number(coordinate)));
+  if (rest.length > 0 || coordinates.length !== 2 || !Number.isFinite(x) || !Number.isFinite(y)) {
+    throw new CliError(`--ig-user-tag "${value}" has no valid position.`, {
+      exitCode: ExitCode.USAGE,
+      hint: 'Write --ig-user-tag "<username>:<x>,<y>" with x and y from 0 to 1, or the username alone',
+    });
+  }
+  return { username, x, y };
 }
 
 function recurrenceFromOptions(options: ContentOptions): PostInput["recurrence"] {
@@ -411,6 +426,9 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
 
   if (options.igShareToStory !== undefined) mergeConfig("INSTAGRAM", { shareToStory: options.igShareToStory });
   if (options.igCollaborator.length > 0) mergeConfig("INSTAGRAM", { collaborators: options.igCollaborator });
+  if (options.igUserTag.length > 0) {
+    mergeConfig("INSTAGRAM", { userTags: options.igUserTag.map(instagramUserTagFromFlag) });
+  }
   if (options.igAiGenerated !== undefined) mergeConfig("INSTAGRAM", { aiGenerated: options.igAiGenerated });
 
   const audioDetails = [options.igAudioTitle, options.igAudioArtist, options.igAudioVolume, options.igVideoVolume];
@@ -977,6 +995,7 @@ function storedConfig(target: SocialPostPlatform): ConfigEntry | undefined {
         postType: target.instagramPostType,
         trialGraduation: target.instagramTrialGraduation,
         collaborators: target.instagramCollaborators,
+        userTags: target.instagramUserTags,
         aiGenerated: target.instagramAiGenerated,
         audio:
           target.instagramAudioId === undefined
@@ -2132,6 +2151,12 @@ const withContentOptions = (command: Command): Command =>
     .option(
       "--ig-collaborator <username>",
       "Invite an Instagram account as a collaborator, repeatable, up to 3",
+      collect,
+      [],
+    )
+    .option(
+      "--ig-user-tag <username[:x,y]>",
+      "Tag an Instagram account, repeatable, up to 20. x and y run from 0 to 1 from the top-left corner: needed on a feed image, optional on a story, ignored on a video. One image or video only; carousels are refused",
       collect,
       [],
     )

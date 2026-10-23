@@ -1003,6 +1003,10 @@ describe("per-platform options on create, update and bulk", () => {
       "@ada",
       "--ig-collaborator",
       "grace",
+      "--ig-user-tag",
+      "@ada:0.5,0.25",
+      "--ig-user-tag",
+      "grace",
       "--ig-ai-generated",
       "--ig-audio",
       "901",
@@ -1019,12 +1023,20 @@ describe("per-platform options on create, update and bulk", () => {
           postType: "REEL",
           shareToStory: true,
           collaborators: ["ada", "grace"],
+          userTags: [{ username: "ada", x: 0.5, y: 0.25 }, { username: "grace" }],
           aiGenerated: true,
           audio: { audioId: "901", audioVolume: 40 },
         },
       ],
       facebookConfigs: [{ pageId: "fb_1", shareToStory: true }],
     });
+  });
+
+  it("refuses an --ig-user-tag with a malformed or out of range position", async () => {
+    const base = ["post", "create", "-t", "Hi", "-a", "ig_7c3e", "--print-body"];
+    await expect(run([...base, "--ig-user-tag", "ada:0.5"])).rejects.toMatchObject({ exitCode: 2 });
+    await expect(run([...base, "--ig-user-tag", "ada:left,top"])).rejects.toMatchObject({ exitCode: 2 });
+    await expect(run([...base, "--ig-user-tag", "ada:1.2,0.5"])).rejects.toMatchObject({ exitCode: 5 });
   });
 
   it("sends the YouTube altered or synthetic content label from --yt-ai-generated", async () => {
@@ -1222,6 +1234,7 @@ describe("per-platform options on create, update and bulk", () => {
           connectionId: "ig_7c3e",
           instagramPostType: "REEL",
           instagramCollaborators: ["ada"],
+          instagramUserTags: [{ username: "grace", x: 0.5, y: 0.25 }, { username: "linus" }],
           instagramAiGenerated: true,
           instagramAudioId: "901",
           instagramAudioVolume: 40,
@@ -1273,6 +1286,7 @@ describe("per-platform options on create, update and bulk", () => {
           connectionId: "ig_7c3e",
           postType: "REEL",
           collaborators: ["ada"],
+          userTags: [{ username: "grace", x: 0.5, y: 0.25 }, { username: "linus" }],
           aiGenerated: true,
           audio: { audioId: "901", audioVolume: 40 },
           shareToStory: true,
@@ -1491,6 +1505,23 @@ describe("per-platform options on create, update and bulk", () => {
           carouselCards: [{ link: "https://acme.test/a" }, { link: "https://acme.test/b", title: "Bags" }],
         },
       ],
+    });
+  });
+
+  it("reads Instagram user tags from a config_INSTAGRAM column", async () => {
+    const path = csvPath(
+      [
+        "text,scheduledAt,media,config_INSTAGRAM",
+        'Bakery,2026-10-19T09:00:00Z,https://cdn/a.png,"{""userTags"":[{""username"":""@ada"",""x"":0.4,""y"":0.6}]}"',
+        "",
+      ].join("\n"),
+    );
+
+    await run(["post", "bulk", "--csv", path, "-a", "ig_7c3e", "--print-body"]);
+
+    const [batch] = stdoutJson().data as Record<string, unknown>[];
+    expect(batch).toMatchObject({
+      instagramConfigs: [{ connectionId: "ig_7c3e", userTags: [{ username: "ada", x: 0.4, y: 0.6 }] }],
     });
   });
 

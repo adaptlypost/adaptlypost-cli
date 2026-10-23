@@ -750,6 +750,11 @@ describe("per-platform options in frontmatter", () => {
         "  fit: PAD",
         "  thumbnailMs: 1500",
         "  collaborators: [ada, \"@grace\"]",
+        "  userTags:",
+        "    - username: \"@ada\"",
+        "      x: 0.5",
+        "      y: 0.25",
+        "    - grace",
         "  audio:",
         "    audioId: \"901\"",
         "    audioVolume: 40",
@@ -770,7 +775,12 @@ describe("per-platform options in frontmatter", () => {
       YOUTUBE: { thumbnailUrl: "https://cdn/yt.png" },
     });
     expect(input.platformConfigs).toEqual({
-      INSTAGRAM: { postType: "FEED", collaborators: ["ada", "@grace"], audio: { audioId: "901", audioVolume: 40 } },
+      INSTAGRAM: {
+        postType: "FEED",
+        collaborators: ["ada", "@grace"],
+        userTags: [{ username: "@ada", x: 0.5, y: 0.25 }, "grace"],
+        audio: { audioId: "901", audioVolume: 40 },
+      },
       GOOGLE_BUSINESS: { topicType: "EVENT" },
     });
   });
@@ -888,6 +898,30 @@ describe("normalizeConfig", () => {
     });
     expect(exitCodeOf(() => normalizeConfig("INSTAGRAM", { collaborators: ["a", "b", "c", "d"] }))).toBe(ExitCode.VALIDATION);
     expect(exitCodeOf(() => normalizeConfig("INSTAGRAM", { collaborators: ["no spaces"] }))).toBe(ExitCode.VALIDATION);
+  });
+
+  it("reads Instagram user tags from blocks or bare usernames, drops duplicates and caps them at 20", () => {
+    expect(
+      normalizeConfig("INSTAGRAM", {
+        userTags: [{ username: "@ada", x: 0.5, y: "0.25" }, "ADA", "grace", { username: "linus", x: 0, y: 1 }],
+      }),
+    ).toEqual({
+      userTags: [{ username: "ada", x: 0.5, y: 0.25 }, { username: "grace" }, { username: "linus", x: 0, y: 1 }],
+    });
+    expect(normalizeConfig("INSTAGRAM", { userTags: "@ada" })).toEqual({ userTags: [{ username: "ada" }] });
+
+    const tooMany = Array.from({ length: 21 }, (_, index) => `user${index}`);
+    expect(exitCodeOf(() => normalizeConfig("INSTAGRAM", { userTags: tooMany }))).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => normalizeConfig("INSTAGRAM", { userTags: ["no spaces"] }))).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => normalizeConfig("INSTAGRAM", { userTags: [{ username: "ada", x: 1.5, y: 0 }] }))).toBe(
+      ExitCode.VALIDATION,
+    );
+    expect(exitCodeOf(() => normalizeConfig("INSTAGRAM", { userTags: [{ username: "ada", x: 0.5 }] }))).toBe(
+      ExitCode.VALIDATION,
+    );
+    expect(exitCodeOf(() => normalizeConfig("INSTAGRAM", { userTags: [{ username: "ada", left: 0.5 }] }))).toBe(
+      ExitCode.VALIDATION,
+    );
   });
 
   it("reads the Instagram AI label as a boolean", () => {
