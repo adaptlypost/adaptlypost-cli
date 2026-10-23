@@ -1,0 +1,29 @@
+README.md
+  s_0f001a19c97a17::t_7a0fef57f360e4 155-158,294,358
+src/api/types.ts
+  s_0f001a19c97a17::t_7922c0c7b6e42c 144,445-450,457,571-572
+src/commands/post-input.ts
+  s_0f001a19c97a17::t_595104f7770b44 17,148,191,320,619,1332-1342,1349,1359-1409,1600
+src/commands/post.ts
+  s_0f001a19c97a17::t_51b0d03952d505 212,255-268,419-421,884,2013-2018
+test/commands/post-input.test.ts
+  s_0f001a19c97a17::t_62eda4c05ee3c5 753-757,778-783,903-926
+test/commands/post.test.ts
+  s_0f001a19c97a17::t_c477ad4bd8f741 1004-1007,1024,1033-1039,1235,1287,1509-1525
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4e321b98c4b2ca40ad5a8118866c2e5d9e1a1829",
+  "prompts": {},
+  "sessions": {
+    "s_0f001a19c97a17": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2258b7bb-f524-4a93-bf0c-14370b7f1895",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}
