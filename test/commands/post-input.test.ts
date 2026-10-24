@@ -63,6 +63,14 @@ const accounts: SocialAccount[] = [
 const moreAccounts: SocialAccount[] = [
   ...accounts,
   {
+    id: "tg_1",
+    platform: "TELEGRAM",
+    displayName: "Acme News",
+    username: "",
+    avatarUrl: "",
+    status: "active",
+  },
+  {
     id: "gbp_1",
     platform: "GOOGLE_BUSINESS",
     displayName: "Acme Bakery, Main St",
@@ -1074,8 +1082,11 @@ describe("buildPostBody with the new platforms and options", () => {
     ]);
   });
 
-  it("refuses TELEGRAM as a target, because the API cannot post there", () => {
-    expect(exitCodeOf(() => buildPostBody({ text: "Hi", platforms: ["TELEGRAM"] }, { accounts }))).toBe(ExitCode.VALIDATION);
+  it("routes a TELEGRAM account to telegramConnectionIds", () => {
+    const body = buildPostBody({ text: "Hi", accounts: ["tg_1"] }, { accounts: moreAccounts });
+
+    expect(body.platforms).toEqual(["TELEGRAM"]);
+    expect(body.telegramConnectionIds).toEqual(["tg_1"]);
   });
 
   it("sends twitterKeepLinks and the extras, and refuses extras for a platform the post skips", () => {

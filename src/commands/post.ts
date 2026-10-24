@@ -1074,16 +1074,6 @@ export function targetsFromPost(post: SocialPost): {
     targets[field] = [...(targets[field] ?? []), value];
   };
 
-  const unreachable = [
-    ...new Set((post.platforms ?? []).map((target) => target.platform).filter((platform) => !CONNECTION_FIELD[platform])),
-  ];
-  if (unreachable.length > 0) {
-    throw new CliError(
-      `This post also goes to ${unreachable.join(", ")}, which the API cannot target, so its targets cannot be resent.`,
-      { exitCode: ExitCode.VALIDATION, hint: "Change the alt text in the AdaptlyPost app" },
-    );
-  }
-
   const groups = new Map<string, SocialPostPlatform[]>();
   for (const target of post.platforms ?? []) {
     const id = target.platform === "FACEBOOK" ? target.pageId : target.connectionId;
@@ -1098,7 +1088,7 @@ export function targetsFromPost(post: SocialPost): {
     const primary = entries.find((target) => !isStory(target)) ?? entries[0];
     if (!primary) continue;
     const id = (primary.platform === "FACEBOOK" ? primary.pageId : primary.connectionId) as string;
-    const connectionField = CONNECTION_FIELD[primary.platform] as string;
+    const connectionField = CONNECTION_FIELD[primary.platform];
 
     push(connectionField, id);
 
@@ -1113,7 +1103,7 @@ export function targetsFromPost(post: SocialPost): {
   }
 
   const platforms = [...new Set((post.platforms ?? []).map((target) => target.platform))].filter(
-    (platform) => (targets[CONNECTION_FIELD[platform] as string] ?? []).length > 0,
+    (platform) => (targets[CONNECTION_FIELD[platform]] ?? []).length > 0,
   );
 
   return {
@@ -2125,7 +2115,7 @@ const withContentOptions = (command: Command): Command =>
     )
     .option(
       "--thumbnail-for <PLATFORM=url>",
-      "Video thumbnail image for one platform, repeatable. YOUTUBE, FACEBOOK, LINKEDIN, INSTAGRAM, PINTEREST",
+      "Video thumbnail image for one platform, repeatable. YOUTUBE, FACEBOOK, LINKEDIN, INSTAGRAM, PINTEREST, TELEGRAM",
       collect,
       [],
     )

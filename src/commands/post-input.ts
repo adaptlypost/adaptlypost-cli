@@ -108,7 +108,7 @@ export interface AspectRatioInput {
   fit?: MediaAspectRatioFit;
 }
 
-export const CONNECTION_FIELD: Partial<Record<PlatformType, keyof PostTargets>> = {
+export const CONNECTION_FIELD: Record<PlatformType, keyof PostTargets> = {
   FACEBOOK: "pageIds",
   INSTAGRAM: "instagramConnectionIds",
   THREADS: "threadsConnectionIds",
@@ -119,19 +119,9 @@ export const CONNECTION_FIELD: Partial<Record<PlatformType, keyof PostTargets>> 
   LINKEDIN: "linkedinConnectionIds",
   PINTEREST: "pinterestConnectionIds",
   YOUTUBE: "youtubeConnectionIds",
+  TELEGRAM: "telegramConnectionIds",
   GOOGLE_BUSINESS: "googleBusinessConnectionIds",
 };
-
-export function connectionFieldFor(platform: PlatformType): keyof PostTargets {
-  const field = CONNECTION_FIELD[platform];
-  if (!field) {
-    throw new CliError(`${platform} posts can only be created in the AdaptlyPost app.`, {
-      exitCode: ExitCode.VALIDATION,
-      hint: "The API has no way to target this platform; drop it from --platform",
-    });
-  }
-  return field;
-}
 
 export const CONFIG_FIELD: Partial<Record<PlatformType, keyof PostTargets>> = {
   FACEBOOK: "facebookConfigs",
@@ -260,6 +250,7 @@ const PLATFORM_ALIASES: Record<string, PlatformType> = {
   li: "LINKEDIN",
   yt: "YOUTUBE",
   tt: "TIKTOK",
+  tg: "TELEGRAM",
   gbp: "GOOGLE_BUSINESS",
   googlebusiness: "GOOGLE_BUSINESS",
   "google-business": "GOOGLE_BUSINESS",
@@ -1227,8 +1218,6 @@ function routeAccounts(
   const connectionsByPlatform = new Map<PlatformType, string[]>();
   const resolved = [...platforms];
 
-  for (const platform of platforms) connectionFieldFor(platform);
-
   for (const id of ids) {
     const account = accounts.find(
       (candidate) => candidate.id === id || candidate.pageId === id,
@@ -1243,7 +1232,7 @@ function routeAccounts(
 
     if (!resolved.includes(account.platform)) resolved.push(account.platform);
 
-    const field = connectionFieldFor(account.platform);
+    const field = CONNECTION_FIELD[account.platform];
     const existing = (targets[field] as string[] | undefined) ?? [];
     if (!existing.includes(account.id)) existing.push(account.id);
     Object.assign(targets, { [field]: existing });

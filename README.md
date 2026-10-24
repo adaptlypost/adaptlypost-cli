@@ -252,7 +252,7 @@ Grammar is noun then verb, space-separated. `ls` works wherever `list` does, `rm
 | `accounts instagram-audio <id>` | `--type music\|original_sound`, `--search` | Music and original sounds the Instagram account can add to a reel. `--type` defaults to `music`; without `--search` it lists what is trending. Pass the `AUDIO ID` to `post create --ig-audio`. Only accounts connected through Facebook can add audio, which `accounts view` shows as `reel audio` |
 | `accounts pinterest-boards <id>` | | Every board the Pinterest account can pin to, secret boards included, with its privacy and pin count. Pass the `BOARD ID` to `post create --pinterest-board`, or the `NAME` to `--pinterest-board-name`. A board belongs to one Pinterest account, so list the boards of each account you post to. The API answers 400 when Pinterest refuses the request, usually because the account must be reconnected |
 
-Google Business Profile locations show up as `GOOGLE_BUSINESS` accounts, named after the location and with no handle. Telegram chats are not listed: the API cannot post to Telegram, so the CLI refuses `TELEGRAM` as a target. It still accepts `TELEGRAM` as a filter on `post list`.
+Google Business Profile locations show up as `GOOGLE_BUSINESS` accounts, named after the location and with no handle. Telegram channels and groups show up as `TELEGRAM` accounts, named after the chat, with its public @username as the handle when it has one. `accounts remove` disconnects a Telegram chat like any other account.
 
 ### post
 
@@ -285,7 +285,7 @@ Per-platform flags on `post create` and `post update`:
 | `--pinterest-board-name <name>` | `pinterestConfigs[].boardName`, the board picked by its name on each Pinterest account of the post. The API trims the name, takes the one board with exactly that name, and otherwise the one board with that name in any case. No match, or several, is a 400, and the pin never goes to another board. `--print-body` looks the name up and shows the board's name and id, and exits 5 when no board or several boards match. `--dry-run` reports the same refusal as a `PINTEREST_BOARD_NOT_FOUND` or `PINTEREST_BOARD_AMBIGUOUS` issue. Not with `--pinterest-board` |
 | `--document-title <title>` | `linkedinConfigs[].documentTitle`, the title LinkedIn shows on a DOCUMENT post. Max 100 characters, defaults to the file name, ignored for other content types |
 | `--first-comment <PLATFORM=text>` | `firstComments`, a comment posted from the same account about 10 seconds after the post goes out (60 on YouTube). One flag per platform: LINKEDIN (1250 characters), TWITTER (280), THREADS (500), BLUESKY (300), MASTODON (500), YOUTUBE (10000). A comment that fails never fails the post; `post get` shows its status. On `post update` the flags replace every stored first comment |
-| `--thumbnail-for <PLATFORM=url>` | `platformThumbnails[].thumbnailUrl`, a thumbnail image for one platform of a VIDEO post. YOUTUBE, FACEBOOK, LINKEDIN, INSTAGRAM, PINTEREST |
+| `--thumbnail-for <PLATFORM=url>` | `platformThumbnails[].thumbnailUrl`, a thumbnail image for one platform of a VIDEO post. YOUTUBE, FACEBOOK, LINKEDIN, INSTAGRAM, PINTEREST, TELEGRAM |
 | `--thumbnail-ms-for <PLATFORM=ms>` | `platformThumbnails[].thumbnailTimestampMs`, a video frame for one platform. INSTAGRAM, PINTEREST, TIKTOK. A platform without either flag uses `--thumbnail` and `--thumbnail-ms` |
 | `--aspect-ratio <PLATFORM=ratio>` | `platformAspectRatios[].aspectRatio` for IMAGE and CAROUSEL posts: `SQUARE` (1:1), `PORTRAIT` (4:5), `VERTICAL` (9:16) or `LANDSCAPE` (1.91:1). INSTAGRAM takes all but VERTICAL, TIKTOK takes all four |
 | `--fit <PLATFORM=fit>` | `platformAspectRatios[].fit`: `CROP` (the default, cut from the center) or `PAD` (keep the whole image on a blurred fill) |
@@ -305,6 +305,8 @@ Per-platform flags on `post create` and `post update`:
 | `--gbp-coupon`, `--gbp-redeem-url`, `--gbp-terms` | `offerCouponCode`, `offerRedeemUrl`, `offerTerms` for an OFFER |
 
 Google Business Profile takes TEXT or IMAGE posts with one JPEG or PNG up to 5 MB and text up to 1500 characters, and has no alt text. A location with no `--gbp-*` flag posts a STANDARD update.
+
+Telegram takes TEXT, IMAGE, VIDEO or CAROUSEL posts: text up to 4096 characters, up to 10 JPEG, PNG or WebP images of 10 MB each, or one MP4 or MOV video up to 50 MB. A caption over 1024 characters goes out as its own message after the media. A video takes a thumbnail image (`--thumbnail-for TELEGRAM=<url>`), not a frame. Telegram has no first comments, aspect ratios, config keys or analytics. `-P tg` is short for `-P TELEGRAM`.
 
 ```bash
 adaptlypost post create -t "Autumn sale, 20% off" -a gbp_51e0 -m ./sale.png \

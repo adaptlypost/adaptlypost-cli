@@ -922,6 +922,14 @@ describe("per-platform options on create, update and bulk", () => {
       pageId: "102938",
     },
     {
+      id: "tg_1",
+      platform: "TELEGRAM",
+      displayName: "Acme News",
+      username: "acmenews",
+      avatarUrl: "",
+      status: "active",
+    },
+    {
       id: "yt_1",
       platform: "YOUTUBE",
       displayName: "Acme Channel",
@@ -1192,13 +1200,59 @@ describe("per-platform options on create, update and bulk", () => {
     });
   });
 
-  it("refuses a first comment on a platform without one, and a TELEGRAM target", async () => {
+  it("refuses a first comment on a platform without one, Telegram included", async () => {
     await expect(
       run(["post", "create", "-t", "Hi", "-a", "ig_7c3e", "--first-comment", "INSTAGRAM=hi", "--print-body"]),
     ).rejects.toMatchObject({ exitCode: 5 });
-    await expect(run(["post", "create", "-t", "Hi", "-P", "TELEGRAM", "--print-body"])).rejects.toMatchObject({
-      exitCode: 5,
+    await expect(
+      run(["post", "create", "-t", "Hi", "-a", "tg_1", "--first-comment", "TELEGRAM=hi", "--print-body"]),
+    ).rejects.toMatchObject({ exitCode: 5 });
+  });
+
+  it("sends a Telegram chat as telegramConnectionIds, picked by account, platform or alias", async () => {
+    await run(["post", "create", "-t", "Hi", "-a", "tg_1", "--print-body"]);
+    expect(stdoutJson().data).toMatchObject({ platforms: ["TELEGRAM"], telegramConnectionIds: ["tg_1"] });
+
+    written = [];
+    await run(["post", "create", "-t", "Hi", "-P", "tg", "--print-body"]);
+    expect(stdoutJson().data).toMatchObject({ platforms: ["TELEGRAM"] });
+  });
+
+  it("takes a thumbnail image for a Telegram video and refuses a frame", async () => {
+    await run([
+      "post",
+      "create",
+      "-t",
+      "Clip",
+      "-a",
+      "tg_1",
+      "-m",
+      "https://cdn.example/clip.mp4",
+      "--thumbnail-for",
+      "TELEGRAM=https://cdn.example/cover.jpg",
+      "--print-body",
+    ]);
+    expect(stdoutJson().data).toMatchObject({
+      contentType: "VIDEO",
+      telegramConnectionIds: ["tg_1"],
+      platformThumbnails: [{ platform: "TELEGRAM", thumbnailUrl: "https://cdn.example/cover.jpg" }],
     });
+
+    await expect(
+      run([
+        "post",
+        "create",
+        "-t",
+        "Clip",
+        "-a",
+        "tg_1",
+        "-m",
+        "https://cdn.example/clip.mp4",
+        "--thumbnail-ms-for",
+        "TELEGRAM=1500",
+        "--print-body",
+      ]),
+    ).rejects.toMatchObject({ exitCode: 5 });
   });
 
   it("sends first comments and keep links on update without touching the targets", async () => {
@@ -1439,7 +1493,7 @@ describe("per-platform options on create, update and bulk", () => {
     });
   });
 
-  it("refuses to resend the targets of a post that also goes to Telegram", async () => {
+  it("resends the Telegram targets of a post along with the others", async () => {
     vi.mocked(client.getPost).mockResolvedValue({
       id: "post_1",
       status: "SCHEDULED",
@@ -1455,9 +1509,13 @@ describe("per-platform options on create, update and bulk", () => {
       userId: "u",
     });
 
-    await expect(run(["post", "update", "post_1", "--alt", "A photo", "--print-body"])).rejects.toMatchObject({
-      exitCode: 5,
-      message: expect.stringContaining("TELEGRAM"),
+    await run(["post", "update", "post_1", "--alt", "A photo", "--print-body"]);
+
+    expect(stdoutJson().data).toMatchObject({
+      mediaAltTexts: ["A photo"],
+      platforms: ["TWITTER", "TELEGRAM"],
+      twitterConnectionIds: ["tw_4d1b"],
+      telegramConnectionIds: ["tg_1"],
     });
   });
 

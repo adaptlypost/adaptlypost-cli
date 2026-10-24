@@ -196,6 +196,7 @@ export const THUMBNAIL_KIND_BY_PLATFORM: Partial<Record<PlatformType, ThumbnailK
   INSTAGRAM: 'image-or-frame',
   PINTEREST: 'image-or-frame',
   TIKTOK: 'frame',
+  TELEGRAM: 'image',
 };
 
 export const YOUTUBE_POST_TYPES = ['VIDEO', 'SHORTS'] as const;
@@ -510,6 +511,7 @@ export interface PostTargets {
   twitterConnectionIds?: string[];
   blueskyConnectionIds?: string[];
   mastodonConnectionIds?: string[];
+  telegramConnectionIds?: string[];
   googleBusinessConnectionIds?: string[];
   linkedinConnectionIds?: string[];
   pinterestConnectionIds?: string[];
