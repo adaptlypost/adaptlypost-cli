@@ -1,6 +1,6 @@
 {
   "name": "@adaptlypost/cli",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "AdaptlyPost from your terminal",
   "keywords": [
     "cli",
