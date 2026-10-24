@@ -859,7 +859,8 @@ describe("buildPlatformExtras", () => {
 
   it("refuses what the API would reject", () => {
     const cases = [
-      { firstComments: { INSTAGRAM: "hi" } },
+      { firstComments: { TIKTOK: "hi" } },
+      { firstComments: { INSTAGRAM: "x".repeat(2201) } },
       { firstComments: { TWITTER: "   " } },
       { firstComments: { TWITTER: "x".repeat(281) } },
       { platformThumbnails: { THREADS: { thumbnailUrl: "https://cdn/a.png" } } },

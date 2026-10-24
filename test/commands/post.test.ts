@@ -1200,9 +1200,15 @@ describe("per-platform options on create, update and bulk", () => {
     });
   });
 
+  it("sends an Instagram first comment", async () => {
+    await run(["post", "create", "-t", "Hi", "-a", "ig_7c3e", "-m", "https://cdn/a.png", "--first-comment", "INSTAGRAM=Link in bio", "--print-body"]);
+
+    expect(stdoutJson().data).toMatchObject({ firstComments: [{ platform: "INSTAGRAM", text: "Link in bio" }] });
+  });
+
   it("refuses a first comment on a platform without one, Telegram included", async () => {
     await expect(
-      run(["post", "create", "-t", "Hi", "-a", "ig_7c3e", "--first-comment", "INSTAGRAM=hi", "--print-body"]),
+      run(["post", "create", "-t", "Hi", "-a", "ig_7c3e", "--first-comment", "TIKTOK=hi", "--print-body"]),
     ).rejects.toMatchObject({ exitCode: 5 });
     await expect(
       run(["post", "create", "-t", "Hi", "-a", "tg_1", "--first-comment", "TELEGRAM=hi", "--print-body"]),

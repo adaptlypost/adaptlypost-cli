@@ -182,6 +182,8 @@ export const FIRST_COMMENT_MAX_LENGTH: Partial<Record<PlatformType, number>> = {
   BLUESKY: 300,
   MASTODON: 500,
   YOUTUBE: 10000,
+  FACEBOOK: 8000,
+  INSTAGRAM: 2200,
 };
 
 export const FIRST_COMMENT_STATUSES = ['PENDING', 'PUBLISHED', 'FAILED'] as const;
