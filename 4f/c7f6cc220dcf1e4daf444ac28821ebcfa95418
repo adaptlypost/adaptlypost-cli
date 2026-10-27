@@ -1,0 +1,31 @@
+README.md
+  s_58e9965936c413::t_c2c23932662d5c 255,287-289,314-315,329,370,404
+src/api/types.ts
+  s_58e9965936c413::t_444f184fd671f7 13,150-153,513-519,529,540,616-618,846
+src/commands/analytics.ts
+  s_58e9965936c413::t_5911331d18c93e 702,713
+src/commands/post-input.ts
+  s_58e9965936c413::t_0259eff2b7917a 24-27,127,138,173,261,1549-1595,1638
+src/commands/post.ts
+  s_58e9965936c413::t_f4090e405db551 34-37,219-221,433-435,1055-1056,2123-2130
+test/commands/post-input.test.ts
+  s_58e9965936c413::t_04d374f809d017 73-80,1018-1045,1129-1158
+test/commands/post.test.ts
+  s_58e9965936c413::t_2557ad3f457a96 932-939,1272-1332,1597-1674
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4fc7f6cc220dcf1e4daf444ac28821ebcfa95418",
+  "prompts": {},
+  "sessions": {
+    "s_58e9965936c413": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a31d672e-d748-4f69-8334-1c366783ee3e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}
