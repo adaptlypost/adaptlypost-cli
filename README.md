@@ -252,7 +252,7 @@ Grammar is noun then verb, space-separated. `ls` works wherever `list` does, `rm
 | `accounts instagram-audio <id>` | `--type music\|original_sound`, `--search` | Music and original sounds the Instagram account can add to a reel. `--type` defaults to `music`; without `--search` it lists what is trending. Pass the `AUDIO ID` to `post create --ig-audio`. Only accounts connected through Facebook can add audio, which `accounts view` shows as `reel audio` |
 | `accounts pinterest-boards <id>` | | Every board the Pinterest account can pin to, secret boards included, with its privacy and pin count. Pass the `BOARD ID` to `post create --pinterest-board`, or the `NAME` to `--pinterest-board-name`. A board belongs to one Pinterest account, so list the boards of each account you post to. The API answers 400 when Pinterest refuses the request, usually because the account must be reconnected |
 
-Google Business Profile locations show up as `GOOGLE_BUSINESS` accounts, named after the location and with no handle. Telegram channels and groups show up as `TELEGRAM` accounts, named after the chat, with its public @username as the handle when it has one. `accounts remove` disconnects a Telegram chat like any other account.
+Google Business Profile locations show up as `GOOGLE_BUSINESS` accounts, named after the location and with no handle. Telegram channels and groups show up as `TELEGRAM` accounts, named after the chat, with its public @username as the handle when it has one. `accounts remove` disconnects a Telegram chat like any other account. Tumblr blogs show up as `TUMBLR` accounts, one per blog.
 
 ### post
 
@@ -284,6 +284,9 @@ Per-platform flags on `post create` and `post update`:
 | `--pinterest-board <id>` | `pinterestConfigs[].boardId`, the board the pin goes to. Optional. Without it the pin goes to a public board named AdaptlyPost, which AdaptlyPost creates on the Pinterest account the first time it is needed. Find ids with `accounts pinterest-boards` |
 | `--pinterest-board-name <name>` | `pinterestConfigs[].boardName`, the board picked by its name on each Pinterest account of the post. The API trims the name, takes the one board with exactly that name, and otherwise the one board with that name in any case. No match, or several, is a 400, and the pin never goes to another board. `--print-body` looks the name up and shows the board's name and id, and exits 5 when no board or several boards match. `--dry-run` reports the same refusal as a `PINTEREST_BOARD_NOT_FOUND` or `PINTEREST_BOARD_AMBIGUOUS` issue. Not with `--pinterest-board` |
 | `--document-title <title>` | `linkedinConfigs[].documentTitle`, the title LinkedIn shows on a DOCUMENT post. Max 100 characters, defaults to the file name, ignored for other content types |
+| `--tumblr-tag <tag>` | `tumblrConfigs[].tags`, repeatable, up to 30 tags of up to 140 characters each. One tag per flag: a tag with a comma exits 5, because Tumblr would split it. A leading `#` is dropped and a repeated tag keeps its first spelling |
+| `--tumblr-title <title>` | `tumblrConfigs[].title`, a heading shown above the media and the text. Max 4096 characters |
+| `--tumblr-source-url <url>` | `tumblrConfigs[].sourceUrl`, the source link of the post. Max 2048 characters |
 | `--first-comment <PLATFORM=text>` | `firstComments`, a comment posted from the same account about 10 seconds after the post goes out (60 on YouTube). One flag per platform: LINKEDIN (1250 characters), TWITTER (280), THREADS (500), BLUESKY (300), MASTODON (500), YOUTUBE (10000), FACEBOOK (8000), INSTAGRAM (2200). Facebook and Instagram stories take none, and a Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect, or its comment fails. A comment that fails never fails the post; `post get` shows its status. On `post update` the flags replace every stored first comment |
 | `--thumbnail-for <PLATFORM=url>` | `platformThumbnails[].thumbnailUrl`, a thumbnail image for one platform of a VIDEO post. YOUTUBE, FACEBOOK, LINKEDIN, INSTAGRAM, PINTEREST, TELEGRAM |
 | `--thumbnail-ms-for <PLATFORM=ms>` | `platformThumbnails[].thumbnailTimestampMs`, a video frame for one platform. INSTAGRAM, PINTEREST, TIKTOK. A platform without either flag uses `--thumbnail` and `--thumbnail-ms` |
@@ -308,6 +311,8 @@ Google Business Profile takes TEXT or IMAGE posts with one JPEG or PNG up to 5 M
 
 Telegram takes TEXT, IMAGE, VIDEO or CAROUSEL posts: text up to 4096 characters, up to 10 JPEG, PNG or WebP images of 10 MB each, or one MP4 or MOV video up to 50 MB. A caption over 1024 characters goes out as its own message after the media. A video takes a thumbnail image (`--thumbnail-for TELEGRAM=<url>`), not a frame. Telegram has no first comments, aspect ratios, config keys or analytics. `-P tg` is short for `-P TELEGRAM`.
 
+Tumblr takes TEXT, IMAGE, VIDEO or CAROUSEL posts: text up to 32768 characters, up to 30 JPEG, PNG or GIF images of 10 MB each, or one MP4 video up to 500 MB and 10 minutes. Images keep their `--alt` text. The `--tumblr-*` flags set the tags, a title and a source link for every Tumblr blog of the post; in a file they go in a `tumblr:` block as `tags` (a YAML list, with a tag that starts with `#` in quotes), `title` and `sourceUrl`. Tumblr has no first comments, per-platform thumbnails, aspect ratios or analytics. `-P tb` is short for `-P TUMBLR`.
+
 ```bash
 adaptlypost post create -t "Autumn sale, 20% off" -a gbp_51e0 -m ./sale.png \
   --gbp-topic OFFER --gbp-event-title "Autumn sale" --gbp-event-start 2026-10-20 --gbp-event-end 2026-10-27 \
@@ -321,7 +326,7 @@ adaptlypost post create -t "Slides from today's talk" -a li_22aa -a tw_4d1b \
   --first-comment "TWITTER=Deck link in the next post"
 ```
 
-Like the other config flags, the Instagram, Facebook and Google Business Profile flags reach the API on `post update` only together with `--platform` or `--account`. `--first-comment`, the thumbnail and aspect ratio flags and `--x-keep-links` work on their own.
+Like the other config flags, the Instagram, Facebook, Google Business Profile and Tumblr flags reach the API on `post update` only together with `--platform` or `--account`. `--first-comment`, the thumbnail and aspect ratio flags and `--x-keep-links` work on their own.
 
 Repeat flags, `post create` only:
 
@@ -362,6 +367,7 @@ Per-platform config keys, for `--config`, frontmatter platform blocks and `confi
 | `PINTEREST` | `boardId`, `boardName`, `title`, `link`. Set `boardId` or `boardName`, not both. `boardName` picks the board by its name, the same way `--pinterest-board-name` does. With neither, the pin goes to a board named AdaptlyPost |
 | `YOUTUBE` | `postType`, `videoTitle`, `tags`, `privacyStatus`, `license`, `notifySubscribers`, `allowEmbedding`, `madeForKids`, `aiGenerated`, `categoryId`, `playlistId` |
 | `LINKEDIN` | `documentTitle` |
+| `TUMBLR` | `tags` (a list, one tag per item, no commas), `title`, `sourceUrl` |
 | `GOOGLE_BUSINESS` | `topicType`, `callToActionType`, `callToActionUrl`, `eventTitle`, `eventStart`, `eventEnd`, `offerCouponCode`, `offerRedeemUrl`, `offerTerms`. `topicType` defaults to `STANDARD` |
 
 ### connect
@@ -395,7 +401,7 @@ Per-platform config keys, for `--config`, frontmatter platform blocks and `confi
 | `analytics sync-status` | | Per-account sync and discovery state |
 | `analytics sync` | `--wait` | One run per workspace per ten minutes |
 
-Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, LinkedIn, YouTube, X and Google Business Profile. Google Business Profile reports how often a location was seen, with no per-post numbers. Mastodon and Telegram have no analytics, and `--platform` ignores them. Connecting an account imports its posts from the last 180 days, and a post keeps refreshing for 180 days after it is published.
+Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, LinkedIn, YouTube, X and Google Business Profile. Google Business Profile reports how often a location was seen, with no per-post numbers. Mastodon, Telegram and Tumblr have no analytics, and `--platform` ignores them. Connecting an account imports its posts from the last 180 days, and a post keeps refreshing for 180 days after it is published.
 
 ### ai
 

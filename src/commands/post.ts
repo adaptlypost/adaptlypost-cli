@@ -31,6 +31,10 @@ import {
   POST_STATUSES,
   RECURRENCE_FREQUENCIES,
   TIKTOK_PRIVACY_LEVELS,
+  TUMBLR_SOURCE_URL_MAX_LENGTH,
+  TUMBLR_TAGS_MAX,
+  TUMBLR_TAG_MAX_LENGTH,
+  TUMBLR_TITLE_MAX_LENGTH,
   type BulkPostInput,
   type BulkSchedulePostsRequest,
   type ContentType,
@@ -212,6 +216,9 @@ interface ContentOptions {
   pinterestBoard?: string;
   pinterestBoardName?: string;
   documentTitle?: string;
+  tumblrTag: string[];
+  tumblrTitle?: string;
+  tumblrSourceUrl?: string;
   firstComment: string[];
   thumbnailFor: string[];
   thumbnailMsFor: string[];
@@ -423,6 +430,9 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
   if (options.documentTitle !== undefined) {
     mergeConfig("LINKEDIN", { documentTitle: options.documentTitle });
   }
+  if (options.tumblrTag.length > 0) mergeConfig("TUMBLR", { tags: options.tumblrTag });
+  if (options.tumblrTitle !== undefined) mergeConfig("TUMBLR", { title: options.tumblrTitle });
+  if (options.tumblrSourceUrl !== undefined) mergeConfig("TUMBLR", { sourceUrl: options.tumblrSourceUrl });
 
   if (options.igShareToStory !== undefined) mergeConfig("INSTAGRAM", { shareToStory: options.igShareToStory });
   if (options.igCollaborator.length > 0) mergeConfig("INSTAGRAM", { collaborators: options.igCollaborator });
@@ -1042,6 +1052,8 @@ function storedConfig(target: SocialPostPlatform): ConfigEntry | undefined {
       });
     case "LINKEDIN":
       return definedOnly({ documentTitle: target.linkedinDocumentTitle });
+    case "TUMBLR":
+      return definedOnly({ tags: target.tumblrTags, title: target.tumblrTitle, sourceUrl: target.tumblrSourceUrl });
     case "GOOGLE_BUSINESS":
       return target.googleBusinessTopicType === undefined
         ? undefined
@@ -2107,6 +2119,14 @@ const withContentOptions = (command: Command): Command =>
       "--document-title <title>",
       "LinkedIn document title, max 100 characters. Defaults to the file name; ignored for non-DOCUMENT posts",
     )
+    .option(
+      "--tumblr-tag <tag>",
+      `Tumblr tag, repeatable, up to ${TUMBLR_TAGS_MAX}, each up to ${TUMBLR_TAG_MAX_LENGTH} characters and without commas. A leading # is dropped`,
+      collect,
+      [],
+    )
+    .option("--tumblr-title <title>", `Heading shown above the media and the text of the Tumblr post, max ${TUMBLR_TITLE_MAX_LENGTH} characters`)
+    .option("--tumblr-source-url <url>", `Source link of the Tumblr post, max ${TUMBLR_SOURCE_URL_MAX_LENGTH} characters`)
     .option(
       "--first-comment <PLATFORM=text>",
       `Comment posted from the same account right after the post, one flag per platform. Works on ${Object.entries(FIRST_COMMENT_MAX_LENGTH).map(([platform, limit]) => `${platform} (${limit})`).join(", ")}`,

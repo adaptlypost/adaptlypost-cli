@@ -21,6 +21,10 @@ import {
   PLATFORM_TYPES,
   RECURRENCE_FREQUENCIES,
   THUMBNAIL_KIND_BY_PLATFORM,
+  TUMBLR_SOURCE_URL_MAX_LENGTH,
+  TUMBLR_TAGS_MAX,
+  TUMBLR_TAG_MAX_LENGTH,
+  TUMBLR_TITLE_MAX_LENGTH,
   WEEKDAYS,
   type ContentType,
   type CreatePostRequest,
@@ -120,6 +124,7 @@ export const CONNECTION_FIELD: Record<PlatformType, keyof PostTargets> = {
   PINTEREST: "pinterestConnectionIds",
   YOUTUBE: "youtubeConnectionIds",
   TELEGRAM: "telegramConnectionIds",
+  TUMBLR: "tumblrConnectionIds",
   GOOGLE_BUSINESS: "googleBusinessConnectionIds",
 };
 
@@ -130,6 +135,7 @@ export const CONFIG_FIELD: Partial<Record<PlatformType, keyof PostTargets>> = {
   PINTEREST: "pinterestConfigs",
   YOUTUBE: "youtubeConfigs",
   LINKEDIN: "linkedinConfigs",
+  TUMBLR: "tumblrConfigs",
   GOOGLE_BUSINESS: "googleBusinessConfigs",
 };
 
@@ -164,6 +170,7 @@ export const CONFIG_KEYS: Partial<Record<PlatformType, readonly string[]>> = {
     "playlistId",
   ],
   LINKEDIN: ["documentTitle"],
+  TUMBLR: ["tags", "title", "sourceUrl"],
   GOOGLE_BUSINESS: [
     "topicType",
     "callToActionType",
@@ -251,6 +258,7 @@ const PLATFORM_ALIASES: Record<string, PlatformType> = {
   yt: "YOUTUBE",
   tt: "TIKTOK",
   tg: "TELEGRAM",
+  tb: "TUMBLR",
   gbp: "GOOGLE_BUSINESS",
   googlebusiness: "GOOGLE_BUSINESS",
   "google-business": "GOOGLE_BUSINESS",
@@ -1538,6 +1546,53 @@ function normalizeGoogleBusinessConfig(config: FrontmatterMap): FrontmatterMap {
   return normalized;
 }
 
+function normalizeTumblrTags(value: FrontmatterValue | undefined): string[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  const list = Array.isArray(value) ? value : [value];
+  const tags: string[] = [];
+
+  for (const [index, entry] of list.entries()) {
+    if (entry === null) {
+      throw configError(`TUMBLR tag ${index + 1} is empty.`, 'Quote a tag that starts with #, as in "#art"');
+    }
+    const raw = configString(entry, `TUMBLR tag ${index + 1}`) ?? "";
+    if (raw.includes(",")) {
+      throw configError(
+        `The Tumblr tag "${raw}" has a comma.`,
+        "Tumblr splits tags on commas. Give each tag its own --tumblr-tag, or its own list item",
+      );
+    }
+    const tag = raw.trim().replace(/^#+/, "").trim();
+    if (tag === "") continue;
+    if (tag.length > TUMBLR_TAG_MAX_LENGTH) {
+      throw configError(`The Tumblr tag "${tag}" is ${tag.length} characters; the limit is ${TUMBLR_TAG_MAX_LENGTH}.`);
+    }
+    if (!tags.some((known) => known.toLowerCase() === tag.toLowerCase())) tags.push(tag);
+  }
+
+  if (tags.length > TUMBLR_TAGS_MAX) {
+    throw configError(`Tumblr takes up to ${TUMBLR_TAGS_MAX} tags, got ${tags.length}.`);
+  }
+  return tags.length > 0 ? tags : undefined;
+}
+
+function tumblrText(value: FrontmatterValue | undefined, key: string, limit: number): string | undefined {
+  const text = configString(value, `TUMBLR ${key}`)?.trim();
+  if (!text) return undefined;
+  if (text.length > limit) {
+    throw configError(`The Tumblr ${key} is ${text.length} characters; the limit is ${limit}.`);
+  }
+  return text;
+}
+
+function normalizeTumblrConfig(config: FrontmatterMap): FrontmatterMap {
+  return definedEntries({
+    tags: normalizeTumblrTags(config.tags),
+    title: tumblrText(config.title, "title", TUMBLR_TITLE_MAX_LENGTH),
+    sourceUrl: tumblrText(config.sourceUrl, "sourceUrl", TUMBLR_SOURCE_URL_MAX_LENGTH),
+  });
+}
+
 function normalizePinterestBoardName(value: FrontmatterValue | undefined): string | undefined {
   const raw = configString(value, "PINTEREST boardName");
   if (raw === undefined) return undefined;
@@ -1580,6 +1635,7 @@ export function pickPinterestBoard(boards: readonly PinterestBoard[], name: stri
 
 export function normalizeConfig(platform: PlatformType, config: FrontmatterMap): FrontmatterMap {
   if (platform === "GOOGLE_BUSINESS") return normalizeGoogleBusinessConfig(config);
+  if (platform === "TUMBLR") return normalizeTumblrConfig(config);
 
   if (platform === "INSTAGRAM") {
     return definedEntries({

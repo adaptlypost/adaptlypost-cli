@@ -930,6 +930,14 @@ describe("per-platform options on create, update and bulk", () => {
       status: "active",
     },
     {
+      id: "tb_1",
+      platform: "TUMBLR",
+      displayName: "Acme Studio",
+      username: "acmestudio",
+      avatarUrl: "",
+      status: "active",
+    },
+    {
       id: "yt_1",
       platform: "YOUTUBE",
       displayName: "Acme Channel",
@@ -1261,6 +1269,67 @@ describe("per-platform options on create, update and bulk", () => {
     ).rejects.toMatchObject({ exitCode: 5 });
   });
 
+  it("sends a Tumblr blog as tumblrConnectionIds with tags, a title and a source link", async () => {
+    await run([
+      "post",
+      "create",
+      "-t",
+      "New prints",
+      "-a",
+      "tb_1",
+      "--tumblr-tag",
+      "#art",
+      "--tumblr-tag",
+      "Art",
+      "--tumblr-tag",
+      "risograph prints",
+      "--tumblr-title",
+      "Studio notes",
+      "--tumblr-source-url",
+      "https://acme.example/prints",
+      "--print-body",
+    ]);
+
+    expect(stdoutJson().data).toMatchObject({
+      platforms: ["TUMBLR"],
+      tumblrConnectionIds: ["tb_1"],
+      tumblrConfigs: [
+        {
+          connectionId: "tb_1",
+          tags: ["art", "risograph prints"],
+          title: "Studio notes",
+          sourceUrl: "https://acme.example/prints",
+        },
+      ],
+    });
+
+    written = [];
+    await run(["post", "create", "-t", "Hi", "-P", "tb", "--print-body"]);
+    expect(stdoutJson().data).toMatchObject({ platforms: ["TUMBLR"] });
+  });
+
+  it("refuses a Tumblr tag with a comma instead of splitting it", async () => {
+    await expect(
+      run(["post", "create", "-t", "Hi", "-a", "tb_1", "--tumblr-tag", "art, prints", "--print-body"]),
+    ).rejects.toMatchObject({ exitCode: 5, message: expect.stringContaining("comma") });
+  });
+
+  it("refuses more than 30 Tumblr tags and a Tumblr flag without a Tumblr account", async () => {
+    const tags = Array.from({ length: 31 }, (_value, index) => ["--tumblr-tag", `tag${index}`]).flat();
+    await expect(run(["post", "create", "-t", "Hi", "-a", "tb_1", ...tags, "--print-body"])).rejects.toMatchObject({
+      exitCode: 5,
+    });
+    await expect(
+      run(["post", "create", "-t", "Hi", "-a", "tw_4d1b", "--tumblr-title", "Notes", "--print-body"]),
+    ).rejects.toMatchObject({ exitCode: 5 });
+  });
+
+  it("refuses a first comment on Tumblr", async () => {
+    await expect(
+      run(["post", "create", "-t", "Hi", "-a", "tb_1", "--first-comment", "TUMBLR=hi", "--print-body"]),
+    ).rejects.toMatchObject({ exitCode: 5 });
+  });
+
   it("sends first comments and keep links on update without touching the targets", async () => {
     await run([
       "post",
@@ -1522,6 +1591,84 @@ describe("per-platform options on create, update and bulk", () => {
       platforms: ["TWITTER", "TELEGRAM"],
       twitterConnectionIds: ["tw_4d1b"],
       telegramConnectionIds: ["tg_1"],
+    });
+  });
+
+  it("resends the Tumblr tags, title and source link of a post", async () => {
+    vi.mocked(client.getPost).mockResolvedValue({
+      id: "post_1",
+      status: "SCHEDULED",
+      contentType: "IMAGE",
+      timezone: "UTC",
+      mediaUrls: ["https://cdn/a.png"],
+      platforms: [
+        {
+          id: "pp_1",
+          platform: "TUMBLR",
+          status: "PENDING",
+          connectionId: "tb_1",
+          tumblrTags: ["art", "prints"],
+          tumblrTitle: "Studio notes",
+          tumblrSourceUrl: "https://acme.example/prints",
+          mediaUrls: [],
+          mediaAltTexts: [],
+          previewUrls: [],
+          createdAt: "",
+          updatedAt: "",
+        },
+        {
+          id: "pp_2",
+          platform: "TELEGRAM",
+          status: "PENDING",
+          connectionId: "tg_1",
+          mediaUrls: [],
+          mediaAltTexts: [],
+          previewUrls: [],
+          createdAt: "",
+          updatedAt: "",
+        },
+      ],
+      createdAt: "",
+      updatedAt: "",
+      userId: "u",
+    });
+
+    await run(["post", "update", "post_1", "--alt", "A print", "--print-body"]);
+
+    expect(stdoutJson().data).toEqual({
+      mediaAltTexts: ["A print"],
+      platforms: ["TUMBLR", "TELEGRAM"],
+      tumblrConnectionIds: ["tb_1"],
+      telegramConnectionIds: ["tg_1"],
+      tumblrConfigs: [
+        { connectionId: "tb_1", tags: ["art", "prints"], title: "Studio notes", sourceUrl: "https://acme.example/prints" },
+      ],
+    });
+  });
+
+  it("sends a config_TUMBLR column as the batch tumblrConfigs and refuses a tag with a comma there", async () => {
+    const path = csvPath(
+      [
+        "text,scheduledAt,config_TUMBLR",
+        'Prints,2026-10-19T09:00:00Z,"{""tags"":[""#art"",""prints""],""sourceUrl"":""https://acme.example""}"',
+        "",
+      ].join("\n"),
+    );
+
+    await run(["post", "bulk", "--csv", path, "-a", "tb_1", "--print-body"]);
+
+    const [batch] = stdoutJson().data as Record<string, unknown>[];
+    expect(batch).toMatchObject({
+      platforms: ["TUMBLR"],
+      tumblrConnectionIds: ["tb_1"],
+      tumblrConfigs: [{ connectionId: "tb_1", tags: ["art", "prints"], sourceUrl: "https://acme.example" }],
+    });
+
+    const commas = csvPath(
+      ["text,scheduledAt,config_TUMBLR", 'Prints,2026-10-19T09:00:00Z,"{""tags"":[""art, prints""]}"', ""].join("\n"),
+    );
+    await expect(run(["post", "bulk", "--csv", commas, "-a", "tb_1", "--print-body"])).rejects.toMatchObject({
+      exitCode: 5,
     });
   });
 

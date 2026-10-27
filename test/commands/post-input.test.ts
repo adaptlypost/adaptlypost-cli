@@ -71,6 +71,14 @@ const moreAccounts: SocialAccount[] = [
     status: "active",
   },
   {
+    id: "tb_1",
+    platform: "TUMBLR",
+    displayName: "Acme Studio",
+    username: "acmestudio",
+    avatarUrl: "",
+    status: "active",
+  },
+  {
     id: "gbp_1",
     platform: "GOOGLE_BUSINESS",
     displayName: "Acme Bakery, Main St",
@@ -1007,6 +1015,34 @@ describe("normalizeConfig", () => {
   });
 });
 
+describe("normalizeConfig for TUMBLR", () => {
+  it("strips leading #, trims, drops empty and repeated tags ignoring case", () => {
+    expect(
+      normalizeConfig("TUMBLR", { tags: ["##art", " Art ", "#", "prints"], title: "  Notes  ", sourceUrl: " " }),
+    ).toEqual({ tags: ["art", "prints"], title: "Notes" });
+    expect(normalizeConfig("TUMBLR", { tags: "solo" })).toEqual({ tags: ["solo"] });
+  });
+
+  it("refuses a comma, an unquoted # in YAML, too many tags and text over the limits", () => {
+    expect(exitCodeOf(() => normalizeConfig("TUMBLR", { tags: ["art, prints"] }))).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => normalizeConfig("TUMBLR", { tags: "art,prints" }))).toBe(ExitCode.VALIDATION);
+    expect(() => normalizeConfig("TUMBLR", { tags: [null] })).toThrow(/tag 1 is empty/);
+    expect(
+      exitCodeOf(() => normalizeConfig("TUMBLR", { tags: Array.from({ length: 31 }, (_value, index) => `t${index}`) })),
+    ).toBe(ExitCode.VALIDATION);
+    expect(normalizeConfig("TUMBLR", { tags: [...Array.from({ length: 30 }, (_value, index) => `t${index}`), "T0"] }).tags).toHaveLength(30);
+    expect(exitCodeOf(() => normalizeConfig("TUMBLR", { tags: ["x".repeat(141)] }))).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => normalizeConfig("TUMBLR", { title: "x".repeat(4097) }))).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => normalizeConfig("TUMBLR", { sourceUrl: `https://a.example/${"x".repeat(2048)}` }))).toBe(
+      ExitCode.VALIDATION,
+    );
+  });
+
+  it("refuses a Tumblr config key the API does not read", () => {
+    expect(() => assertConfigKeys("TUMBLR", { tag: ["art"] })).toThrow(/Did you mean "tags"/);
+  });
+});
+
 describe("pickPinterestBoard", () => {
   const board = (id: string, name: string): PinterestBoard => ({ id, name });
   const boards = [
@@ -1088,6 +1124,36 @@ describe("buildPostBody with the new platforms and options", () => {
 
     expect(body.platforms).toEqual(["TELEGRAM"]);
     expect(body.telegramConnectionIds).toEqual(["tg_1"]);
+  });
+
+  it("routes a TUMBLR account to tumblrConnectionIds with the tumblr block of the frontmatter", () => {
+    const input = parsePostInput(
+      [
+        "---",
+        "accounts: [tb_1]",
+        "tumblr:",
+        "  title: Studio notes",
+        "  sourceUrl: https://acme.example/prints",
+        "  tags:",
+        '    - "#art"',
+        "    - ART",
+        "    - risograph prints",
+        "---",
+        "New prints",
+      ].join("\n"),
+    );
+    const body = buildPostBody(input, { accounts: moreAccounts });
+
+    expect(body.platforms).toEqual(["TUMBLR"]);
+    expect(body.tumblrConnectionIds).toEqual(["tb_1"]);
+    expect(body.tumblrConfigs).toEqual([
+      {
+        connectionId: "tb_1",
+        tags: ["art", "risograph prints"],
+        title: "Studio notes",
+        sourceUrl: "https://acme.example/prints",
+      },
+    ]);
   });
 
   it("sends twitterKeepLinks and the extras, and refuses extras for a platform the post skips", () => {

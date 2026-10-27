@@ -10,6 +10,7 @@ export const PLATFORM_TYPES = [
   'YOUTUBE',
   'MASTODON',
   'TELEGRAM',
+  'TUMBLR',
   'GOOGLE_BUSINESS',
 ] as const;
 export type PlatformType = (typeof PLATFORM_TYPES)[number];
@@ -146,6 +147,10 @@ export const INSTAGRAM_AUDIO_VOLUME_MIN = 1;
 export const INSTAGRAM_AUDIO_VOLUME_MAX = 100;
 export const INSTAGRAM_AUDIO_SEARCH_MAX_LENGTH = 100;
 export const PINTEREST_BOARD_NAME_MAX_LENGTH = 180;
+export const TUMBLR_TAGS_MAX = 30;
+export const TUMBLR_TAG_MAX_LENGTH = 140;
+export const TUMBLR_TITLE_MAX_LENGTH = 4096;
+export const TUMBLR_SOURCE_URL_MAX_LENGTH = 2048;
 
 export const INSTAGRAM_AUDIO_TYPES = ['music', 'original_sound'] as const;
 export type InstagramAudioType = (typeof INSTAGRAM_AUDIO_TYPES)[number];
@@ -505,6 +510,13 @@ export interface LinkedInPostConfig {
   documentTitle?: string;
 }
 
+export interface TumblrPostConfig {
+  connectionId: string;
+  tags?: string[];
+  title?: string;
+  sourceUrl?: string;
+}
+
 export interface PostTargets {
   pageIds?: string[];
   tiktokConnectionIds?: string[];
@@ -514,6 +526,7 @@ export interface PostTargets {
   blueskyConnectionIds?: string[];
   mastodonConnectionIds?: string[];
   telegramConnectionIds?: string[];
+  tumblrConnectionIds?: string[];
   googleBusinessConnectionIds?: string[];
   linkedinConnectionIds?: string[];
   pinterestConnectionIds?: string[];
@@ -524,6 +537,7 @@ export interface PostTargets {
   facebookConfigs?: FacebookPostConfig[];
   youtubeConfigs?: YouTubePostConfig[];
   linkedinConfigs?: LinkedInPostConfig[];
+  tumblrConfigs?: TumblrPostConfig[];
   googleBusinessConfigs?: GoogleBusinessPostConfig[];
 }
 
@@ -599,6 +613,9 @@ export interface SocialPostPlatform {
   youtubeCategoryId?: string;
   youtubePlaylistId?: string;
   twitterKeepLinks?: boolean;
+  tumblrTags?: string[];
+  tumblrTitle?: string;
+  tumblrSourceUrl?: string;
   googleBusinessTopicType?: GoogleBusinessTopicType;
   googleBusinessCallToActionType?: GoogleBusinessCallToActionType;
   googleBusinessCallToActionUrl?: string;
@@ -826,6 +843,7 @@ export interface BulkPostInput extends PlatformExtras {
   instagramConfigs?: InstagramPostConfig[];
   facebookConfigs?: FacebookPostConfig[];
   youtubeConfigs?: YouTubePostConfig[];
+  tumblrConfigs?: TumblrPostConfig[];
   googleBusinessConfigs?: GoogleBusinessPostConfig[];
 }
 
