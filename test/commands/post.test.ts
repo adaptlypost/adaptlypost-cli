@@ -396,6 +396,22 @@ describe("post create", () => {
     expect(client.createPost).not.toHaveBeenCalled();
   });
 
+  it("keeps the planned date of a draft created with --draft and --at", async () => {
+    vi.mocked(client.createPost).mockResolvedValue({
+      postId: "post_9c3e1f",
+      queuedPlatforms: [],
+      skippedPlatforms: [],
+      isScheduled: false,
+      scheduledAt: "2027-01-04T09:00:00.000Z",
+    });
+
+    await run(["post", "create", "-t", "hi", "-a", "tw_4d1b", "--at", "2027-01-04T09:00:00Z", "--draft"]);
+
+    expect(client.createPost).toHaveBeenCalledWith(
+      expect.objectContaining({ saveAsDraft: true, scheduledAt: "2027-01-04T09:00:00.000Z" }),
+    );
+  });
+
   it("refuses --repeat with --draft", async () => {
     await expect(
       run(["post", "create", "-t", "hi", "-a", "tw_4d1b", "--at", "2027-01-04T09:00:00Z", "--repeat", "DAILY", "--draft"]),
@@ -597,6 +613,43 @@ describe("post publish", () => {
       timezone: "UTC",
       scheduledAt: "2026-09-20T09:00:00.000Z",
     });
+  });
+
+  it("sends publishNow with --now", async () => {
+    vi.mocked(client.publishDraft).mockResolvedValue({
+      postId: "post_1",
+      queuedPlatforms: ["TWITTER"],
+      isScheduled: false,
+    });
+
+    await run(["post", "publish", "post_1", "--now"]);
+
+    expect(vi.mocked(client.publishDraft).mock.calls.at(-1)).toStrictEqual([
+      "post_1",
+      { timezone: "UTC", publishNow: true },
+    ]);
+  });
+
+  it("sends neither scheduledAt nor publishNow without a flag, so the planned date decides", async () => {
+    vi.mocked(client.publishDraft).mockResolvedValue({
+      postId: "post_1",
+      queuedPlatforms: [],
+      isScheduled: true,
+      scheduledAt: "2026-09-20T09:00:00.000Z",
+    });
+
+    await run(["post", "publish", "post_1"]);
+
+    expect(vi.mocked(client.publishDraft).mock.calls.at(-1)).toStrictEqual(["post_1", { timezone: "UTC" }]);
+  });
+
+  it("refuses --at with --now", async () => {
+    vi.mocked(client.publishDraft).mockClear();
+
+    await expect(
+      run(["post", "publish", "post_1", "--at", "2026-09-20T09:00:00Z", "--now"]),
+    ).rejects.toMatchObject({ exitCode: 2, message: "Pass --at or --now, not both." });
+    expect(client.publishDraft).not.toHaveBeenCalled();
   });
 });
 

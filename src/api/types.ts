@@ -802,6 +802,7 @@ export interface PublishResponse {
 export interface PublishDraftRequest {
   timezone: string;
   scheduledAt?: string;
+  publishNow?: boolean;
 }
 
 export interface RetryFailedPlatformsRequest {

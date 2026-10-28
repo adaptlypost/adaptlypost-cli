@@ -49,6 +49,7 @@ import {
   type PostStatus,
   type PostTargets,
   type PostValidationReport,
+  type PublishDraftRequest,
   type SocialAccount,
   type SocialPost,
   type SocialPostPlatform,
@@ -939,14 +940,21 @@ async function runCreate(options: CreateOptions): Promise<void> {
     success(`Post created  ${formatId(created.postId)}`);
     const entries: [string, string][] = [];
 
-    if (created.scheduledAt) {
+    if (body.saveAsDraft) {
+      entries.push(["status", "DRAFT"]);
+      if (created.scheduledAt) {
+        const date = new Date(created.scheduledAt);
+        entries.push([
+          "planned",
+          `${formatAbsolute(date, { timezone: body.timezone })} (${formatRelative(date)})`,
+        ]);
+      }
+    } else if (created.scheduledAt) {
       const date = new Date(created.scheduledAt);
       entries.push([
         "scheduled",
         `${formatAbsolute(date, { timezone: body.timezone })} (${formatRelative(date)})`,
       ]);
-    } else if (body.saveAsDraft) {
-      entries.push(["status", "DRAFT"]);
     } else {
       entries.push(["publishing", "now"]);
     }
@@ -1296,14 +1304,23 @@ async function runUnschedule(id: string): Promise<void> {
 
 interface PublishOptions extends GlobalOptions {
   at?: string;
+  now?: boolean;
 }
 
 async function runPublish(id: string, options: PublishOptions): Promise<void> {
-  const timezone = resolveTimezone(options.timezone);
-  const scheduledAt =
-    options.at === undefined ? undefined : toIso(parseWhen(options.at, { timezone }));
+  if (options.now && options.at !== undefined) {
+    throw new CliError("Pass --at or --now, not both.", {
+      exitCode: ExitCode.USAGE,
+      hint: "--at schedules the draft, --now publishes it right away",
+    });
+  }
 
-  const published = await publishDraft(id, { timezone, scheduledAt });
+  const timezone = resolveTimezone(options.timezone);
+  const publishDraftRequest: PublishDraftRequest = { timezone };
+  if (options.at !== undefined) publishDraftRequest.scheduledAt = toIso(parseWhen(options.at, { timezone }));
+  if (options.now) publishDraftRequest.publishNow = true;
+
+  const published = await publishDraft(id, publishDraftRequest);
 
   if (isMachine()) {
     printResult("post.publish", published);
@@ -2276,8 +2293,11 @@ export function registerPostCommands(program: Command): void {
 
   post
     .command("publish <id>")
-    .description("Publish a draft now, or schedule it")
-    .option("-s, --at <when>", "Schedule instead of publishing now")
+    .description(
+      "Publish or schedule a draft. Without --at or --now, a draft with a planned date in the future is scheduled for that date, any other draft publishes now",
+    )
+    .option("-s, --at <when>", "Schedule for this time instead of the planned date")
+    .option("--now", "Publish now, even when the draft has a planned date")
     .option("--timezone <tz>", "IANA timezone stored with the post")
     .action(async (id: string, _options: PublishOptions, command: Command) => {
       await runPublish(id, command.optsWithGlobals() as PublishOptions);

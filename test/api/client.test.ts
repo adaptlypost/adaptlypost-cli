@@ -117,6 +117,15 @@ describe('endpoint mapping', () => {
       },
     ],
     [
+      'publishDraft with publishNow',
+      () => client.publishDraft('post_9c3e1f', { timezone: 'UTC', publishNow: true }),
+      {
+        method: 'POST',
+        path: '/social-posts/post_9c3e1f/publish',
+        body: { timezone: 'UTC', publishNow: true },
+      },
+    ],
+    [
       'unschedulePost',
       () => client.unschedulePost('post_9c3e1f'),
       { method: 'POST', path: '/social-posts/post_9c3e1f/unschedule' },
