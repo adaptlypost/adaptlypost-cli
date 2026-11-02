@@ -991,6 +991,14 @@ describe("per-platform options on create, update and bulk", () => {
       status: "active",
     },
     {
+      id: "wp_1",
+      platform: "WORDPRESS",
+      displayName: "Acme Blog",
+      username: "",
+      avatarUrl: "",
+      status: "active",
+    },
+    {
       id: "yt_1",
       platform: "YOUTUBE",
       displayName: "Acme Channel",
@@ -1285,7 +1293,7 @@ describe("per-platform options on create, update and bulk", () => {
     expect(stdoutJson().data).toMatchObject({ platforms: ["TELEGRAM"] });
   });
 
-  it("takes a thumbnail image for a Telegram video and refuses a frame", async () => {
+  it("takes a thumbnail image or a frame for a Telegram video", async () => {
     await run([
       "post",
       "create",
@@ -1305,21 +1313,23 @@ describe("per-platform options on create, update and bulk", () => {
       platformThumbnails: [{ platform: "TELEGRAM", thumbnailUrl: "https://cdn.example/cover.jpg" }],
     });
 
-    await expect(
-      run([
-        "post",
-        "create",
-        "-t",
-        "Clip",
-        "-a",
-        "tg_1",
-        "-m",
-        "https://cdn.example/clip.mp4",
-        "--thumbnail-ms-for",
-        "TELEGRAM=1500",
-        "--print-body",
-      ]),
-    ).rejects.toMatchObject({ exitCode: 5 });
+    written = [];
+    await run([
+      "post",
+      "create",
+      "-t",
+      "Clip",
+      "-a",
+      "tg_1",
+      "-m",
+      "https://cdn.example/clip.mp4",
+      "--thumbnail-ms-for",
+      "TELEGRAM=1500",
+      "--print-body",
+    ]);
+    expect(stdoutJson().data).toMatchObject({
+      platformThumbnails: [{ platform: "TELEGRAM", thumbnailTimestampMs: 1500 }],
+    });
   });
 
   it("sends a Tumblr blog as tumblrConnectionIds with tags, a title and a source link", async () => {
@@ -1374,6 +1384,74 @@ describe("per-platform options on create, update and bulk", () => {
     });
     await expect(
       run(["post", "create", "-t", "Hi", "-a", "tw_4d1b", "--tumblr-title", "Notes", "--print-body"]),
+    ).rejects.toMatchObject({ exitCode: 5 });
+  });
+
+  it("sends a WordPress site as wordpressConnectionIds with a title, an excerpt, categories and tags", async () => {
+    await run([
+      "post",
+      "create",
+      "-t",
+      "We shipped it",
+      "-a",
+      "wp_1",
+      "--wordpress-title",
+      "Launch notes",
+      "--wordpress-excerpt",
+      "What shipped this week",
+      "--wordpress-category",
+      "12",
+      "--wordpress-category",
+      "3",
+      "--wordpress-tag",
+      "release",
+      "--wordpress-tag",
+      "Q4, 2026",
+      "--print-body",
+    ]);
+
+    expect(stdoutJson().data).toMatchObject({
+      platforms: ["WORDPRESS"],
+      wordpressConnectionIds: ["wp_1"],
+      wordpressConfigs: [
+        {
+          connectionId: "wp_1",
+          title: "Launch notes",
+          excerpt: "What shipped this week",
+          categoryIds: [12, 3],
+          tags: ["release", "Q4, 2026"],
+        },
+      ],
+    });
+
+    written = [];
+    await run(["post", "create", "-t", "Hi", "-P", "wp", "--print-body"]);
+    expect(stdoutJson().data).toMatchObject({ platforms: ["WORDPRESS"] });
+  });
+
+  it("refuses a WordPress category that is not an id and a WordPress flag without a WordPress account", async () => {
+    await expect(
+      run(["post", "create", "-t", "Hi", "-a", "wp_1", "--wordpress-category", "News", "--print-body"]),
+    ).rejects.toMatchObject({ exitCode: 5, message: expect.stringContaining("whole numbers") });
+    await expect(
+      run(["post", "create", "-t", "Hi", "-a", "tw_4d1b", "--wordpress-title", "Notes", "--print-body"]),
+    ).rejects.toMatchObject({ exitCode: 5 });
+  });
+
+  it("sends the YouTube audio language, and null for none", async () => {
+    await run(["post", "create", "-t", "Hi", "-a", "yt_1", "-m", "https://cdn/a.mp4", "--yt-audio-language", "pt-BR", "--print-body"]);
+    expect(stdoutJson().data).toMatchObject({
+      youtubeConfigs: [{ connectionId: "yt_1", defaultAudioLanguage: "pt-BR" }],
+    });
+
+    written = [];
+    await run(["post", "create", "-t", "Hi", "-a", "yt_1", "-m", "https://cdn/a.mp4", "--yt-audio-language", "none", "--print-body"]);
+    expect(stdoutJson().data).toMatchObject({
+      youtubeConfigs: [{ connectionId: "yt_1", defaultAudioLanguage: null }],
+    });
+
+    await expect(
+      run(["post", "create", "-t", "Hi", "-a", "yt_1", "-m", "https://cdn/a.mp4", "--yt-audio-language", "Portuguese", "--print-body"]),
     ).rejects.toMatchObject({ exitCode: 5 });
   });
 
@@ -1696,6 +1774,80 @@ describe("per-platform options on create, update and bulk", () => {
       tumblrConfigs: [
         { connectionId: "tb_1", tags: ["art", "prints"], title: "Studio notes", sourceUrl: "https://acme.example/prints" },
       ],
+    });
+  });
+
+  it("resends the WordPress config and the YouTube audio language of a post", async () => {
+    vi.mocked(client.getPost).mockResolvedValue({
+      id: "post_1",
+      status: "SCHEDULED",
+      contentType: "IMAGE",
+      timezone: "UTC",
+      mediaUrls: ["https://cdn/a.png"],
+      platforms: [
+        {
+          id: "pp_1",
+          platform: "WORDPRESS",
+          status: "PENDING",
+          connectionId: "wp_1",
+          wordpressTitle: "Launch notes",
+          wordpressExcerpt: "What shipped",
+          wordpressCategoryIds: [12],
+          wordpressTags: ["release"],
+          mediaUrls: [],
+          mediaAltTexts: [],
+          previewUrls: [],
+          createdAt: "",
+          updatedAt: "",
+        },
+        {
+          id: "pp_2",
+          platform: "YOUTUBE",
+          status: "PENDING",
+          connectionId: "yt_1",
+          youtubeDefaultAudioLanguage: "pt-BR",
+          mediaUrls: [],
+          mediaAltTexts: [],
+          previewUrls: [],
+          createdAt: "",
+          updatedAt: "",
+        },
+      ],
+      createdAt: "",
+      updatedAt: "",
+      userId: "u",
+    });
+
+    await run(["post", "update", "post_1", "--alt", "A photo", "--print-body"]);
+
+    expect(stdoutJson().data).toEqual({
+      mediaAltTexts: ["A photo"],
+      platforms: ["WORDPRESS", "YOUTUBE"],
+      wordpressConnectionIds: ["wp_1"],
+      youtubeConnectionIds: ["yt_1"],
+      wordpressConfigs: [
+        { connectionId: "wp_1", title: "Launch notes", excerpt: "What shipped", categoryIds: [12], tags: ["release"] },
+      ],
+      youtubeConfigs: [{ connectionId: "yt_1", defaultAudioLanguage: "pt-BR" }],
+    });
+  });
+
+  it("sends a config_WORDPRESS column as the batch wordpressConfigs", async () => {
+    const path = csvPath(
+      [
+        "text,scheduledAt,config_WORDPRESS",
+        'Notes,2026-10-19T09:00:00Z,"{""title"":""Launch notes"",""categoryIds"":[12],""tags"":[""release""]}"',
+        "",
+      ].join("\n"),
+    );
+
+    await run(["post", "bulk", "--csv", path, "-a", "wp_1", "--print-body"]);
+
+    const [batch] = stdoutJson().data as Record<string, unknown>[];
+    expect(batch).toMatchObject({
+      platforms: ["WORDPRESS"],
+      wordpressConnectionIds: ["wp_1"],
+      wordpressConfigs: [{ connectionId: "wp_1", title: "Launch notes", categoryIds: [12], tags: ["release"] }],
     });
   });
 

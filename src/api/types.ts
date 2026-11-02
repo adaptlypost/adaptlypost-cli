@@ -11,6 +11,7 @@ export const PLATFORM_TYPES = [
   'MASTODON',
   'TELEGRAM',
   'TUMBLR',
+  'WORDPRESS',
   'GOOGLE_BUSINESS',
 ] as const;
 export type PlatformType = (typeof PLATFORM_TYPES)[number];
@@ -151,6 +152,13 @@ export const TUMBLR_TAGS_MAX = 30;
 export const TUMBLR_TAG_MAX_LENGTH = 140;
 export const TUMBLR_TITLE_MAX_LENGTH = 4096;
 export const TUMBLR_SOURCE_URL_MAX_LENGTH = 2048;
+export const WORDPRESS_TITLE_MAX_LENGTH = 300;
+export const WORDPRESS_EXCERPT_MAX_LENGTH = 1000;
+export const WORDPRESS_CATEGORIES_MAX = 50;
+export const WORDPRESS_TAGS_MAX = 50;
+export const WORDPRESS_TAG_MAX_LENGTH = 100;
+export const YOUTUBE_AUDIO_LANGUAGE_MAX_LENGTH = 35;
+export const YOUTUBE_AUDIO_LANGUAGE_PATTERN = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 
 export const INSTAGRAM_AUDIO_TYPES = ['music', 'original_sound'] as const;
 export type InstagramAudioType = (typeof INSTAGRAM_AUDIO_TYPES)[number];
@@ -197,13 +205,13 @@ export type FirstCommentStatus = (typeof FIRST_COMMENT_STATUSES)[number];
 export type ThumbnailKind = 'image' | 'frame' | 'image-or-frame';
 
 export const THUMBNAIL_KIND_BY_PLATFORM: Partial<Record<PlatformType, ThumbnailKind>> = {
-  YOUTUBE: 'image',
-  FACEBOOK: 'image',
-  LINKEDIN: 'image',
+  YOUTUBE: 'image-or-frame',
+  FACEBOOK: 'image-or-frame',
+  LINKEDIN: 'image-or-frame',
   INSTAGRAM: 'image-or-frame',
   PINTEREST: 'image-or-frame',
   TIKTOK: 'frame',
-  TELEGRAM: 'image',
+  TELEGRAM: 'image-or-frame',
 };
 
 export const YOUTUBE_POST_TYPES = ['VIDEO', 'SHORTS'] as const;
@@ -334,6 +342,16 @@ export interface PinterestBoard {
 
 export interface PinterestBoardsResponse {
   boards: PinterestBoard[];
+}
+
+export interface WordPressCategory {
+  id: number;
+  name: string;
+  parentId: number | null;
+}
+
+export interface WordPressCategoriesResponse {
+  categories: WordPressCategory[];
 }
 
 export type TokenType = 'api_token' | 'oauth';
@@ -503,6 +521,7 @@ export interface YouTubePostConfig {
   aiGenerated?: boolean;
   categoryId?: string;
   playlistId?: string;
+  defaultAudioLanguage?: string | null;
 }
 
 export interface LinkedInPostConfig {
@@ -517,6 +536,14 @@ export interface TumblrPostConfig {
   sourceUrl?: string;
 }
 
+export interface WordPressPostConfig {
+  connectionId: string;
+  title?: string;
+  excerpt?: string;
+  categoryIds?: number[];
+  tags?: string[];
+}
+
 export interface PostTargets {
   pageIds?: string[];
   tiktokConnectionIds?: string[];
@@ -527,6 +554,7 @@ export interface PostTargets {
   mastodonConnectionIds?: string[];
   telegramConnectionIds?: string[];
   tumblrConnectionIds?: string[];
+  wordpressConnectionIds?: string[];
   googleBusinessConnectionIds?: string[];
   linkedinConnectionIds?: string[];
   pinterestConnectionIds?: string[];
@@ -538,6 +566,7 @@ export interface PostTargets {
   youtubeConfigs?: YouTubePostConfig[];
   linkedinConfigs?: LinkedInPostConfig[];
   tumblrConfigs?: TumblrPostConfig[];
+  wordpressConfigs?: WordPressPostConfig[];
   googleBusinessConfigs?: GoogleBusinessPostConfig[];
 }
 
@@ -612,10 +641,15 @@ export interface SocialPostPlatform {
   youtubeAiGenerated?: boolean;
   youtubeCategoryId?: string;
   youtubePlaylistId?: string;
+  youtubeDefaultAudioLanguage?: string | null;
   twitterKeepLinks?: boolean;
   tumblrTags?: string[];
   tumblrTitle?: string;
   tumblrSourceUrl?: string;
+  wordpressTitle?: string;
+  wordpressExcerpt?: string;
+  wordpressCategoryIds?: number[];
+  wordpressTags?: string[];
   googleBusinessTopicType?: GoogleBusinessTopicType;
   googleBusinessCallToActionType?: GoogleBusinessCallToActionType;
   googleBusinessCallToActionUrl?: string;
@@ -845,6 +879,7 @@ export interface BulkPostInput extends PlatformExtras {
   facebookConfigs?: FacebookPostConfig[];
   youtubeConfigs?: YouTubePostConfig[];
   tumblrConfigs?: TumblrPostConfig[];
+  wordpressConfigs?: WordPressPostConfig[];
   googleBusinessConfigs?: GoogleBusinessPostConfig[];
 }
 

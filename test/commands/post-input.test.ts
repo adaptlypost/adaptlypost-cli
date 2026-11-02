@@ -79,6 +79,14 @@ const moreAccounts: SocialAccount[] = [
     status: "active",
   },
   {
+    id: "wp_1",
+    platform: "WORDPRESS",
+    displayName: "Acme Blog",
+    username: "",
+    avatarUrl: "",
+    status: "active",
+  },
+  {
     id: "gbp_1",
     platform: "GOOGLE_BUSINESS",
     displayName: "Acme Bakery, Main St",
@@ -873,7 +881,6 @@ describe("buildPlatformExtras", () => {
       { firstComments: { TWITTER: "x".repeat(281) } },
       { platformThumbnails: { THREADS: { thumbnailUrl: "https://cdn/a.png" } } },
       { platformThumbnails: { TIKTOK: { thumbnailUrl: "https://cdn/a.png" } } },
-      { platformThumbnails: { YOUTUBE: { thumbnailTimestampMs: 10 } } },
       { platformAspectRatios: { FACEBOOK: { aspectRatio: "SQUARE" as const } } },
       { platformAspectRatios: { INSTAGRAM: { aspectRatio: "VERTICAL" as const } } },
       { platformAspectRatios: { INSTAGRAM: { fit: "PAD" as const } } },
@@ -1043,6 +1050,51 @@ describe("normalizeConfig for TUMBLR", () => {
   });
 });
 
+describe("normalizeConfig for WORDPRESS", () => {
+  it("trims text, keeps category ids as numbers and drops empty and repeated tags ignoring case", () => {
+    expect(
+      normalizeConfig("WORDPRESS", {
+        title: "  Launch notes  ",
+        excerpt: " ",
+        categoryIds: [12, "3", 12],
+        tags: ["Release", " release ", "", "Q4, 2026"],
+      }),
+    ).toEqual({ title: "Launch notes", categoryIds: [12, 3], tags: ["Release", "Q4, 2026"] });
+    expect(normalizeConfig("WORDPRESS", { categoryIds: 7, tags: "solo" })).toEqual({ categoryIds: [7], tags: ["solo"] });
+  });
+
+  it("refuses a category id that is not a whole number from 1 and text over the limits", () => {
+    expect(exitCodeOf(() => normalizeConfig("WORDPRESS", { categoryIds: [0] }))).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => normalizeConfig("WORDPRESS", { categoryIds: ["News"] }))).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => normalizeConfig("WORDPRESS", { categoryIds: [1.5] }))).toBe(ExitCode.VALIDATION);
+    expect(
+      exitCodeOf(() => normalizeConfig("WORDPRESS", { categoryIds: Array.from({ length: 51 }, (_value, index) => index + 1) })),
+    ).toBe(ExitCode.VALIDATION);
+    expect(
+      exitCodeOf(() => normalizeConfig("WORDPRESS", { tags: Array.from({ length: 51 }, (_value, index) => `t${index}`) })),
+    ).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => normalizeConfig("WORDPRESS", { tags: ["x".repeat(101)] }))).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => normalizeConfig("WORDPRESS", { title: "x".repeat(301) }))).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => normalizeConfig("WORDPRESS", { excerpt: "x".repeat(1001) }))).toBe(ExitCode.VALIDATION);
+  });
+
+  it("refuses a WordPress config key the API does not read", () => {
+    expect(() => assertConfigKeys("WORDPRESS", { categories: [1] })).toThrow(/Did you mean "categoryIds"/);
+  });
+});
+
+describe("normalizeConfig for the YouTube audio language", () => {
+  it("keeps a language tag and null, and refuses anything else", () => {
+    expect(normalizeConfig("YOUTUBE", { defaultAudioLanguage: " pt-BR " })).toEqual({ defaultAudioLanguage: "pt-BR" });
+    expect(normalizeConfig("YOUTUBE", { defaultAudioLanguage: "es-419" })).toEqual({ defaultAudioLanguage: "es-419" });
+    expect(normalizeConfig("YOUTUBE", { defaultAudioLanguage: null })).toEqual({ defaultAudioLanguage: null });
+    expect(exitCodeOf(() => normalizeConfig("YOUTUBE", { defaultAudioLanguage: "Portuguese" }))).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => normalizeConfig("YOUTUBE", { defaultAudioLanguage: `en-${"a".repeat(40)}` }))).toBe(
+      ExitCode.VALIDATION,
+    );
+  });
+});
+
 describe("pickPinterestBoard", () => {
   const board = (id: string, name: string): PinterestBoard => ({ id, name });
   const boards = [
@@ -1154,6 +1206,43 @@ describe("buildPostBody with the new platforms and options", () => {
         sourceUrl: "https://acme.example/prints",
       },
     ]);
+  });
+
+  it("routes a WORDPRESS account to wordpressConnectionIds with the wordpress block of the frontmatter", () => {
+    const input = parsePostInput(
+      [
+        "---",
+        "accounts: [wp_1]",
+        "wordpress:",
+        "  title: Launch notes",
+        "  excerpt: What shipped this week",
+        "  categoryIds: [12, 3]",
+        "  tags:",
+        "    - release",
+        "    - Release",
+        "---",
+        "We shipped it",
+      ].join("\n"),
+    );
+    const body = buildPostBody(input, { accounts: moreAccounts });
+
+    expect(body.platforms).toEqual(["WORDPRESS"]);
+    expect(body.wordpressConnectionIds).toEqual(["wp_1"]);
+    expect(body.wordpressConfigs).toEqual([
+      {
+        connectionId: "wp_1",
+        title: "Launch notes",
+        excerpt: "What shipped this week",
+        categoryIds: [12, 3],
+        tags: ["release"],
+      },
+    ]);
+  });
+
+  it("sends a frame as the YouTube thumbnail", () => {
+    expect(buildPlatformExtras({ platformThumbnails: { YOUTUBE: { thumbnailTimestampMs: 10 } } })).toEqual({
+      platformThumbnails: [{ platform: "YOUTUBE", thumbnailTimestampMs: 10 }],
+    });
   });
 
   it("sends twitterKeepLinks and the extras, and refuses extras for a platform the post skips", () => {

@@ -25,6 +25,13 @@ import {
   TUMBLR_TAGS_MAX,
   TUMBLR_TAG_MAX_LENGTH,
   TUMBLR_TITLE_MAX_LENGTH,
+  WORDPRESS_CATEGORIES_MAX,
+  WORDPRESS_EXCERPT_MAX_LENGTH,
+  WORDPRESS_TAGS_MAX,
+  WORDPRESS_TAG_MAX_LENGTH,
+  WORDPRESS_TITLE_MAX_LENGTH,
+  YOUTUBE_AUDIO_LANGUAGE_MAX_LENGTH,
+  YOUTUBE_AUDIO_LANGUAGE_PATTERN,
   WEEKDAYS,
   type ContentType,
   type CreatePostRequest,
@@ -125,6 +132,7 @@ export const CONNECTION_FIELD: Record<PlatformType, keyof PostTargets> = {
   YOUTUBE: "youtubeConnectionIds",
   TELEGRAM: "telegramConnectionIds",
   TUMBLR: "tumblrConnectionIds",
+  WORDPRESS: "wordpressConnectionIds",
   GOOGLE_BUSINESS: "googleBusinessConnectionIds",
 };
 
@@ -136,6 +144,7 @@ export const CONFIG_FIELD: Partial<Record<PlatformType, keyof PostTargets>> = {
   YOUTUBE: "youtubeConfigs",
   LINKEDIN: "linkedinConfigs",
   TUMBLR: "tumblrConfigs",
+  WORDPRESS: "wordpressConfigs",
   GOOGLE_BUSINESS: "googleBusinessConfigs",
 };
 
@@ -168,9 +177,11 @@ export const CONFIG_KEYS: Partial<Record<PlatformType, readonly string[]>> = {
     "aiGenerated",
     "categoryId",
     "playlistId",
+    "defaultAudioLanguage",
   ],
   LINKEDIN: ["documentTitle"],
   TUMBLR: ["tags", "title", "sourceUrl"],
+  WORDPRESS: ["title", "excerpt", "categoryIds", "tags"],
   GOOGLE_BUSINESS: [
     "topicType",
     "callToActionType",
@@ -259,6 +270,7 @@ const PLATFORM_ALIASES: Record<string, PlatformType> = {
   tt: "TIKTOK",
   tg: "TELEGRAM",
   tb: "TUMBLR",
+  wp: "WORDPRESS",
   gbp: "GOOGLE_BUSINESS",
   googlebusiness: "GOOGLE_BUSINESS",
   "google-business": "GOOGLE_BUSINESS",
@@ -1593,6 +1605,80 @@ function normalizeTumblrConfig(config: FrontmatterMap): FrontmatterMap {
   });
 }
 
+function normalizeWordPressCategoryIds(value: FrontmatterValue | undefined): number[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  const list = Array.isArray(value) ? value : [value];
+  const ids: number[] = [];
+
+  for (const [index, entry] of list.entries()) {
+    const raw = typeof entry === "number" ? String(entry) : configString(entry, `WORDPRESS category ${index + 1}`)?.trim() ?? "";
+    if (!/^\d+$/.test(raw) || Number(raw) < 1 || !Number.isSafeInteger(Number(raw))) {
+      throw configError(
+        `WordPress category ids are whole numbers from 1 up, got "${raw}".`,
+        "List the site's categories with: adaptlypost accounts wordpress-categories <accountId>",
+      );
+    }
+    const id = Number(raw);
+    if (!ids.includes(id)) ids.push(id);
+  }
+
+  if (ids.length > WORDPRESS_CATEGORIES_MAX) {
+    throw configError(`A WordPress post takes up to ${WORDPRESS_CATEGORIES_MAX} categories, got ${ids.length}.`);
+  }
+  return ids.length > 0 ? ids : undefined;
+}
+
+function normalizeWordPressTags(value: FrontmatterValue | undefined): string[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  const list = Array.isArray(value) ? value : [value];
+  const tags: string[] = [];
+
+  for (const [index, entry] of list.entries()) {
+    const tag = (configString(entry, `WORDPRESS tag ${index + 1}`) ?? "").trim();
+    if (tag === "") continue;
+    if (tag.length > WORDPRESS_TAG_MAX_LENGTH) {
+      throw configError(`The WordPress tag "${tag}" is ${tag.length} characters; the limit is ${WORDPRESS_TAG_MAX_LENGTH}.`);
+    }
+    if (!tags.some((known) => known.toLowerCase() === tag.toLowerCase())) tags.push(tag);
+  }
+
+  if (tags.length > WORDPRESS_TAGS_MAX) {
+    throw configError(`A WordPress post takes up to ${WORDPRESS_TAGS_MAX} tags, got ${tags.length}.`);
+  }
+  return tags.length > 0 ? tags : undefined;
+}
+
+function wordpressText(value: FrontmatterValue | undefined, key: string, limit: number): string | undefined {
+  const text = configString(value, `WORDPRESS ${key}`)?.trim();
+  if (!text) return undefined;
+  if (text.length > limit) {
+    throw configError(`The WordPress ${key} is ${text.length} characters; the limit is ${limit}.`);
+  }
+  return text;
+}
+
+function normalizeWordPressConfig(config: FrontmatterMap): FrontmatterMap {
+  return definedEntries({
+    title: wordpressText(config.title, "title", WORDPRESS_TITLE_MAX_LENGTH),
+    excerpt: wordpressText(config.excerpt, "excerpt", WORDPRESS_EXCERPT_MAX_LENGTH),
+    categoryIds: normalizeWordPressCategoryIds(config.categoryIds),
+    tags: normalizeWordPressTags(config.tags),
+  });
+}
+
+function normalizeYouTubeAudioLanguage(value: FrontmatterValue | undefined): string | null | undefined {
+  if (value === null) return null;
+  const language = configString(value, "YOUTUBE defaultAudioLanguage")?.trim();
+  if (language === undefined) return undefined;
+  if (language.length > YOUTUBE_AUDIO_LANGUAGE_MAX_LENGTH || !YOUTUBE_AUDIO_LANGUAGE_PATTERN.test(language)) {
+    throw configError(
+      `"${language}" is not a language tag YouTube takes.`,
+      "Use a BCP-47 tag such as en, pt-BR or es-419",
+    );
+  }
+  return language;
+}
+
 function normalizePinterestBoardName(value: FrontmatterValue | undefined): string | undefined {
   const raw = configString(value, "PINTEREST boardName");
   if (raw === undefined) return undefined;
@@ -1636,6 +1722,7 @@ export function pickPinterestBoard(boards: readonly PinterestBoard[], name: stri
 export function normalizeConfig(platform: PlatformType, config: FrontmatterMap): FrontmatterMap {
   if (platform === "GOOGLE_BUSINESS") return normalizeGoogleBusinessConfig(config);
   if (platform === "TUMBLR") return normalizeTumblrConfig(config);
+  if (platform === "WORDPRESS") return normalizeWordPressConfig(config);
 
   if (platform === "INSTAGRAM") {
     return definedEntries({
@@ -1652,6 +1739,7 @@ export function normalizeConfig(platform: PlatformType, config: FrontmatterMap):
     return definedEntries({
       ...config,
       aiGenerated: configBoolean(config.aiGenerated, "YOUTUBE aiGenerated"),
+      defaultAudioLanguage: normalizeYouTubeAudioLanguage(config.defaultAudioLanguage),
     });
   }
 

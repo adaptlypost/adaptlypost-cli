@@ -35,6 +35,11 @@ import {
   TUMBLR_TAGS_MAX,
   TUMBLR_TAG_MAX_LENGTH,
   TUMBLR_TITLE_MAX_LENGTH,
+  WORDPRESS_CATEGORIES_MAX,
+  WORDPRESS_EXCERPT_MAX_LENGTH,
+  WORDPRESS_TAGS_MAX,
+  WORDPRESS_TAG_MAX_LENGTH,
+  WORDPRESS_TITLE_MAX_LENGTH,
   type BulkPostInput,
   type BulkSchedulePostsRequest,
   type ContentType,
@@ -214,12 +219,17 @@ interface ContentOptions {
   igTrial?: string;
   ytTitle?: string;
   ytAiGenerated?: boolean;
+  ytAudioLanguage?: string;
   pinterestBoard?: string;
   pinterestBoardName?: string;
   documentTitle?: string;
   tumblrTag: string[];
   tumblrTitle?: string;
   tumblrSourceUrl?: string;
+  wordpressTitle?: string;
+  wordpressExcerpt?: string;
+  wordpressCategory: string[];
+  wordpressTag: string[];
   firstComment: string[];
   thumbnailFor: string[];
   thumbnailMsFor: string[];
@@ -416,6 +426,10 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
 
   if (options.ytTitle !== undefined) mergeConfig("YOUTUBE", { videoTitle: options.ytTitle });
   if (options.ytAiGenerated !== undefined) mergeConfig("YOUTUBE", { aiGenerated: options.ytAiGenerated });
+  if (options.ytAudioLanguage !== undefined) {
+    const language = options.ytAudioLanguage.trim();
+    mergeConfig("YOUTUBE", { defaultAudioLanguage: language.toLowerCase() === "none" ? null : language });
+  }
   if (options.pinterestBoard !== undefined && options.pinterestBoardName !== undefined) {
     throw new CliError("Pass --pinterest-board or --pinterest-board-name, not both.", {
       exitCode: ExitCode.VALIDATION,
@@ -434,6 +448,10 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
   if (options.tumblrTag.length > 0) mergeConfig("TUMBLR", { tags: options.tumblrTag });
   if (options.tumblrTitle !== undefined) mergeConfig("TUMBLR", { title: options.tumblrTitle });
   if (options.tumblrSourceUrl !== undefined) mergeConfig("TUMBLR", { sourceUrl: options.tumblrSourceUrl });
+  if (options.wordpressTitle !== undefined) mergeConfig("WORDPRESS", { title: options.wordpressTitle });
+  if (options.wordpressExcerpt !== undefined) mergeConfig("WORDPRESS", { excerpt: options.wordpressExcerpt });
+  if (options.wordpressCategory.length > 0) mergeConfig("WORDPRESS", { categoryIds: options.wordpressCategory });
+  if (options.wordpressTag.length > 0) mergeConfig("WORDPRESS", { tags: options.wordpressTag });
 
   if (options.igShareToStory !== undefined) mergeConfig("INSTAGRAM", { shareToStory: options.igShareToStory });
   if (options.igCollaborator.length > 0) mergeConfig("INSTAGRAM", { collaborators: options.igCollaborator });
@@ -1057,11 +1075,19 @@ function storedConfig(target: SocialPostPlatform): ConfigEntry | undefined {
         aiGenerated: target.youtubeAiGenerated,
         categoryId: target.youtubeCategoryId,
         playlistId: target.youtubePlaylistId,
+        defaultAudioLanguage: target.youtubeDefaultAudioLanguage,
       });
     case "LINKEDIN":
       return definedOnly({ documentTitle: target.linkedinDocumentTitle });
     case "TUMBLR":
       return definedOnly({ tags: target.tumblrTags, title: target.tumblrTitle, sourceUrl: target.tumblrSourceUrl });
+    case "WORDPRESS":
+      return definedOnly({
+        title: target.wordpressTitle,
+        excerpt: target.wordpressExcerpt,
+        categoryIds: target.wordpressCategoryIds,
+        tags: target.wordpressTags,
+      });
     case "GOOGLE_BUSINESS":
       return target.googleBusinessTopicType === undefined
         ? undefined
@@ -2125,6 +2151,10 @@ const withContentOptions = (command: Command): Command =>
     .option("--yt-title <title>", "YouTube video title")
     .option("--yt-ai-generated", "Disclose altered or synthetic content on the YouTube video, so YouTube shows its label")
     .option(
+      "--yt-audio-language <tag>",
+      "Language spoken in the YouTube video's original audio, as a BCP-47 tag such as en, pt-BR or es-419. Does not turn off automatic dubbing. none clears a saved language",
+    )
+    .option(
       "--pinterest-board <id>",
       "Pinterest board id. Without it or --pinterest-board-name the pin goes to a board named AdaptlyPost. Find ids with: accounts pinterest-boards",
     )
@@ -2145,6 +2175,26 @@ const withContentOptions = (command: Command): Command =>
     .option("--tumblr-title <title>", `Heading shown above the media and the text of the Tumblr post, max ${TUMBLR_TITLE_MAX_LENGTH} characters`)
     .option("--tumblr-source-url <url>", `Source link of the Tumblr post, max ${TUMBLR_SOURCE_URL_MAX_LENGTH} characters`)
     .option(
+      "--wordpress-title <title>",
+      `WordPress post title, max ${WORDPRESS_TITLE_MAX_LENGTH} characters. Defaults to the first line of the text, cut to 100 characters`,
+    )
+    .option(
+      "--wordpress-excerpt <text>",
+      `Summary WordPress shows in post lists and feeds, max ${WORDPRESS_EXCERPT_MAX_LENGTH} characters`,
+    )
+    .option(
+      "--wordpress-category <id>",
+      `WordPress category id, repeatable, up to ${WORDPRESS_CATEGORIES_MAX}. Without it the post goes to the site's default category. Find ids with: accounts wordpress-categories`,
+      collect,
+      [],
+    )
+    .option(
+      "--wordpress-tag <tag>",
+      `WordPress tag name, repeatable, up to ${WORDPRESS_TAGS_MAX}, each up to ${WORDPRESS_TAG_MAX_LENGTH} characters. A tag the site lacks is created when the WordPress user may manage tags`,
+      collect,
+      [],
+    )
+    .option(
       "--first-comment <PLATFORM=text>",
       `Comment posted from the same account right after the post, one flag per platform. Works on ${Object.entries(FIRST_COMMENT_MAX_LENGTH).map(([platform, limit]) => `${platform} (${limit})`).join(", ")}`,
       collect,
@@ -2158,7 +2208,7 @@ const withContentOptions = (command: Command): Command =>
     )
     .option(
       "--thumbnail-ms-for <PLATFORM=ms>",
-      "Video frame to use as one platform's thumbnail, repeatable. INSTAGRAM, PINTEREST, TIKTOK",
+      "Video frame to use as one platform's thumbnail, repeatable. YOUTUBE, FACEBOOK, LINKEDIN, INSTAGRAM, PINTEREST, TELEGRAM, TIKTOK",
       collect,
       [],
     )

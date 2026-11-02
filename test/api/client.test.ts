@@ -41,6 +41,11 @@ describe('endpoint mapping', () => {
       { method: 'GET', path: '/social-accounts/pin_3c1d/pinterest-boards' },
     ],
     [
+      'listWordPressCategories',
+      () => client.listWordPressCategories('wp_7e2a'),
+      { method: 'GET', path: '/social-accounts/wp_7e2a/wordpress-categories' },
+    ],
+    [
       'createUploadUrls',
       () =>
         client.createUploadUrls({

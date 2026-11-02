@@ -251,8 +251,9 @@ Grammar is noun then verb, space-separated. `ls` works wherever `list` does, `rm
 | `accounts remove <id>` | `--yes` | Disconnects the account from the workspace, the same as removing it on the Connectors page. Works on accounts that need reconnecting too. Pending and recurring posts stop publishing to it. For Facebook only that page goes, other pages from the same login stay. Takes the account id or the Facebook page id. Asks first unless you pass `--yes`. Alias `rm` |
 | `accounts instagram-audio <id>` | `--type music\|original_sound`, `--search` | Music and original sounds the Instagram account can add to a reel. `--type` defaults to `music`; without `--search` it lists what is trending. Pass the `AUDIO ID` to `post create --ig-audio`. Only accounts connected through Facebook can add audio, which `accounts view` shows as `reel audio` |
 | `accounts pinterest-boards <id>` | | Every board the Pinterest account can pin to, secret boards included, with its privacy and pin count. Pass the `BOARD ID` to `post create --pinterest-board`, or the `NAME` to `--pinterest-board-name`. A board belongs to one Pinterest account, so list the boards of each account you post to. The API answers 400 when Pinterest refuses the request, usually because the account must be reconnected |
+| `accounts wordpress-categories <id>` | | Every category of the WordPress site, sorted by name, with its id and its parent's id. Pass the `CATEGORY ID` to `post create --wordpress-category`. Alias `wp-categories`. The API answers with an error when the site refuses the request or cannot be reached, and a site that refuses needs reconnecting |
 
-Google Business Profile locations show up as `GOOGLE_BUSINESS` accounts, named after the location and with no handle. Telegram channels and groups show up as `TELEGRAM` accounts, named after the chat, with its public @username as the handle when it has one. `accounts remove` disconnects a Telegram chat like any other account. Tumblr blogs show up as `TUMBLR` accounts, one per blog.
+Google Business Profile locations show up as `GOOGLE_BUSINESS` accounts, named after the location and with no handle. Telegram channels and groups show up as `TELEGRAM` accounts, named after the chat, with its public @username as the handle when it has one. `accounts remove` disconnects a Telegram chat like any other account. Tumblr blogs show up as `TUMBLR` accounts, one per blog. Self-hosted WordPress sites show up as `WORDPRESS` accounts, one per site; connect one on the Connectors page or through a connect link.
 
 ### post
 
@@ -281,15 +282,20 @@ Per-platform flags on `post create` and `post update`:
 | `--ig-trial <graduation>` | `instagramConfigs[].trialGraduation`: `MANUAL` (you share it to followers from the Instagram app) or `SS_PERFORMANCE` (Instagram shares it if it performs well). Video reels only; a story, image or carousel is rejected |
 | `--yt-title <title>` | `youtubeConfigs[].videoTitle` |
 | `--yt-ai-generated` | `youtubeConfigs[].aiGenerated`: disclose altered or synthetic content, such as an AI voice, an AI avatar or realistic footage that was generated or edited. YouTube shows its "Altered or synthetic content" label on the video. Works on videos and Shorts |
+| `--yt-audio-language <tag>` | `youtubeConfigs[].defaultAudioLanguage`, the language spoken in the video's original audio, as a BCP-47 tag such as `en`, `pt-BR` or `es-419`, so YouTube does not treat a Portuguese video as English. Max 35 characters. It does not turn off YouTube's automatic dubbing. `none` sends null, which clears a saved language |
 | `--pinterest-board <id>` | `pinterestConfigs[].boardId`, the board the pin goes to. Optional. Without it the pin goes to a public board named AdaptlyPost, which AdaptlyPost creates on the Pinterest account the first time it is needed. Find ids with `accounts pinterest-boards` |
 | `--pinterest-board-name <name>` | `pinterestConfigs[].boardName`, the board picked by its name on each Pinterest account of the post. The API trims the name, takes the one board with exactly that name, and otherwise the one board with that name in any case. No match, or several, is a 400, and the pin never goes to another board. `--print-body` looks the name up and shows the board's name and id, and exits 5 when no board or several boards match. `--dry-run` reports the same refusal as a `PINTEREST_BOARD_NOT_FOUND` or `PINTEREST_BOARD_AMBIGUOUS` issue. Not with `--pinterest-board` |
 | `--document-title <title>` | `linkedinConfigs[].documentTitle`, the title LinkedIn shows on a DOCUMENT post. Max 100 characters, defaults to the file name, ignored for other content types |
 | `--tumblr-tag <tag>` | `tumblrConfigs[].tags`, repeatable, up to 30 tags of up to 140 characters each. One tag per flag: a tag with a comma exits 5, because Tumblr would split it. A leading `#` is dropped and a repeated tag keeps its first spelling |
 | `--tumblr-title <title>` | `tumblrConfigs[].title`, a heading shown above the media and the text. Max 4096 characters |
 | `--tumblr-source-url <url>` | `tumblrConfigs[].sourceUrl`, the source link of the post. Max 2048 characters |
+| `--wordpress-title <title>` | `wordpressConfigs[].title`. Max 300 characters. Without it the title is the first line of the text, cut to 100 characters |
+| `--wordpress-excerpt <text>` | `wordpressConfigs[].excerpt`, the summary WordPress shows in post lists and feeds. Max 1000 characters |
+| `--wordpress-category <id>` | `wordpressConfigs[].categoryIds`, repeatable, up to 50 category ids of the site. Without it WordPress files the post under the site's default category. Find ids with `accounts wordpress-categories` |
+| `--wordpress-tag <tag>` | `wordpressConfigs[].tags`, repeatable, one tag name per flag, up to 50 tags of up to 100 characters each. A repeated tag keeps its first spelling. A tag the site does not have yet is created when the WordPress user may manage tags, and skipped otherwise |
 | `--first-comment <PLATFORM=text>` | `firstComments`, a comment posted from the same account about 10 seconds after the post goes out (60 on YouTube). One flag per platform: LINKEDIN (1250 characters), TWITTER (280), THREADS (500), BLUESKY (300), MASTODON (500), YOUTUBE (10000), FACEBOOK (8000), INSTAGRAM (2200). Facebook and Instagram stories take none, and a Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect, or its comment fails. A comment that fails never fails the post; `post get` shows its status. On `post update` the flags replace every stored first comment |
 | `--thumbnail-for <PLATFORM=url>` | `platformThumbnails[].thumbnailUrl`, a thumbnail image for one platform of a VIDEO post. YOUTUBE, FACEBOOK, LINKEDIN, INSTAGRAM, PINTEREST, TELEGRAM |
-| `--thumbnail-ms-for <PLATFORM=ms>` | `platformThumbnails[].thumbnailTimestampMs`, a video frame for one platform. INSTAGRAM, PINTEREST, TIKTOK. A platform without either flag uses `--thumbnail` and `--thumbnail-ms` |
+| `--thumbnail-ms-for <PLATFORM=ms>` | `platformThumbnails[].thumbnailTimestampMs`, a video frame for one platform. YOUTUBE, FACEBOOK, LINKEDIN, INSTAGRAM, PINTEREST, TELEGRAM, TIKTOK. When a platform gets both an image and a frame, the image wins, except on TIKTOK, which takes only a frame. A platform without either flag uses `--thumbnail` and `--thumbnail-ms` |
 | `--aspect-ratio <PLATFORM=ratio>` | `platformAspectRatios[].aspectRatio` for IMAGE and CAROUSEL posts: `SQUARE` (1:1), `PORTRAIT` (4:5), `VERTICAL` (9:16) or `LANDSCAPE` (1.91:1). INSTAGRAM takes all but VERTICAL, TIKTOK takes all four |
 | `--fit <PLATFORM=fit>` | `platformAspectRatios[].fit`: `CROP` (the default, cut from the center) or `PAD` (keep the whole image on a blurred fill) |
 | `--ig-share-to-story` | `instagramConfigs[].shareToStory`: also publish the media as a story next to the feed post or reel. The story is its own platform entry and skips the caption, first comment, cover, collaborators, trial and audio. Videos up to 60 seconds |
@@ -309,9 +315,11 @@ Per-platform flags on `post create` and `post update`:
 
 Google Business Profile takes TEXT or IMAGE posts with one JPEG or PNG up to 5 MB and text up to 1500 characters, and has no alt text. A location with no `--gbp-*` flag posts a STANDARD update.
 
-Telegram takes TEXT, IMAGE, VIDEO or CAROUSEL posts: text up to 4096 characters, up to 10 JPEG, PNG or WebP images of 10 MB each, or one MP4 or MOV video up to 50 MB. A caption over 1024 characters goes out as its own message after the media. A video takes a thumbnail image (`--thumbnail-for TELEGRAM=<url>`), not a frame. Telegram has no first comments, aspect ratios, config keys or analytics. `-P tg` is short for `-P TELEGRAM`.
+Telegram takes TEXT, IMAGE, VIDEO or CAROUSEL posts: text up to 4096 characters, up to 10 JPEG, PNG or WebP images of 10 MB each, or one MP4 or MOV video up to 50 MB. A caption over 1024 characters goes out as its own message after the media. A video takes a thumbnail image (`--thumbnail-for TELEGRAM=<url>`) or a video frame (`--thumbnail-ms-for TELEGRAM=<ms>`). Telegram has no first comments, aspect ratios, config keys or analytics. `-P tg` is short for `-P TELEGRAM`.
 
 Tumblr takes TEXT, IMAGE, VIDEO or CAROUSEL posts: text up to 32768 characters, up to 30 JPEG, PNG or GIF images of 10 MB each, or one MP4 video up to 500 MB and 10 minutes. Images keep their `--alt` text. The `--tumblr-*` flags set the tags, a title and a source link for every Tumblr blog of the post; in a file they go in a `tumblr:` block as `tags` (a YAML list, with a tag that starts with `#` in quotes), `title` and `sourceUrl`. Tumblr has no first comments, per-platform thumbnails, aspect ratios or analytics. `-P tb` is short for `-P TUMBLR`.
+
+WordPress publishes the text as the body of a published blog post on a self-hosted site: blank lines start new paragraphs and bare links become clickable. Text goes up to 100,000 characters, with up to 20 media items: images up to 20 MB and video up to 500 MB. The first image is the featured image, and the other images or the video follow the text. Images keep their `--alt` text. The `--wordpress-*` flags set the title, excerpt, categories and tags for every WordPress site of the post; in a file they go in a `wordpress:` block as `title`, `excerpt`, `categoryIds` (a YAML list of ids) and `tags` (a YAML list). WordPress has no first comments, per-platform thumbnails, aspect ratios or analytics. `-P wp` is short for `-P WORDPRESS`.
 
 ```bash
 adaptlypost post create -t "Autumn sale, 20% off" -a gbp_51e0 -m ./sale.png \
@@ -326,7 +334,7 @@ adaptlypost post create -t "Slides from today's talk" -a li_22aa -a tw_4d1b \
   --first-comment "TWITTER=Deck link in the next post"
 ```
 
-Like the other config flags, the Instagram, Facebook, Google Business Profile and Tumblr flags reach the API on `post update` only together with `--platform` or `--account`. `--first-comment`, the thumbnail and aspect ratio flags and `--x-keep-links` work on their own.
+Like the other config flags, the Instagram, Facebook, Google Business Profile, Tumblr and WordPress flags reach the API on `post update` only together with `--platform` or `--account`. `--first-comment`, the thumbnail and aspect ratio flags and `--x-keep-links` work on their own.
 
 Repeat flags, `post create` only:
 
@@ -365,9 +373,10 @@ Per-platform config keys, for `--config`, frontmatter platform blocks and `confi
 | `INSTAGRAM` | `postType`, `shareToStory`, `trialGraduation`, `collaborators`, `userTags` (a list of blocks with `username`, `x` and `y`, or bare usernames), `aiGenerated`, `audio` (an audio id, or a block with `audioId`, `title`, `artist`, `audioVolume`, `videoVolume`) |
 | `TIKTOK` | `privacyLevel`, `title`, `caption`, `allowComments`, `allowDuet`, `allowStitch`, `sendAsDraft`, `aiGenerated`, `brandedContent`, `brandedContentOwnBrand`, `autoAddMusic` |
 | `PINTEREST` | `boardId`, `boardName`, `title`, `link`. Set `boardId` or `boardName`, not both. `boardName` picks the board by its name, the same way `--pinterest-board-name` does. With neither, the pin goes to a board named AdaptlyPost |
-| `YOUTUBE` | `postType`, `videoTitle`, `tags`, `privacyStatus`, `license`, `notifySubscribers`, `allowEmbedding`, `madeForKids`, `aiGenerated`, `categoryId`, `playlistId` |
+| `YOUTUBE` | `postType`, `videoTitle`, `tags`, `privacyStatus`, `license`, `notifySubscribers`, `allowEmbedding`, `madeForKids`, `aiGenerated`, `categoryId`, `playlistId`, `defaultAudioLanguage` |
 | `LINKEDIN` | `documentTitle` |
 | `TUMBLR` | `tags` (a list, one tag per item, no commas), `title`, `sourceUrl` |
+| `WORDPRESS` | `title`, `excerpt`, `categoryIds` (a list of category ids), `tags` (a list, one tag per item) |
 | `GOOGLE_BUSINESS` | `topicType`, `callToActionType`, `callToActionUrl`, `eventTitle`, `eventStart`, `eventEnd`, `offerCouponCode`, `offerRedeemUrl`, `offerTerms`. `topicType` defaults to `STANDARD` |
 
 ### connect
@@ -401,7 +410,7 @@ Per-platform config keys, for `--config`, frontmatter platform blocks and `confi
 | `analytics sync-status` | | Per-account sync and discovery state |
 | `analytics sync` | `--wait` | One run per workspace per ten minutes |
 
-Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, LinkedIn, YouTube, X and Google Business Profile. Google Business Profile reports how often a location was seen, with no per-post numbers. Mastodon, Telegram and Tumblr have no analytics, and `--platform` ignores them. Connecting an account imports its posts from the last 180 days, and a post keeps refreshing for 180 days after it is published.
+Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, LinkedIn, YouTube, X and Google Business Profile. Google Business Profile reports how often a location was seen, with no per-post numbers. Mastodon, Telegram, Tumblr and WordPress have no analytics, and `--platform` ignores them. Connecting an account imports its posts from the last 180 days, and a post keeps refreshing for 180 days after it is published.
 
 ### ai
 

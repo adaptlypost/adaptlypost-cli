@@ -1,19 +1,27 @@
 import { Command } from 'commander';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { checkSocialAccount, listPinterestBoards, listSocialAccounts, removeSocialAccount, searchInstagramAudio } =
-  vi.hoisted(() => ({
-    checkSocialAccount: vi.fn(),
-    listPinterestBoards: vi.fn(),
-    listSocialAccounts: vi.fn(),
-    removeSocialAccount: vi.fn(),
-    searchInstagramAudio: vi.fn(),
-  }));
+const {
+  checkSocialAccount,
+  listPinterestBoards,
+  listSocialAccounts,
+  listWordPressCategories,
+  removeSocialAccount,
+  searchInstagramAudio,
+} = vi.hoisted(() => ({
+  checkSocialAccount: vi.fn(),
+  listPinterestBoards: vi.fn(),
+  listSocialAccounts: vi.fn(),
+  listWordPressCategories: vi.fn(),
+  removeSocialAccount: vi.fn(),
+  searchInstagramAudio: vi.fn(),
+}));
 
 vi.mock('../../src/api/client.js', () => ({
   checkSocialAccount,
   listPinterestBoards,
   listSocialAccounts,
+  listWordPressCategories,
   removeSocialAccount,
   searchInstagramAudio,
 }));
@@ -68,6 +76,7 @@ beforeEach(() => {
   checkSocialAccount.mockReset();
   listPinterestBoards.mockReset();
   listSocialAccounts.mockReset();
+  listWordPressCategories.mockReset();
   removeSocialAccount.mockReset();
   searchInstagramAudio.mockReset();
   setOutputMode('machine');
@@ -85,7 +94,7 @@ beforeEach(() => {
 });
 
 describe('registerAccountCommands', () => {
-  it('registers list, view, check, remove, instagram-audio and pinterest-boards', () => {
+  it('registers list, view, check, remove, instagram-audio, pinterest-boards and wordpress-categories', () => {
     expect(accountsCommand(buildProgram()).commands.map((command) => command.name())).toEqual([
       'list',
       'view',
@@ -93,6 +102,7 @@ describe('registerAccountCommands', () => {
       'remove',
       'instagram-audio',
       'pinterest-boards',
+      'wordpress-categories',
     ]);
   });
 });
@@ -201,6 +211,53 @@ describe('accounts pinterest-boards', () => {
     await expect(run(['pinterest-boards', 'acc_1'])).rejects.toThrow(/no Pinterest boards/);
     await expect(run(['pinterest-boards', 'pin_missing'])).rejects.toThrow(/No account with id/);
     expect(listPinterestBoards).not.toHaveBeenCalled();
+  });
+});
+
+describe('accounts wordpress-categories', () => {
+  const wordpress = (overrides: Partial<SocialAccount> = {}): SocialAccount =>
+    account({ id: 'wp_1', platform: 'WORDPRESS', ...overrides });
+
+  const categories = [
+    { id: 12, name: 'News', parentId: 3 },
+    { id: 3, name: 'Updates', parentId: null },
+  ];
+
+  it('lists the categories of the site and prints the API payload', async () => {
+    listSocialAccounts.mockResolvedValue({ accounts: [wordpress()] });
+    listWordPressCategories.mockResolvedValue({ categories });
+
+    await run(['wp-categories', 'wp_1']);
+
+    expect(listWordPressCategories).toHaveBeenCalledWith('wp_1');
+    expect(JSON.parse(stdout.join(''))).toMatchObject({
+      command: 'accounts.wordpress-categories',
+      data: categories,
+      meta: { total: 2, hasMore: false },
+    });
+  });
+
+  it('prints a table with the category id, name and parent id', async () => {
+    listSocialAccounts.mockResolvedValue({ accounts: [wordpress()] });
+    listWordPressCategories.mockResolvedValue({ categories });
+    setOutputMode('human');
+
+    await run(['wordpress-categories', 'wp_1']);
+
+    const lines = stdout.join('').split('\n');
+    expect(lines[0]).toMatch(/^CATEGORY ID\s+NAME\s+PARENT ID$/);
+    expect(lines[1]).toMatch(/^12\s+News\s+3$/);
+    expect(lines[2]).toMatch(/^3\s+Updates\s+—$/);
+    expect(stdout.join('')).toContain('2 categories');
+    expect(stderr.join('')).toContain('--wordpress-category <categoryId>');
+  });
+
+  it('refuses other platforms and unknown ids before calling the API', async () => {
+    listSocialAccounts.mockResolvedValue({ accounts: [account(), wordpress()] });
+
+    await expect(run(['wordpress-categories', 'acc_1'])).rejects.toThrow(/no WordPress categories/);
+    await expect(run(['wordpress-categories', 'wp_missing'])).rejects.toThrow(/No account with id/);
+    expect(listWordPressCategories).not.toHaveBeenCalled();
   });
 });
 

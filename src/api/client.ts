@@ -34,6 +34,7 @@ import type {
   ListRecurringPostsResponse,
   Me,
   PinterestBoardsResponse,
+  WordPressCategoriesResponse,
   PlatformBreakdownResponse,
   PostResultsResponse,
   PostValidationReport,
@@ -98,6 +99,14 @@ export const listPinterestBoards = (
   request<PinterestBoardsResponse>({
     method: 'GET',
     path: `/social-accounts/${segment(accountId)}/pinterest-boards`,
+  });
+
+export const listWordPressCategories = (
+  accountId: string,
+): Promise<WordPressCategoriesResponse> =>
+  request<WordPressCategoriesResponse>({
+    method: 'GET',
+    path: `/social-accounts/${segment(accountId)}/wordpress-categories`,
   });
 
 export const createUploadUrls = (

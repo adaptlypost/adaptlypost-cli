@@ -4,6 +4,7 @@ import {
   checkSocialAccount,
   listPinterestBoards,
   listSocialAccounts,
+  listWordPressCategories,
   removeSocialAccount,
   searchInstagramAudio,
 } from '../api/client.js';
@@ -20,6 +21,7 @@ import {
   type SocialAccountCheck,
   type SocialAccountRemoval,
   type SocialAccountStatus,
+  type WordPressCategory,
 } from '../api/types.js';
 import {
   CliError,
@@ -426,6 +428,51 @@ const runPinterestBoards = async (id: string): Promise<void> => {
   hint('pin to one: adaptlypost post create --pinterest-board <boardId> or --pinterest-board-name "<name>" …');
 };
 
+const CATEGORY_COLUMNS: Column<WordPressCategory>[] = [
+  { header: 'CATEGORY ID', value: (category) => category.id, align: 'left' },
+  { header: 'NAME', value: (category) => category.name || '—' },
+  { header: 'PARENT ID', value: (category) => category.parentId ?? '—', align: 'right' },
+];
+
+const runWordPressCategories = async (id: string): Promise<void> => {
+  const account = findAccount(await fetchAccounts('Loading account…'), id);
+
+  if (!account) {
+    throw notFoundError(
+      `No account with id "${id}" in this workspace`,
+      'list them with: adaptlypost accounts list --platform WORDPRESS',
+    );
+  }
+
+  if (account.platform !== 'WORDPRESS') {
+    throw usageError(`${account.platform} accounts have no WordPress categories`, 'pass a WORDPRESS account id');
+  }
+
+  const progress = isQuiet() || isMachine() ? null : spinner('Asking the WordPress site…');
+  let categories: WordPressCategory[];
+  try {
+    ({ categories } = await listWordPressCategories(account.id));
+  } finally {
+    progress?.stop();
+  }
+
+  if (isMachine()) {
+    printResult('accounts.wordpress-categories', categories, { total: categories.length, hasMore: false });
+    return;
+  }
+
+  if (categories.length === 0) {
+    print('This WordPress site has no categories.');
+    hint('a post without --wordpress-category goes to the site\'s default category');
+    return;
+  }
+
+  printTable(categories, CATEGORY_COLUMNS);
+  print();
+  print(`${categories.length} ${categories.length === 1 ? 'category' : 'categories'}`);
+  hint('file a post under one: adaptlypost post create --wordpress-category <categoryId> …');
+};
+
 export const registerAccountCommands = (program: Command): void => {
   const accounts = program
     .command('accounts')
@@ -491,5 +538,13 @@ export const registerAccountCommands = (program: Command): void => {
     .description('list the boards a Pinterest account can pin to, secret boards included')
     .action(async (id: string) => {
       await runPinterestBoards(id);
+    });
+
+  accounts
+    .command('wordpress-categories <id>')
+    .alias('wp-categories')
+    .description('list the categories of a WordPress site, to pass their ids to post create --wordpress-category')
+    .action(async (id: string) => {
+      await runWordPressCategories(id);
     });
 };
