@@ -191,7 +191,6 @@ export const ASPECT_RATIOS_BY_PLATFORM: Partial<Record<PlatformType, readonly Me
 export const FIRST_COMMENT_MAX_LENGTH: Partial<Record<PlatformType, number>> = {
   LINKEDIN: 1250,
   TWITTER: 280,
-  THREADS: 500,
   BLUESKY: 300,
   MASTODON: 500,
   YOUTUBE: 10000,

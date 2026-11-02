@@ -878,6 +878,7 @@ describe("buildPlatformExtras", () => {
       { firstComments: { TIKTOK: "hi" } },
       { firstComments: { INSTAGRAM: "x".repeat(2201) } },
       { firstComments: { TWITTER: "   " } },
+      { firstComments: { THREADS: "hi" } },
       { firstComments: { TWITTER: "x".repeat(281) } },
       { platformThumbnails: { THREADS: { thumbnailUrl: "https://cdn/a.png" } } },
       { platformThumbnails: { TIKTOK: { thumbnailUrl: "https://cdn/a.png" } } },
