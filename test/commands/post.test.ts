@@ -1137,6 +1137,28 @@ describe("per-platform options on create, update and bulk", () => {
     });
   });
 
+  it("sends the Facebook AI label from --fb-ai-generated", async () => {
+    await run([
+      "post",
+      "create",
+      "-t",
+      "New reel",
+      "-a",
+      "fb_1",
+      "-m",
+      "https://cdn/reel.mp4",
+      "--config",
+      'FACEBOOK={"postType":"REEL"}',
+      "--fb-share-to-story",
+      "--fb-ai-generated",
+      "--print-body",
+    ]);
+
+    expect(stdoutJson().data).toMatchObject({
+      facebookConfigs: [{ pageId: "fb_1", postType: "REEL", shareToStory: true, aiGenerated: true }],
+    });
+  });
+
   it("builds a Facebook link carousel from --fb-card, implying the carousel layout", async () => {
     await run([
       "post",
@@ -1595,6 +1617,42 @@ describe("per-platform options on create, update and bulk", () => {
     });
   });
 
+  it("resends the Facebook AI label a post already has", async () => {
+    vi.mocked(client.getPost).mockResolvedValue({
+      id: "post_1",
+      status: "SCHEDULED",
+      contentType: "VIDEO",
+      text: "New reel",
+      timezone: "UTC",
+      mediaUrls: ["https://cdn/reel.mp4"],
+      platforms: [
+        {
+          id: "pp_1",
+          platform: "FACEBOOK",
+          status: "PENDING",
+          pageId: "fb_1",
+          facebookPostType: "REEL",
+          facebookAiGenerated: true,
+          mediaUrls: [],
+          mediaAltTexts: [],
+          previewUrls: [],
+          createdAt: "",
+          updatedAt: "",
+        },
+      ],
+      createdAt: "",
+      updatedAt: "",
+      userId: "u",
+    });
+
+    await run(["post", "update", "post_1", "--alt", "A reel", "--print-body"]);
+
+    expect(stdoutJson().data).toMatchObject({
+      platforms: ["FACEBOOK"],
+      facebookConfigs: [{ pageId: "fb_1", postType: "REEL", aiGenerated: true }],
+    });
+  });
+
   it("resends a Facebook carousel layout and its cards", async () => {
     vi.mocked(client.getPost).mockResolvedValue({
       id: "post_1",
@@ -1898,6 +1956,23 @@ describe("per-platform options on create, update and bulk", () => {
       platformTexts: [{ platform: "GOOGLE_BUSINESS", text: "Shorter" }],
       firstComments: [{ platform: "TWITTER", text: "Reply, with a comma" }],
       platformAspectRatios: [{ platform: "INSTAGRAM", aspectRatio: "SQUARE", fit: "PAD" }],
+    });
+  });
+
+  it("reads the Facebook AI label from a config_FACEBOOK column", async () => {
+    const path = csvPath(
+      [
+        "text,scheduledAt,media,config_FACEBOOK",
+        'Reel,2026-10-19T09:00:00Z,https://cdn/reel.mp4,"{""postType"":""REEL"",""aiGenerated"":true}"',
+        "",
+      ].join("\n"),
+    );
+
+    await run(["post", "bulk", "--csv", path, "-a", "fb_1", "--print-body"]);
+
+    const [batch] = stdoutJson().data as Record<string, unknown>[];
+    expect(batch).toMatchObject({
+      facebookConfigs: [{ pageId: "fb_1", postType: "REEL", aiGenerated: true }],
     });
   });
 

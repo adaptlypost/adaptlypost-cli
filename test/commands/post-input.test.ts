@@ -954,6 +954,11 @@ describe("normalizeConfig", () => {
     expect(exitCodeOf(() => normalizeConfig("INSTAGRAM", { aiGenerated: "maybe" }))).toBe(ExitCode.VALIDATION);
   });
 
+  it("reads the Facebook AI label as a boolean", () => {
+    expect(normalizeConfig("FACEBOOK", { aiGenerated: true })).toEqual({ aiGenerated: true });
+    expect(exitCodeOf(() => normalizeConfig("FACEBOOK", { aiGenerated: "maybe" }))).toBe(ExitCode.VALIDATION);
+  });
+
   it("reads the YouTube altered or synthetic content label as a boolean", () => {
     expect(normalizeConfig("YOUTUBE", { aiGenerated: true })).toEqual({ aiGenerated: true });
     expect(exitCodeOf(() => normalizeConfig("YOUTUBE", { aiGenerated: "maybe" }))).toBe(ExitCode.VALIDATION);

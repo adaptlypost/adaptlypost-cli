@@ -492,6 +492,7 @@ export interface FacebookPostConfig {
   textFormatPresetId?: string;
   imageLayout?: FacebookImageLayout;
   carouselCards?: FacebookCarouselCard[];
+  aiGenerated?: boolean;
 }
 
 export interface GoogleBusinessPostConfig {
@@ -628,6 +629,7 @@ export interface SocialPostPlatform {
   facebookTextFormatPresetId?: string;
   facebookImageLayout?: FacebookImageLayout;
   facebookCarouselCards?: FacebookCarouselCard[];
+  facebookAiGenerated?: boolean;
   facebookPageExternalId?: string;
   youtubePostType?: YouTubePostType;
   youtubeVideoTitle?: string;

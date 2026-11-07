@@ -245,6 +245,7 @@ interface ContentOptions {
   igAudioVolume?: string;
   igVideoVolume?: string;
   fbShareToStory?: boolean;
+  fbAiGenerated?: boolean;
   fbTextBackground?: string;
   fbLayout?: string;
   fbCard: string[];
@@ -484,6 +485,7 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
   }
 
   if (options.fbShareToStory !== undefined) mergeConfig("FACEBOOK", { shareToStory: options.fbShareToStory });
+  if (options.fbAiGenerated !== undefined) mergeConfig("FACEBOOK", { aiGenerated: options.fbAiGenerated });
   if (options.fbTextBackground !== undefined) {
     mergeConfig("FACEBOOK", { textFormatPresetId: options.fbTextBackground });
   }
@@ -1025,6 +1027,7 @@ function storedConfig(target: SocialPostPlatform): ConfigEntry | undefined {
           target.facebookImageLayout === "CAROUSEL"
             ? target.facebookCarouselCards?.map((card) => definedOnly({ ...card }))
             : undefined,
+        aiGenerated: target.facebookAiGenerated,
       });
     case "INSTAGRAM":
       return definedOnly({
@@ -2244,6 +2247,10 @@ const withContentOptions = (command: Command): Command =>
     .option("--ig-audio-volume <1-100>", "Volume of the added audio. Defaults to 100")
     .option("--ig-video-volume <1-100>", "Volume of the reel's own sound. Defaults to 100")
     .option("--fb-share-to-story", "Also publish the Facebook media as a story next to the feed post or reel")
+    .option(
+      "--fb-ai-generated",
+      "Disclose that the Facebook video was made or edited with AI, so Facebook shows its AI info label. Reels and video stories only",
+    )
     .option(
       "--fb-text-background <presetId>",
       "Facebook colored text background id, for example 106018623298955. TEXT posts up to 130 characters, no media",
