@@ -2249,7 +2249,7 @@ const withContentOptions = (command: Command): Command =>
     .option("--fb-share-to-story", "Also publish the Facebook media as a story next to the feed post or reel")
     .option(
       "--fb-ai-generated",
-      "Disclose that the Facebook video was made or edited with AI, so Facebook shows its AI info label. Reels and video stories only",
+      "Disclose that the Facebook video was made or edited with AI, so Facebook shows its AI info label. Any video post",
     )
     .option(
       "--fb-text-background <presetId>",
