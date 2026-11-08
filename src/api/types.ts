@@ -201,6 +201,26 @@ export const FIRST_COMMENT_MAX_LENGTH: Partial<Record<PlatformType, number>> = {
 export const FIRST_COMMENT_STATUSES = ['PENDING', 'PUBLISHED', 'FAILED'] as const;
 export type FirstCommentStatus = (typeof FIRST_COMMENT_STATUSES)[number];
 
+export const THREAD_PLATFORMS = ['TWITTER', 'THREADS', 'BLUESKY', 'MASTODON'] as const satisfies readonly PlatformType[];
+export const THREAD_MAX_REPLIES = 25;
+export const THREAD_REPLY_MAX_IMAGES = 4;
+
+/** X Premium accounts and Mastodon instances can allow more, so only the server checks those two. */
+export const THREAD_REPLY_MAX_LENGTH: Partial<Record<PlatformType, number>> = {
+  THREADS: 500,
+  BLUESKY: 300,
+};
+
+export const THREAD_REPLY_USUAL_LENGTH: Record<(typeof THREAD_PLATFORMS)[number], string> = {
+  TWITTER: '280, more on X Premium',
+  THREADS: '500',
+  BLUESKY: '300',
+  MASTODON: "500, or the instance's limit",
+};
+
+export const THREAD_STATUSES = ['PENDING', 'PUBLISHED', 'FAILED'] as const;
+export type ThreadStatus = (typeof THREAD_STATUSES)[number];
+
 export type ThumbnailKind = 'image' | 'frame' | 'image-or-frame';
 
 export const THUMBNAIL_KIND_BY_PLATFORM: Partial<Record<PlatformType, ThumbnailKind>> = {
@@ -418,6 +438,12 @@ export interface PlatformFirstComment {
   text: string;
 }
 
+export interface PlatformThreadReplies {
+  platform: PlatformType;
+  texts: string[];
+  mediaUrls?: string[][];
+}
+
 export interface PlatformThumbnail {
   platform: PlatformType;
   thumbnailUrl?: string;
@@ -432,6 +458,7 @@ export interface PlatformAspectRatio {
 
 export interface PlatformExtras {
   firstComments?: PlatformFirstComment[];
+  threadReplies?: PlatformThreadReplies[];
   platformThumbnails?: PlatformThumbnail[];
   platformAspectRatios?: PlatformAspectRatio[];
 }
@@ -596,6 +623,12 @@ export interface SocialPostPlatform {
   firstCommentId?: string;
   firstCommentError?: string;
   firstCommentPublishedAt?: string;
+  threadReplies?: string[];
+  threadReplyMediaUrls?: string[][];
+  threadStatus?: ThreadStatus;
+  threadReplyIds?: string[];
+  threadError?: string;
+  threadPublishedAt?: string;
   linkedinDocumentTitle?: string;
   pinterestBoardId?: string;
   pinterestTitle?: string;

@@ -2052,6 +2052,233 @@ describe("per-platform options on create, update and bulk", () => {
   });
 });
 
+describe("thread replies", () => {
+  const threadAccounts: SocialAccount[] = [
+    ...accounts,
+    {
+      id: "bs_1",
+      platform: "BLUESKY",
+      displayName: "Acme",
+      username: "acme.bsky.social",
+      avatarUrl: "",
+      status: "active",
+    },
+  ];
+
+  const csvPath = (contents: string): string => {
+    const path = join(workspace, `thread-${Math.random().toString(16).slice(2)}.csv`);
+    writeFileSync(path, contents);
+    return path;
+  };
+
+  beforeEach(() => {
+    vi.mocked(client.listSocialAccounts).mockResolvedValue({ accounts: threadAccounts });
+    vi.mocked(client.createUploadUrls).mockReset();
+    vi.mocked(client.validatePost).mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("adds one reply per --thread-reply flag, keeping commas and = in the text, and images per reply", async () => {
+    await run([
+      "post",
+      "create",
+      "-t",
+      "Opening post",
+      "-a",
+      "tw_4d1b",
+      "-a",
+      "bs_1",
+      "--thread-reply",
+      "X=Second, with a comma = sign",
+      "--thread-reply",
+      "TWITTER=",
+      "--thread-reply",
+      "bluesky=Bluesky reply",
+      "--thread-media",
+      "x:2=https://cdn/a.png",
+      "--thread-media",
+      "TWITTER:2=https://cdn/b.gif",
+      "--print-body",
+    ]);
+
+    expect(stdoutJson().data).toMatchObject({
+      platforms: ["TWITTER", "BLUESKY"],
+      threadReplies: [
+        {
+          platform: "TWITTER",
+          texts: ["Second, with a comma = sign", ""],
+          mediaUrls: [[], ["https://cdn/a.png", "https://cdn/b.gif"]],
+        },
+        { platform: "BLUESKY", texts: ["Bluesky reply"] },
+      ],
+    });
+  });
+
+  it("refuses --thread-media without a matching reply, or in the wrong shape", async () => {
+    await expect(
+      run(["post", "create", "-t", "Hi", "-a", "tw_4d1b", "--thread-reply", "X=One", "--thread-media", "X:2=https://cdn/a.png", "--print-body"]),
+    ).rejects.toMatchObject({ exitCode: 2 });
+    await expect(
+      run(["post", "create", "-t", "Hi", "-a", "tw_4d1b", "--thread-reply", "X=One", "--thread-media", "X=https://cdn/a.png", "--print-body"]),
+    ).rejects.toMatchObject({ exitCode: 2 });
+  });
+
+  it("refuses a thread next to a first comment on the same platform", async () => {
+    await expect(
+      run(["post", "create", "-t", "Hi", "-a", "tw_4d1b", "--thread-reply", "X=One", "--first-comment", "X=Two", "--print-body"]),
+    ).rejects.toMatchObject({ exitCode: 5 });
+  });
+
+  it("uploads a local reply image before the dry run checks the post", async () => {
+    const image = join(workspace, "reply.png");
+    writeFileSync(image, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]));
+    vi.mocked(client.createUploadUrls).mockResolvedValue({
+      urls: [
+        {
+          fileName: "reply.png",
+          uploadUrl: "https://upload.test/reply.png",
+          publicUrl: "https://cdn/reply.png",
+          key: "k",
+          expiresAt: "2026-12-01T00:00:00Z",
+        },
+      ],
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 200 })));
+    vi.mocked(client.validatePost).mockResolvedValue({
+      valid: true,
+      outcome: "PUBLISH_NOW",
+      requiredPermissions: [],
+      issues: [],
+      accounts: [],
+      notChecked: [],
+    });
+
+    await run(["post", "create", "-t", "Hi", "-a", "tw_4d1b", "--thread-reply", "X=", "--thread-media", `X:1=${image}`, "--dry-run"]);
+
+    expect(client.createUploadUrls).toHaveBeenCalledWith({ files: [{ fileName: "reply.png", mimeType: "image/png" }] });
+    expect(client.validatePost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadReplies: [{ platform: "TWITTER", texts: [""], mediaUrls: [["https://cdn/reply.png"]] }],
+      }),
+    );
+  });
+
+  it("sends the threads on update, and --clear-threads as an empty array", async () => {
+    await run(["post", "update", "post_1", "--thread-reply", "BLUESKY=New reply", "--print-body"]);
+    expect(stdoutJson().data).toEqual({ threadReplies: [{ platform: "BLUESKY", texts: ["New reply"] }] });
+
+    written = [];
+    await run(["post", "update", "post_1", "--clear-threads", "--print-body"]);
+    expect(stdoutJson().data).toEqual({ threadReplies: [] });
+
+    await expect(
+      run(["post", "update", "post_1", "--clear-threads", "--thread-reply", "X=Hi", "--print-body"]),
+    ).rejects.toMatchObject({ exitCode: 2 });
+  });
+
+  it("reads numbered thread columns from a bulk CSV, a reply's images split on ;", async () => {
+    const path = csvPath(
+      [
+        "text,scheduledAt,thread1_TWITTER,thread2_TWITTER,threadMedia2_TWITTER,thread1_BLUESKY",
+        'Launch,2026-10-19T09:00:00Z,"Second, with a comma",,https://cdn/a.png;https://cdn/b.png,On Bluesky',
+        "Plain,2026-10-20T09:00:00Z,Only one,,,",
+        "",
+      ].join("\n"),
+    );
+
+    await run(["post", "bulk", "--csv", path, "-a", "tw_4d1b", "-a", "bs_1", "--print-body"]);
+
+    const [batch] = stdoutJson().data as { posts: Record<string, unknown>[] }[];
+    expect(batch?.posts[0]).toMatchObject({
+      threadReplies: [
+        { platform: "TWITTER", texts: ["Second, with a comma", ""], mediaUrls: [[], ["https://cdn/a.png", "https://cdn/b.png"]] },
+        { platform: "BLUESKY", texts: ["On Bluesky"] },
+      ],
+    });
+    expect(batch?.posts[1]).toMatchObject({ threadReplies: [{ platform: "TWITTER", texts: ["Only one"] }] });
+  });
+
+  it("refuses a gap in a row's thread and an unnumbered thread column", async () => {
+    const gap = csvPath(["text,scheduledAt,thread1_TWITTER,thread2_TWITTER", "Hi,2026-10-19T09:00:00Z,,Two", ""].join("\n"));
+    await expect(run(["post", "bulk", "--csv", gap, "-a", "tw_4d1b", "--print-body"])).rejects.toMatchObject({
+      exitCode: 5,
+      message: expect.stringContaining("Row 2"),
+    });
+
+    const unnumbered = csvPath(["text,scheduledAt,thread_TWITTER", "Hi,2026-10-19T09:00:00Z,Two", ""].join("\n"));
+    await expect(run(["post", "bulk", "--csv", unnumbered, "-a", "tw_4d1b", "--print-body"])).rejects.toMatchObject({
+      exitCode: 5,
+    });
+  });
+
+  it("reads threads from --dir files", async () => {
+    const dir = mkdtempSync(join(workspace, "threads-"));
+    writeFileSync(
+      join(dir, "01.md"),
+      ["---", "at: 2026-10-19T09:00:00Z", "bluesky:", "  thread:", "    - Part two", "    - Part three", "---", "Part one", ""].join("\n"),
+    );
+
+    await run(["post", "bulk", "--dir", dir, "-a", "bs_1", "--print-body"]);
+
+    const [batch] = stdoutJson().data as { posts: Record<string, unknown>[] }[];
+    expect(batch?.posts[0]).toMatchObject({
+      threadReplies: [{ platform: "BLUESKY", texts: ["Part two", "Part three"] }],
+    });
+  });
+
+  it("shows each platform's thread status, reply count, images and error in post get", async () => {
+    setOutputMode("human");
+    const target = {
+      platform: "TWITTER" as const,
+      status: "PUBLISHED" as const,
+      connectionId: "tw_4d1b",
+      mediaUrls: [],
+      mediaAltTexts: [],
+      previewUrls: [],
+      createdAt: "2026-10-19T09:00:00Z",
+      updatedAt: "2026-10-19T09:00:00Z",
+    };
+    vi.mocked(client.getPost).mockResolvedValue({
+      id: "post_1",
+      status: "COMPLETED",
+      contentType: "TEXT",
+      text: "Opening post",
+      timezone: "UTC",
+      platforms: [
+        {
+          ...target,
+          id: "pp_1",
+          threadReplies: ["Two", "Three"],
+          threadReplyMediaUrls: [[], ["https://cdn/a.png", "https://cdn/b.png"]],
+          threadStatus: "PUBLISHED",
+          threadReplyIds: ["1", "2"],
+        },
+        {
+          ...target,
+          id: "pp_2",
+          platform: "BLUESKY",
+          connectionId: "bs_1",
+          threadReplies: ["Two", "Three", "Four"],
+          threadReplyMediaUrls: [],
+          threadStatus: "FAILED",
+          threadReplyIds: ["at://1"],
+          threadError: "Rate limited",
+        },
+      ],
+    } as never);
+
+    await run(["post", "get", "post_1"]);
+
+    const out = written.join("");
+    expect(out).toContain("THREAD");
+    expect(out).toContain("PUBLISHED · 2/2 replies sent · 2 images");
+    expect(out).toContain("FAILED · 1/3 replies sent: Rate limited");
+  });
+});
+
 describe("Pinterest boards by name", () => {
   const pinterest: SocialAccount = {
     id: "pin_3c1d",

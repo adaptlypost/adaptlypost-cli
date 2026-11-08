@@ -20,6 +20,10 @@ import {
   PINTEREST_BOARD_NAME_MAX_LENGTH,
   PLATFORM_TYPES,
   RECURRENCE_FREQUENCIES,
+  THREAD_MAX_REPLIES,
+  THREAD_PLATFORMS,
+  THREAD_REPLY_MAX_IMAGES,
+  THREAD_REPLY_MAX_LENGTH,
   THUMBNAIL_KIND_BY_PLATFORM,
   TUMBLR_SOURCE_URL_MAX_LENGTH,
   TUMBLR_TAGS_MAX,
@@ -40,6 +44,7 @@ import {
   type PinterestBoard,
   type PlatformExtras,
   type PlatformText,
+  type PlatformThreadReplies,
   type PlatformType,
   type PostTargets,
   type Recurrence,
@@ -103,10 +108,16 @@ export interface PostInput {
   platformTexts?: Partial<Record<PlatformType, string>>;
   platformConfigs?: Partial<Record<PlatformType, Record<string, FrontmatterValue>>>;
   firstComments?: Partial<Record<PlatformType, string>>;
+  threadReplies?: Partial<Record<PlatformType, ThreadReplyInput[]>>;
   platformThumbnails?: Partial<Record<PlatformType, ThumbnailInput>>;
   platformAspectRatios?: Partial<Record<PlatformType, AspectRatioInput>>;
   twitterKeepLinks?: boolean;
   recurrence?: RecurrenceInput;
+}
+
+export interface ThreadReplyInput {
+  text: string;
+  media: string[];
 }
 
 export interface ThumbnailInput {
@@ -337,6 +348,9 @@ const NUMBER = /^-?\d+(\.\d+)?$/;
 const KEY_LINE = /^([A-Za-z0-9_.-]+)\s*:\s*(.*)$/;
 const LIST_ITEM_KEY = /^[A-Za-z0-9_.-]+\s*:(\s|$)/;
 const BLOCK_LIST_KEYS: readonly string[] = ["carouselCards", "userTags"];
+const THREAD_KEYS: readonly string[] = ["thread", "threadreplies", "replies"];
+const THREAD_ITEM_KEY = /^(text|media|mediaurls|images)\s*:(\s|$)/i;
+const BLOCK_SCALAR_STYLES: readonly string[] = ["|", "|-", ">", ">-"];
 
 export function normalizePlatformName(value: string): PlatformType {
   const raw = value.trim();
@@ -601,7 +615,7 @@ function parseMap(lines: string[], start: number, baseIndent: number): { value: 
 
     const trimmedRest = rest.trim();
 
-    if (trimmedRest === "|" || trimmedRest === "|-" || trimmedRest === ">" || trimmedRest === ">-") {
+    if (BLOCK_SCALAR_STYLES.includes(trimmedRest)) {
       const block = parseBlockScalar(lines, index, trimmedRest);
       map[key] = block.value;
       index = block.next;
@@ -635,7 +649,16 @@ function parseMap(lines: string[], start: number, baseIndent: number): { value: 
         }
         if (indentOf(item) < childIndent || !item.trim().startsWith("-")) break;
         const entry = item.trim().replace(/^-\s*/, "");
-        if (BLOCK_LIST_KEYS.includes(key) && LIST_ITEM_KEY.test(entry)) {
+        if (BLOCK_SCALAR_STYLES.includes(entry)) {
+          const block = parseBlockScalar(lines, index + 1, entry);
+          items.push(block.value);
+          index = block.next;
+          continue;
+        }
+        const mapItem = BLOCK_LIST_KEYS.includes(key)
+          ? LIST_ITEM_KEY.test(entry)
+          : THREAD_KEYS.includes(squash(key)) && THREAD_ITEM_KEY.test(entry);
+        if (mapItem) {
           const entryIndent = indentOf(item) + item.trim().length - entry.length;
           const shifted = [...lines];
           shifted[index] = `${" ".repeat(entryIndent)}${entry}`;
@@ -740,9 +763,15 @@ function platformKey(key: string): PlatformType | undefined {
   return (PLATFORM_TYPES as readonly string[]).includes(upper) ? (upper as PlatformType) : undefined;
 }
 
-const BLOCK_EXTRA_KEYS: Record<string, "firstComment" | "thumbnailUrl" | "thumbnailTimestampMs" | "aspectRatio" | "fit" | "keepLinks"> = {
+const BLOCK_EXTRA_KEYS: Record<
+  string,
+  "firstComment" | "thread" | "thumbnailUrl" | "thumbnailTimestampMs" | "aspectRatio" | "fit" | "keepLinks"
+> = {
   firstcomment: "firstComment",
   comment: "firstComment",
+  thread: "thread",
+  threadreplies: "thread",
+  replies: "thread",
   thumbnail: "thumbnailUrl",
   thumbnailurl: "thumbnailUrl",
   thumbnailms: "thumbnailTimestampMs",
@@ -756,6 +785,53 @@ const BLOCK_EXTRA_KEYS: Record<string, "firstComment" | "thumbnailUrl" | "thumbn
 
 export function setFirstComment(input: PostInput, platform: PlatformType, text: string): void {
   input.firstComments = { ...input.firstComments, [platform]: text };
+}
+
+export function setThreadReplies(input: PostInput, platform: PlatformType, replies: ThreadReplyInput[]): void {
+  input.threadReplies = { ...input.threadReplies, [platform]: replies };
+}
+
+const THREAD_ITEM_MEDIA_KEYS: readonly string[] = ["media", "mediaurls", "images"];
+
+function asThreadReply(value: FrontmatterValue, key: string): ThreadReplyInput {
+  if (value === null) {
+    throw new CliError(`Frontmatter key "${key}" has an empty reply.`, {
+      exitCode: ExitCode.VALIDATION,
+      hint: "Give each reply a text, or a block with text: and media:",
+    });
+  }
+  if (typeof value !== "object" || Array.isArray(value)) return { text: asString(value, key), media: [] };
+
+  const reply: ThreadReplyInput = { text: "", media: [] };
+  for (const [field, fieldValue] of Object.entries(value)) {
+    const label = `${key}.${field}`;
+    if (fieldValue === null) continue;
+    if (squash(field) === "text") {
+      reply.text = asString(fieldValue, label);
+      continue;
+    }
+    if (THREAD_ITEM_MEDIA_KEYS.includes(squash(field))) {
+      reply.media = Array.isArray(fieldValue)
+        ? fieldValue.map((item) => asString(item, label))
+        : [asString(fieldValue, label)];
+      continue;
+    }
+    throw new CliError(`Unknown thread reply key "${label}".`, {
+      exitCode: ExitCode.VALIDATION,
+      hint: "A reply takes text: and media: (a list of image paths or URLs)",
+    });
+  }
+  return reply;
+}
+
+function asThreadReplies(value: FrontmatterValue, key: string): ThreadReplyInput[] {
+  if (!Array.isArray(value)) {
+    throw new CliError(`Frontmatter key "${key}" must be a YAML list, one reply per item.`, {
+      exitCode: ExitCode.VALIDATION,
+      hint: 'Write one reply per line under the key, as in "  - Second post"',
+    });
+  }
+  return value.map((item, index) => asThreadReply(item, `${key}[${index + 1}]`));
 }
 
 export function setPlatformThumbnail(input: PostInput, platform: PlatformType, thumbnail: ThumbnailInput): void {
@@ -789,6 +865,7 @@ function takePlatformExtras(
       continue;
     }
     if (extra === "firstComment") setFirstComment(input, platform, asString(value, label));
+    if (extra === "thread") setThreadReplies(input, platform, asThreadReplies(value, label));
     if (extra === "thumbnailUrl") setPlatformThumbnail(input, platform, { thumbnailUrl: asString(value, label) });
     if (extra === "thumbnailTimestampMs") {
       setPlatformThumbnail(input, platform, { thumbnailTimestampMs: asMilliseconds(value, label) });
@@ -992,6 +1069,10 @@ export function mergePostInput(base: PostInput, override: PostInput): PostInput 
 
   if (base.firstComments || override.firstComments) {
     merged.firstComments = { ...base.firstComments, ...override.firstComments };
+  }
+
+  if (base.threadReplies || override.threadReplies) {
+    merged.threadReplies = { ...base.threadReplies, ...override.threadReplies };
   }
 
   for (const key of ["platformThumbnails", "platformAspectRatios"] as const) {
@@ -1801,7 +1882,66 @@ export function normalizeConfig(platform: PlatformType, config: FrontmatterMap):
 const extraError = (context: string, message: string, hint?: string): CliError =>
   new CliError(`${context}${message}`, { exitCode: ExitCode.VALIDATION, hint });
 
-/** Builds firstComments, platformThumbnails and platformAspectRatios, refusing what the API would 400 on. */
+const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+const graphemeCount = (text: string): number => [...graphemeSegmenter.segment(text)].length;
+
+function buildThreadReplies(
+  platform: PlatformType,
+  replies: readonly ThreadReplyInput[],
+  firstCommentPlatforms: readonly string[],
+  context: string,
+): PlatformThreadReplies {
+  if (!(THREAD_PLATFORMS as readonly string[]).includes(platform)) {
+    throw extraError(context, `${platform} has no threads.`, `Threads work on ${THREAD_PLATFORMS.join(", ")}`);
+  }
+  if (replies.length > THREAD_MAX_REPLIES) {
+    throw extraError(context, `The ${platform} thread has ${replies.length} replies; the limit is ${THREAD_MAX_REPLIES}.`);
+  }
+  if (replies.length > 0 && firstCommentPlatforms.includes(platform)) {
+    throw extraError(
+      context,
+      `${platform} has both a first comment and a thread.`,
+      "Drop the first comment, or make it the first reply of the thread",
+    );
+  }
+
+  const limit = THREAD_REPLY_MAX_LENGTH[platform];
+  const texts = replies.map(({ text, media }, index) => {
+    const position = `Reply ${index + 1} of the ${platform} thread`;
+    const trimmed = text.trim();
+    if (trimmed === "" && media.length === 0) throw extraError(context, `${position} has neither text nor images.`);
+    if (limit !== undefined && graphemeCount(trimmed) > limit) {
+      throw extraError(context, `${position} is ${graphemeCount(trimmed)} characters; the limit is ${limit}.`);
+    }
+    if (media.length > THREAD_REPLY_MAX_IMAGES) {
+      throw extraError(context, `${position} has ${media.length} images; the limit is ${THREAD_REPLY_MAX_IMAGES}.`);
+    }
+    const notImage = media.find((reference) => !guessMimeType(reference).startsWith("image/"));
+    if (notImage !== undefined) {
+      throw extraError(context, `${position} can only carry images, not ${notImage}.`, "Use JPEG, PNG, GIF or WebP images");
+    }
+    return trimmed;
+  });
+
+  const withImages = replies.some(({ media }) => media.length > 0);
+  return { platform, texts, ...(withImages ? { mediaUrls: replies.map(({ media }) => [...media]) } : {}) };
+}
+
+export const threadReplyMediaReferences = (entries: readonly PlatformThreadReplies[] = []): string[] =>
+  entries.flatMap((entry) => entry.mediaUrls?.flat() ?? []);
+
+export const withThreadReplyMediaUrls = (
+  entries: readonly PlatformThreadReplies[],
+  urls: ReadonlyMap<string, string>,
+): PlatformThreadReplies[] =>
+  entries.map((entry) =>
+    entry.mediaUrls
+      ? { ...entry, mediaUrls: entry.mediaUrls.map((media) => media.map((reference) => urls.get(reference) ?? reference)) }
+      : entry,
+  );
+
+/** Builds firstComments, threadReplies, platformThumbnails and platformAspectRatios, refusing what the API would 400 on. */
 export function buildPlatformExtras(input: PostInput, context = ""): PlatformExtras {
   const extras: PlatformExtras = {};
 
@@ -1821,6 +1961,14 @@ export function buildPlatformExtras(input: PostInput, context = ""): PlatformExt
       throw extraError(context, `The ${platform} first comment is ${text.length} characters; the limit is ${limit}.`);
     }
     extras.firstComments = [...(extras.firstComments ?? []), { platform, text }];
+  }
+
+  const firstCommentPlatforms = Object.keys(input.firstComments ?? {});
+  for (const [platform, replies] of Object.entries(input.threadReplies ?? {})) {
+    extras.threadReplies = [
+      ...(extras.threadReplies ?? []),
+      buildThreadReplies(platform as PlatformType, replies ?? [], firstCommentPlatforms, context),
+    ];
   }
 
   for (const [rawPlatform, thumbnail] of Object.entries(input.platformThumbnails ?? {})) {
@@ -1891,7 +2039,12 @@ export function assertExtrasFitPost(
     throw extraError(context, "Per-platform aspect ratios only apply to IMAGE and CAROUSEL posts.");
   }
   if (!platforms) return;
-  const entries = [...(extras.firstComments ?? []), ...(extras.platformThumbnails ?? []), ...(extras.platformAspectRatios ?? [])];
+  const entries = [
+    ...(extras.firstComments ?? []),
+    ...(extras.threadReplies ?? []).filter((entry) => entry.texts.length > 0),
+    ...(extras.platformThumbnails ?? []),
+    ...(extras.platformAspectRatios ?? []),
+  ];
   const stray = entries.find((entry) => !platforms.includes(entry.platform));
   if (stray) {
     throw extraError(context, `This post does not go to ${stray.platform}, so its ${stray.platform} options cannot be sent.`, `Add a ${stray.platform} account with --account <id>`);

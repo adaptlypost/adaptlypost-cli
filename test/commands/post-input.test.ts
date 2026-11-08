@@ -852,6 +852,126 @@ describe("per-platform options in frontmatter", () => {
   });
 });
 
+describe("thread replies in frontmatter", () => {
+  it("reads a platform's thread as a YAML list of texts and text-and-media blocks", () => {
+    const input = parsePostInput(
+      [
+        "---",
+        "twitter:",
+        "  thread:",
+        "    - Second post, with a comma",
+        "    - text: Third post with a chart",
+        "      media: [./chart.png, https://cdn/b.png]",
+        "    - media:",
+        "        - https://cdn/c.gif",
+        "    - Note: a colon stays text",
+        "    - |",
+        "      Two lines",
+        "      of text",
+        "bluesky:",
+        "  threadReplies: [Only one]",
+        "---",
+        "Opening post",
+      ].join("\n"),
+    );
+
+    expect(input.text).toBe("Opening post");
+    expect(input.threadReplies).toEqual({
+      TWITTER: [
+        { text: "Second post, with a comma", media: [] },
+        { text: "Third post with a chart", media: ["./chart.png", "https://cdn/b.png"] },
+        { text: "", media: ["https://cdn/c.gif"] },
+        { text: "Note: a colon stays text", media: [] },
+        { text: "Two lines\nof text\n", media: [] },
+      ],
+      BLUESKY: [{ text: "Only one", media: [] }],
+    });
+    expect(input.platformConfigs).toBeUndefined();
+  });
+
+  it("reads an empty list as a thread to remove", () => {
+    expect(parsePostInput("---\nthreads:\n  thread: []\n---\nHi").threadReplies).toEqual({ THREADS: [] });
+  });
+
+  it("refuses a thread that is not a list, an empty item and an unknown reply key", () => {
+    expect(exitCodeOf(() => parsePostInput("---\nx:\n  thread: Just one\n---\nHi"))).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => parsePostInput("---\nx:\n  thread:\n    - \n---\nHi"))).toBe(ExitCode.VALIDATION);
+    expect(
+      exitCodeOf(() => parsePostInput("---\nx:\n  thread:\n    - text: Hi\n      link: https://a\n---\nHi")),
+    ).toBe(ExitCode.VALIDATION);
+  });
+
+  it("lets the flags replace a platform's thread from the file and keeps the others", () => {
+    const merged = mergePostInput(
+      { threadReplies: { TWITTER: [{ text: "file", media: [] }], BLUESKY: [{ text: "file", media: [] }] } },
+      { threadReplies: { TWITTER: [{ text: "flag", media: [] }] } },
+    );
+    expect(merged.threadReplies).toEqual({
+      TWITTER: [{ text: "flag", media: [] }],
+      BLUESKY: [{ text: "file", media: [] }],
+    });
+  });
+});
+
+describe("buildPlatformExtras threads", () => {
+  it("trims the replies and sends mediaUrls parallel to the texts only when a reply has images", () => {
+    expect(
+      buildPlatformExtras({
+        threadReplies: {
+          TWITTER: [
+            { text: "  Second  ", media: [] },
+            { text: "", media: ["https://cdn/a.png", "./b.webp"] },
+          ],
+          MASTODON: [{ text: "Only text", media: [] }],
+        },
+      }),
+    ).toEqual({
+      threadReplies: [
+        { platform: "TWITTER", texts: ["Second", ""], mediaUrls: [[], ["https://cdn/a.png", "./b.webp"]] },
+        { platform: "MASTODON", texts: ["Only text"] },
+      ],
+    });
+  });
+
+  it("does not hold X and Mastodon replies to 280 and 500 characters, which accounts can raise", () => {
+    const long = [{ text: "x".repeat(600), media: [] }];
+    expect(buildPlatformExtras({ threadReplies: { TWITTER: long, MASTODON: long } }).threadReplies).toHaveLength(2);
+  });
+
+  it("counts an emoji as one character on Bluesky", () => {
+    const replies = [{ text: "👩‍👩‍👧".repeat(300), media: [] }];
+    expect(buildPlatformExtras({ threadReplies: { BLUESKY: replies } }).threadReplies).toHaveLength(1);
+  });
+
+  it("refuses what the API would reject", () => {
+    const reply = (text: string, media: string[] = []) => ({ text, media });
+    const cases = [
+      { threadReplies: { LINKEDIN: [reply("hi")] } },
+      { threadReplies: { TWITTER: [reply("  ")] } },
+      { threadReplies: { BLUESKY: [reply("x".repeat(301))] } },
+      { threadReplies: { THREADS: [reply("x".repeat(501))] } },
+      { threadReplies: { TWITTER: Array.from({ length: 26 }, () => reply("hi")) } },
+      { threadReplies: { TWITTER: [reply("hi", ["a.png", "b.png", "c.png", "d.png", "e.png"])] } },
+      { threadReplies: { TWITTER: [reply("hi", ["https://cdn/clip.mp4"])] } },
+      { threadReplies: { TWITTER: [reply("hi")] }, firstComments: { TWITTER: "hi" } },
+    ];
+    for (const input of cases) {
+      expect(exitCodeOf(() => buildPlatformExtras(input))).toBe(ExitCode.VALIDATION);
+    }
+  });
+
+  it("refuses a thread for a platform the post does not go to", () => {
+    expect(
+      exitCodeOf(() =>
+        buildPostBody(
+          { text: "Hi", accounts: ["tw_4d1b"], threadReplies: { BLUESKY: [{ text: "More", media: [] }] } },
+          { accounts },
+        ),
+      ),
+    ).toBe(ExitCode.VALIDATION);
+  });
+});
+
 describe("buildPlatformExtras", () => {
   it("builds the three arrays, trimming comments and dropping a frame an image-only platform cannot use", () => {
     expect(

@@ -30,6 +30,10 @@ import {
   META_POST_TYPES,
   POST_STATUSES,
   RECURRENCE_FREQUENCIES,
+  THREAD_MAX_REPLIES,
+  THREAD_PLATFORMS,
+  THREAD_REPLY_MAX_IMAGES,
+  THREAD_REPLY_USUAL_LENGTH,
   TIKTOK_PRIVACY_LEVELS,
   TUMBLR_SOURCE_URL_MAX_LENGTH,
   TUMBLR_TAGS_MAX,
@@ -46,6 +50,7 @@ import {
   type PinterestBoard,
   type PinterestPostConfig,
   type PlatformText,
+  type PlatformThreadReplies,
   type PlatformType,
   type PostAccountStatus,
   type PostIssue,
@@ -111,6 +116,7 @@ import {
   buildPostBody,
   buildTargets,
   inferContentTypeFromReferences,
+  isRemoteMedia,
   mergePostInput,
   normalizeAspectRatio,
   normalizeAspectRatioFit,
@@ -125,8 +131,12 @@ import {
   setFirstComment,
   setPlatformAspectRatio,
   setPlatformThumbnail,
+  setThreadReplies,
+  threadReplyMediaReferences,
   uploadLocalMedia,
+  withThreadReplyMediaUrls,
   type PostInput,
+  type ThreadReplyInput,
 } from "./post-input.js";
 import { describeRecurrence } from "./recurring.js";
 
@@ -231,6 +241,8 @@ interface ContentOptions {
   wordpressCategory: string[];
   wordpressTag: string[];
   firstComment: string[];
+  threadReply: string[];
+  threadMedia: string[];
   thumbnailFor: string[];
   thumbnailMsFor: string[];
   aspectRatio: string[];
@@ -293,6 +305,43 @@ function instagramUserTagFromFlag(value: string): Record<string, unknown> {
     });
   }
   return { username, x, y };
+}
+
+function threadMediaFromFlag(value: string): { platform: PlatformType; reply: number; reference: string } {
+  const index = value.indexOf("=");
+  const [platform = "", reply = "", ...rest] = index <= 0 ? [] : value.slice(0, index).split(":");
+  const position = Number(reply);
+  if (platform === "" || rest.length > 0 || !Number.isInteger(position) || position < 1) {
+    throw new CliError(`--thread-media expects PLATFORM:N=path-or-url, got "${value}".`, {
+      exitCode: ExitCode.USAGE,
+      hint: 'N counts the --thread-reply flags of that platform from 1, as in --thread-media "X:2=./chart.png"',
+    });
+  }
+  return { platform: normalizePlatformName(platform), reply: position, reference: value.slice(index + 1) };
+}
+
+function threadRepliesFromOptions(options: ContentOptions): PostInput["threadReplies"] {
+  const threads: Partial<Record<PlatformType, ThreadReplyInput[]>> = {};
+
+  for (const entry of options.threadReply) {
+    const [platform, text] = parsePair(entry, "--thread-reply");
+    const key = normalizePlatformName(platform);
+    threads[key] = [...(threads[key] ?? []), { text, media: [] }];
+  }
+
+  for (const entry of options.threadMedia) {
+    const { platform, reply, reference } = threadMediaFromFlag(entry);
+    const target = threads[platform]?.[reply - 1];
+    if (!target) {
+      throw new CliError(`--thread-media ${platform}:${reply} has no matching reply.`, {
+        exitCode: ExitCode.USAGE,
+        hint: `Give at least ${reply} --thread-reply ${platform}=… flags; use ${platform}= for a reply with images only`,
+      });
+    }
+    target.media.push(reference);
+  }
+
+  return Object.keys(threads).length > 0 ? threads : undefined;
 }
 
 function recurrenceFromOptions(options: ContentOptions): PostInput["recurrence"] {
@@ -532,6 +581,10 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
     setFirstComment(input, normalizePlatformName(platform), text);
   }
 
+  for (const [platform, replies] of Object.entries(threadRepliesFromOptions(options) ?? {})) {
+    setThreadReplies(input, platform as PlatformType, replies ?? []);
+  }
+
   for (const entry of options.thumbnailFor) {
     const [platform, thumbnailUrl] = parsePair(entry, "--thumbnail-for");
     setPlatformThumbnail(input, normalizePlatformName(platform), { thumbnailUrl });
@@ -763,6 +816,21 @@ async function resolveMedia(input: PostInput, quiet: boolean): Promise<string[]>
   }
 }
 
+async function uploadThreadReplyMedia(
+  body: { threadReplies?: PlatformThreadReplies[] },
+  quiet: boolean,
+): Promise<void> {
+  const references = [...new Set(threadReplyMediaReferences(body.threadReplies))].filter(
+    (reference) => !isRemoteMedia(reference),
+  );
+  if (references.length === 0 || !body.threadReplies) return;
+
+  const urls = await withProgress(`Uploading ${references.length} thread image(s)…`, quiet, () =>
+    uploadLocalMedia(references),
+  );
+  body.threadReplies = withThreadReplyMediaUrls(body.threadReplies, urls);
+}
+
 interface ListOptions extends GlobalOptions {
   limit?: string;
   offset?: string;
@@ -895,6 +963,7 @@ async function runView(id: string, options: GlobalOptions): Promise<void> {
     ...(targets.some((target) => target.firstCommentStatus)
       ? [{ header: "FIRST COMMENT", value: firstCommentCell }]
       : []),
+    ...(targets.some((target) => target.threadStatus) ? [{ header: "THREAD", value: threadCell }] : []),
     { header: "ERROR", value: (target) => target.errorMessage ?? "—" },
   ]);
 }
@@ -914,6 +983,21 @@ const firstCommentCell = (target: SocialPostPlatform): string => {
   return target.firstCommentStatus;
 };
 
+const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`;
+
+const threadCell = (target: SocialPostPlatform): string => {
+  if (!target.threadStatus) return "—";
+  const total = target.threadReplies?.length ?? 0;
+  const sent = target.threadReplyIds?.length ?? 0;
+  const images = (target.threadReplyMediaUrls ?? []).reduce((count, urls) => count + urls.length, 0);
+  const summary = [
+    target.threadStatus,
+    `${sent}/${total} ${total === 1 ? "reply" : "replies"} sent`,
+    ...(images > 0 ? [plural(images, "image")] : []),
+  ].join(" · ");
+  return target.threadStatus === "FAILED" && target.threadError ? `${summary}: ${target.threadError}` : summary;
+};
+
 interface CreateOptions extends ContentOptions, GlobalOptions {
   watch?: boolean;
   dryRun?: boolean;
@@ -928,6 +1012,8 @@ async function runCreate(options: CreateOptions): Promise<void> {
   const mediaUrls = options.printBody ? (input.media ?? []) : await resolveMedia(input, quiet);
 
   const body = buildPostBody(input, { accounts, mediaUrls });
+
+  if (!options.printBody) await uploadThreadReplyMedia(body, quiet);
 
   if (options.printBody) {
     const boards = await resolvePinterestBoardNames(pinterestConfigsOf(body), quiet);
@@ -1004,6 +1090,7 @@ async function runCreate(options: CreateOptions): Promise<void> {
 interface UpdateOptions extends ContentOptions, GlobalOptions {
   dryRun?: boolean;
   printBody?: boolean;
+  clearThreads?: boolean;
 }
 
 type ConfigEntry = Record<string, unknown>;
@@ -1192,6 +1279,16 @@ async function runUpdate(id: string, options: UpdateOptions): Promise<void> {
     });
   }
 
+  if (options.clearThreads) {
+    if (Object.keys(input.threadReplies ?? {}).length > 0) {
+      throw new CliError("Pass --clear-threads or the thread replies to keep, not both.", {
+        exitCode: ExitCode.USAGE,
+        hint: "The replies you pass replace every stored thread, so --clear-threads is only needed to remove them all",
+      });
+    }
+    input.threadReplies = {};
+  }
+
   const accounts = (input.accounts ?? []).length > 0 ? await loadAccounts(quiet) : [];
   const mediaUrls = options.media.length > 0 ? await resolveMedia(input, quiet) : [];
 
@@ -1213,6 +1310,7 @@ async function runUpdate(id: string, options: UpdateOptions): Promise<void> {
   if (options.thumbnailMs !== undefined) body.thumbnailTimestampMs = full.thumbnailTimestampMs;
   if (input.twitterKeepLinks !== undefined) body.twitterKeepLinks = input.twitterKeepLinks;
   if (input.firstComments !== undefined) body.firstComments = full.firstComments;
+  if (input.threadReplies !== undefined) body.threadReplies = full.threadReplies ?? [];
   if (input.platformThumbnails !== undefined) body.platformThumbnails = full.platformThumbnails;
   if (input.platformAspectRatios !== undefined) body.platformAspectRatios = full.platformAspectRatios;
 
@@ -1258,9 +1356,11 @@ async function runUpdate(id: string, options: UpdateOptions): Promise<void> {
   if (Object.keys(body).length === 0) {
     throw new CliError("Nothing to update.", {
       exitCode: ExitCode.USAGE,
-      hint: "Pass at least one of --text, --file, --at, --timezone, --type, --thumbnail, --alt, --first-comment, --thumbnail-for, --aspect-ratio, --x-keep-links or --platform",
+      hint: "Pass at least one of --text, --file, --at, --timezone, --type, --thumbnail, --alt, --first-comment, --thread-reply, --clear-threads, --thumbnail-for, --aspect-ratio, --x-keep-links or --platform",
     });
   }
+
+  if (!options.dryRun && !options.printBody) await uploadThreadReplyMedia(body, quiet);
 
   if (options.dryRun || options.printBody) {
     const boards = await resolvePinterestBoardNames(pinterestConfigsOf(body), quiet);
@@ -1607,17 +1707,37 @@ function refuseDocumentRows(rows: BulkRow[]): void {
   }
 }
 
-const PLATFORM_COLUMN_PREFIXES = ["text", "config", "firstComment", "thumbnail", "thumbnailMs", "aspectRatio", "fit"] as const;
+const PLATFORM_COLUMN_PREFIXES = [
+  "text",
+  "config",
+  "firstComment",
+  "thread",
+  "threadMedia",
+  "thumbnail",
+  "thumbnailMs",
+  "aspectRatio",
+  "fit",
+] as const;
 type PlatformColumnPrefix = (typeof PLATFORM_COLUMN_PREFIXES)[number];
 
-const PLATFORM_COLUMN = /^([A-Za-z]+)_([A-Za-z_]+)$/;
+const NUMBERED_COLUMN_PREFIXES: readonly PlatformColumnPrefix[] = ["thread", "threadMedia"];
 
-function platformColumn(header: string): { prefix: PlatformColumnPrefix; platform: string } | undefined {
+const PLATFORM_COLUMN = /^([A-Za-z]+?)(\d*)_([A-Za-z_]+)$/;
+
+function platformColumn(
+  header: string,
+): { prefix: PlatformColumnPrefix; platform: string; reply: number } | undefined {
   const match = PLATFORM_COLUMN.exec(header);
   const prefix = match?.[1] as PlatformColumnPrefix | undefined;
   if (!match || !prefix || !PLATFORM_COLUMN_PREFIXES.includes(prefix)) return undefined;
-  return { prefix, platform: match[2] ?? "" };
+  const reply = Number(match[2] || 0);
+  const numbered = NUMBERED_COLUMN_PREFIXES.includes(prefix);
+  if (numbered !== reply > 0 || reply > THREAD_MAX_REPLIES) return undefined;
+  return { prefix, platform: match[3] ?? "", reply };
 }
+
+const columnPattern = (prefix: PlatformColumnPrefix): string =>
+  NUMBERED_COLUMN_PREFIXES.includes(prefix) ? `${prefix}<N>_<PLATFORM>` : `${prefix}_<PLATFORM>`;
 
 function readBulkColumns(headers: string[]): void {
   const unknown = headers.filter((header) => !CORE_COLUMNS.has(header) && !platformColumn(header));
@@ -1625,7 +1745,7 @@ function readBulkColumns(headers: string[]): void {
   if (unknown.length > 0) {
     throw new CliError(`Unknown CSV column(s): ${unknown.join(", ")}.`, {
       exitCode: ExitCode.VALIDATION,
-      hint: `Known columns: ${[...CORE_COLUMNS].join(", ")}, ${PLATFORM_COLUMN_PREFIXES.map((prefix) => `${prefix}_<PLATFORM>`).join(", ")}`,
+      hint: `Known columns: ${[...CORE_COLUMNS].join(", ")}, ${PLATFORM_COLUMN_PREFIXES.map(columnPattern).join(", ")} (N from 1 to ${THREAD_MAX_REPLIES})`,
     });
   }
 }
@@ -1676,6 +1796,15 @@ function bulkRowFromRecord(
   const platformTexts: PlatformText[] = [];
   const configs: PostInput["platformConfigs"] = {};
   const extrasInput: PostInput = {};
+  const threadCells = new Map<PlatformType, Map<number, ThreadReplyInput>>();
+
+  const replyCell = (platform: PlatformType, reply: number): ThreadReplyInput => {
+    const cells = threadCells.get(platform) ?? new Map<number, ThreadReplyInput>();
+    threadCells.set(platform, cells);
+    const cell = cells.get(reply) ?? { text: "", media: [] };
+    cells.set(reply, cell);
+    return cell;
+  };
 
   for (const [column, value] of Object.entries(record)) {
     if (value.trim() === "") continue;
@@ -1691,6 +1820,16 @@ function bulkRowFromRecord(
 
     if (target.prefix === "firstComment") {
       setFirstComment(extrasInput, platform, value);
+      continue;
+    }
+
+    if (target.prefix === "thread") {
+      replyCell(platform, target.reply).text = value;
+      continue;
+    }
+
+    if (target.prefix === "threadMedia") {
+      replyCell(platform, target.reply).media = splitList(value);
       continue;
     }
 
@@ -1751,6 +1890,21 @@ function bulkRowFromRecord(
       });
     }
     item.thumbnailTimestampMs = ms;
+  }
+
+  for (const [platform, cells] of threadCells) {
+    const last = Math.max(...cells.keys());
+    const replies = Array.from({ length: last }, (_unused, index) => {
+      const cell = cells.get(index + 1);
+      if (!cell) {
+        throw new CliError(`Row ${line}: thread${index + 1}_${platform} is empty, but thread${last}_${platform} is not.`, {
+          exitCode: ExitCode.VALIDATION,
+          hint: "Number the replies of a row from 1 without gaps",
+        });
+      }
+      return cell;
+    });
+    setThreadReplies(extrasInput, platform, replies);
   }
 
   const extras = buildPlatformExtras(extrasInput, `Row ${line}: `);
@@ -1876,7 +2030,9 @@ async function runBulk(options: BulkOptions): Promise<void> {
 
   if (!isMachine()) print(`Read ${rows.length} rows from ${sourceLabel}`);
 
-  const references = [...new Set(rows.flatMap((row) => row.mediaRefs))];
+  const references = [
+    ...new Set(rows.flatMap((row) => [...row.mediaRefs, ...threadReplyMediaReferences(row.item.threadReplies)])),
+  ];
   const uploaded =
     references.length === 0 || options.printBody
       ? new Map<string, string>()
@@ -1890,6 +2046,7 @@ async function runBulk(options: BulkOptions): Promise<void> {
         })();
 
   for (const row of rows) {
+    if (row.item.threadReplies) row.item.threadReplies = withThreadReplyMediaUrls(row.item.threadReplies, uploaded);
     if (row.mediaRefs.length === 0) continue;
     const urls = row.mediaRefs.map((reference) => uploaded.get(reference) ?? reference);
     row.item.mediaUrls = urls;
@@ -2204,6 +2361,18 @@ const withContentOptions = (command: Command): Command =>
       [],
     )
     .option(
+      "--thread-reply <PLATFORM=text>",
+      `One reply of a thread, repeatable: each flag adds the next reply on PLATFORM, posted from the same account under the one before. Everything after the first = is the text, commas included; PLATFORM= alone makes a reply that only carries images. ${THREAD_PLATFORMS.map((platform) => `${platform} (${THREAD_REPLY_USUAL_LENGTH[platform]})`).join(", ")}, up to ${THREAD_MAX_REPLIES} replies. Not on a platform that has --first-comment. On update the threads you pass replace every stored thread`,
+      collect,
+      [],
+    )
+    .option(
+      "--thread-media <PLATFORM:N=path|url>",
+      `Image for reply N of PLATFORM's --thread-reply flags, counted from 1, repeatable, up to ${THREAD_REPLY_MAX_IMAGES} per reply, as in --thread-media "X:2=./chart.png". JPEG, PNG or WebP files are uploaded first; a GIF must be an https URL`,
+      collect,
+      [],
+    )
+    .option(
       "--thumbnail-for <PLATFORM=url>",
       "Video thumbnail image for one platform, repeatable. YOUTUBE, FACEBOOK, LINKEDIN, INSTAGRAM, PINTEREST, TELEGRAM",
       collect,
@@ -2334,6 +2503,7 @@ export function registerPostCommands(program: Command): void {
 
   withContentOptions(post.command("update <id>"))
     .description("Update a draft or scheduled post. A scheduled post cannot move into the past")
+    .option("--clear-threads", "Remove every thread from the post")
     .option("--dry-run", "Print the request body and exit")
     .option("--print-body", "Print the request body and exit")
     .action(async (id: string, _options: UpdateOptions, command: Command) => {

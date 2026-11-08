@@ -140,7 +140,7 @@ Shipping the CLI today. Schedule, publish and check results without
 leaving your terminal.
 ```
 
-A platform block takes the platform's text and config keys plus a few options of its own: `firstComment`, `thumbnail` (an image URL), `thumbnailMs` (a video frame), `aspectRatio` with `fit`, and `keepLinks` in the `twitter:` block. On LinkedIn, mention a company page in the text with `@[Page Name](urn:li:organization:<id>)`, using the page name exactly as LinkedIn shows it.
+A platform block takes the platform's text and config keys plus a few options of its own: `firstComment`, `thread` (see below), `thumbnail` (an image URL), `thumbnailMs` (a video frame), `aspectRatio` with `fit`, and `keepLinks` in the `twitter:` block. On LinkedIn, mention a company page in the text with `@[Page Name](urn:li:organization:<id>)`, using the page name exactly as LinkedIn shows it.
 
 ```markdown
 ---
@@ -165,6 +165,27 @@ google_business:
   callToActionUrl: https://acme.example/open-day
 ---
 Open day on Saturday. Come and taste the new bread.
+```
+
+**Threads.** A `thread:` list in a `twitter:`, `threads:`, `bluesky:` or `mastodon:` block turns the post into a thread on that platform. The post opens it, and each list item goes out from the same account as a reply to the one before, up to 25 replies. An item is either the reply's text, or a block with `text:` and `media:`, a list of up to 4 JPEG, PNG, GIF or WebP images (local files are uploaded first, a GIF has to be an https URL). A reply with images may leave out `text:`. Use `- |` for a reply over several lines. Write a reply that contains ` #` (a hashtag after a space) in quotes or as `- |`, because YAML reads the rest of the line as a comment. A platform can have a thread or a `firstComment`, not both. `threadReplies:` and `replies:` work as names for the list too.
+
+```markdown
+---
+accounts: [tw_4d1b, bs_19aa]
+twitter:
+  thread:
+    - Here is what changed, in three parts.
+    - text: The new upload flow, before and after
+      media: [./before.png, ./after.png]
+    - media: [https://cdn.acme.example/demo.gif]
+    - |
+      Release notes: https://acme.example/changelog
+      #buildinpublic
+bluesky:
+  thread:
+    - "Shorter on Bluesky. #buildinpublic"
+---
+We shipped the new upload flow today.
 ```
 
 A Facebook link carousel takes one card per image, in the same order as `media:`:
@@ -228,6 +249,8 @@ until: 2026-12-31
 | `text_<PLATFORM>` | `platformTexts` |
 | `config_<PLATFORM>` | The platform's config, as a JSON object. Rows with different configs go out as separate requests |
 | `firstComment_<PLATFORM>` | `firstComments`, the whole cell as one comment |
+| `thread<N>_<PLATFORM>` | Reply N of the platform's thread in `threadReplies`, the whole cell as its text, N from 1 to 25. Number a row's replies from 1 without gaps; rows can have threads of different lengths |
+| `threadMedia<N>_<PLATFORM>` | The images of reply N (`;`-separated, up to 4). A reply with images can leave its `thread<N>_<PLATFORM>` cell empty |
 | `thumbnail_<PLATFORM>` | `platformThumbnails[].thumbnailUrl` |
 | `thumbnailMs_<PLATFORM>` | `platformThumbnails[].thumbnailTimestampMs` |
 | `aspectRatio_<PLATFORM>` | `platformAspectRatios[].aspectRatio`: `SQUARE`, `PORTRAIT`, `VERTICAL` or `LANDSCAPE` |
@@ -261,8 +284,8 @@ Google Business Profile locations show up as `GOOGLE_BUSINESS` accounts, named a
 |---|---|---|
 | `post create` | `-t/--text`, `-f/--file`, `-P/--platform`, `-a/--account`, `-m/--media`, `--alt`, `--type`, `-s/--at`, `--timezone`, `--draft`, `--repeat`, `--every`, `--on` (repeatable), `--until`, `--count`, `--watch`, `--dry-run`, `--print-body` | `-` on `--text` or `--file` reads stdin. `--alt` is the alt text for the `--media` image at the same position. `--type` is `TEXT`, `IMAGE`, `VIDEO`, `CAROUSEL` or `DOCUMENT`, inferred from `--media` when omitted. `--repeat` needs `--at`. `--draft` with `--at` saves a draft with that planned date, and `post publish` later schedules it for that date. `--dry-run` sends the post to `POST /social-posts/validate`, which runs every check a real create runs plus the ones that usually fail at publish time, and creates nothing. It prints one line per account with its problems and exits 5 when the post would be refused. Local media is uploaded first so the server can inspect it. `--print-body` prints the request body without contacting the server |
 | `post list` | `--status`, `--platform`, `--from`, `--to`, `--sort`, `--limit`, `--offset`, `--all` | |
-| `post get <id>` | | Post header plus one row per platform. A story shared next to an Instagram or Facebook post shows as its own `story` row, and a `FIRST COMMENT` column appears when any platform has one |
-| `post update <id>` | Same as `create` minus `--draft`, `--watch` and the repeat flags | `--platform` replaces every target on the post, so it confirms first. The API saves alt text only when the targets are sent too, so `--alt` (or `alt:` in `--file`) without `--platform` reads the post first and sends its current targets back unchanged. Moving a scheduled post more than a minute into the past fails with a 400 |
+| `post get <id>` | | Post header plus one row per platform. A story shared next to an Instagram or Facebook post shows as its own `story` row, and a `FIRST COMMENT` column appears when any platform has one. A `THREAD` column appears when any platform has a thread: its status (`PENDING`, `PUBLISHED` or `FAILED`), how many replies went out, how many images the replies carry, and why it stopped, as in `FAILED · 1/3 replies sent: <error>`. `--json` returns `threadReplies`, `threadReplyMediaUrls`, `threadStatus`, `threadReplyIds`, `threadError` and `threadPublishedAt` per platform |
+| `post update <id>` | Same as `create` minus `--draft`, `--watch` and the repeat flags, plus `--clear-threads` | `--platform` replaces every target on the post, so it confirms first. Thread replies sent on update replace every stored thread, so resend the thread of each platform you want to keep; `--clear-threads` removes them all, and `thread: []` in a platform block of `--file` sends that platform's thread as empty. The API saves alt text only when the targets are sent too, so `--alt` (or `alt:` in `--file`) without `--platform` reads the post first and sends its current targets back unchanged. Moving a scheduled post more than a minute into the past fails with a 400 |
 | `post delete <id>` | `--yes` | |
 | `post results <id>` | | The only source of truth for what published |
 | `post retry <id>` | `--platform-id` (repeatable), `-P, --platform` (repeatable), `--failed` | No flags retries every FAILED platform server-side. `--platform BLUESKY` retries every failed entry of that platform. `--failed` resolves the ids locally first |
@@ -294,6 +317,8 @@ Per-platform flags on `post create` and `post update`:
 | `--wordpress-category <id>` | `wordpressConfigs[].categoryIds`, repeatable, up to 50 category ids of the site. Without it WordPress files the post under the site's default category. Find ids with `accounts wordpress-categories` |
 | `--wordpress-tag <tag>` | `wordpressConfigs[].tags`, repeatable, one tag name per flag, up to 50 tags of up to 100 characters each. A repeated tag keeps its first spelling. A tag the site does not have yet is created when the WordPress user may manage tags, and skipped otherwise |
 | `--first-comment <PLATFORM=text>` | `firstComments`, a comment posted from the same account about 10 seconds after the post goes out (60 on YouTube). One flag per platform: LINKEDIN (1250 characters), TWITTER (280), BLUESKY (300), MASTODON (500), YOUTUBE (10000), FACEBOOK (8000), INSTAGRAM (2200). Facebook and Instagram stories take none, and a Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect, or its comment fails. A comment that fails never fails the post; `post get` shows its status. On `post update` the flags replace every stored first comment |
+| `--thread-reply <PLATFORM=text>` | `threadReplies`, which turns the post into a thread: the post opens it, and each reply goes out from the same account under the one before, starting about 10 seconds after the post publishes. Repeat the flag once per reply, in order, as in `--thread-reply "X=Second post" --thread-reply "X=Third post"`. Everything after the first `=` is the text, commas and `=` included. `X=` with nothing after it is a reply that only carries images. TWITTER (280 characters per reply, more on X Premium), THREADS (500), BLUESKY (300), MASTODON (500, or the instance's limit), up to 25 replies per platform. A platform with `--first-comment` cannot have a thread too. A thread that fails never fails the post; `post get` shows its status. On `post update` the flags replace every stored thread |
+| `--thread-media <PLATFORM:N=path\|url>` | `threadReplies[].mediaUrls`, an image for reply N of that platform's `--thread-reply` flags, counted from 1. Repeat it for each image, up to 4 per reply, as in `--thread-media "X:2=./chart.png"`. JPEG, PNG, GIF or WebP; local JPEG, PNG and WebP files are uploaded first, and a GIF has to be an https URL. No videos |
 | `--thumbnail-for <PLATFORM=url>` | `platformThumbnails[].thumbnailUrl`, a thumbnail image for one platform of a VIDEO post. YOUTUBE, FACEBOOK, LINKEDIN, INSTAGRAM, PINTEREST, TELEGRAM |
 | `--thumbnail-ms-for <PLATFORM=ms>` | `platformThumbnails[].thumbnailTimestampMs`, a video frame for one platform. YOUTUBE, FACEBOOK, LINKEDIN, INSTAGRAM, PINTEREST, TELEGRAM, TIKTOK. When a platform gets both an image and a frame, the image wins, except on TIKTOK, which takes only a frame. A platform without either flag uses `--thumbnail` and `--thumbnail-ms` |
 | `--aspect-ratio <PLATFORM=ratio>` | `platformAspectRatios[].aspectRatio` for IMAGE and CAROUSEL posts: `SQUARE` (1:1), `PORTRAIT` (4:5), `VERTICAL` (9:16) or `LANDSCAPE` (1.91:1). INSTAGRAM takes all but VERTICAL, TIKTOK takes all four |
