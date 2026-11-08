@@ -1,0 +1,33 @@
+README.md
+  s_9fcd50f8ee03ee::t_12fbb6b1cda89f 143,170-190,252-253,287-288,320-321
+package-lock.json
+  s_9fcd50f8ee03ee::t_a6c2919403426f 3,9
+package.json
+  s_9fcd50f8ee03ee::t_edcf70bef99c01 3
+src/api/types.ts
+  s_9fcd50f8ee03ee::t_45a35a4249d1b7 204-223,441-446,461,626-631
+src/commands/post-input.ts
+  s_9fcd50f8ee03ee::t_ca5e58b0c7d440 23-26,47,111,118-122,351-353,618,652-661,766-769,772-774,790-836,868,1074-1077,1885-1944,1966-1973,2042-2047
+src/commands/post.ts
+  s_9fcd50f8ee03ee::t_4f4b26eead6013 33-36,53,119,134-135,137,139,244-245,310-346,584-587,819-833,966,986-1000,1016-1017,1093,1282-1291,1313,1359,1363-1364,1710-1720,1723-1725,1727-1729,1733-1736,1739-1741,1748,1799-1807,1826-1835,1895-1909,2033-2035,2049,2363-2374,2506
+test/commands/post-input.test.ts
+  s_9fcd50f8ee03ee::t_7795df6d1b2add 855-974
+test/commands/post.test.ts
+  s_9fcd50f8ee03ee::t_cba460bbad7d03 2055-2281
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d3a49a1aab4f2ddde8930779283721b79e064ad6",
+  "prompts": {},
+  "sessions": {
+    "s_9fcd50f8ee03ee": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "79549624-43f3-433c-84f4-edea199c41d0",
+        "model": "unknown"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}
