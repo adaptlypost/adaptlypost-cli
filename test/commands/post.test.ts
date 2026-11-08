@@ -1173,6 +1173,51 @@ describe("per-platform options on create, update and bulk", () => {
     });
   });
 
+  it("asks YouTube to publish the video itself from --yt-schedule-on-youtube", async () => {
+    await run([
+      "post",
+      "create",
+      "-t",
+      "Launch video",
+      "-a",
+      "yt_1",
+      "-m",
+      "https://cdn/launch.mp4",
+      "-s",
+      "2026-10-19T09:00:00Z",
+      "--yt-schedule-on-youtube",
+      "--print-body",
+    ]);
+
+    expect(stdoutJson().data).toMatchObject({
+      youtubeConfigs: [{ connectionId: "yt_1", scheduleOnYouTube: true }],
+    });
+  });
+
+  it("reads scheduleOnYouTube from a YouTube block in --dir files", async () => {
+    const dir = mkdtempSync(join(workspace, "youtube-"));
+    writeFileSync(
+      join(dir, "01.md"),
+      [
+        "---",
+        "at: 2026-10-19T09:00:00Z",
+        "media: https://cdn/launch.mp4",
+        "youtube:",
+        "  videoTitle: Launch",
+        "  scheduleOnYouTube: true",
+        "---",
+        "Launch video",
+        "",
+      ].join("\n"),
+    );
+
+    await run(["post", "bulk", "--dir", dir, "-a", "yt_1", "--print-body"]);
+
+    expect(stdoutJson().data).toMatchObject([
+      { youtubeConfigs: [{ connectionId: "yt_1", videoTitle: "Launch", scheduleOnYouTube: true }] },
+    ]);
+  });
+
   it("sends the Facebook AI label from --fb-ai-generated", async () => {
     await run([
       "post",
@@ -1650,6 +1695,40 @@ describe("per-platform options on create, update and bulk", () => {
       platforms: ["YOUTUBE"],
       youtubeConnectionIds: ["yt_1"],
       youtubeConfigs: [{ connectionId: "yt_1", videoTitle: "Launch", madeForKids: false, aiGenerated: true }],
+    });
+  });
+
+  it("resends the YouTube schedule on YouTube choice a post already has", async () => {
+    vi.mocked(client.getPost).mockResolvedValue({
+      id: "post_1",
+      status: "SCHEDULED",
+      contentType: "VIDEO",
+      text: "Launch video",
+      timezone: "UTC",
+      mediaUrls: ["https://cdn/launch.mp4"],
+      platforms: [
+        {
+          id: "pp_1",
+          platform: "YOUTUBE",
+          status: "PENDING",
+          connectionId: "yt_1",
+          youtubeScheduleOnYouTube: true,
+          mediaUrls: [],
+          mediaAltTexts: [],
+          previewUrls: [],
+          createdAt: "",
+          updatedAt: "",
+        },
+      ],
+      createdAt: "",
+      updatedAt: "",
+      userId: "u",
+    });
+
+    await run(["post", "update", "post_1", "--alt", "Launch", "--print-body"]);
+
+    expect(stdoutJson().data).toMatchObject({
+      youtubeConfigs: [{ connectionId: "yt_1", scheduleOnYouTube: true }],
     });
   });
 

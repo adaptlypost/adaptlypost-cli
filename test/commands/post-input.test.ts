@@ -1118,6 +1118,13 @@ describe("normalizeConfig", () => {
     expect(exitCodeOf(() => normalizeConfig("YOUTUBE", { aiGenerated: "maybe" }))).toBe(ExitCode.VALIDATION);
   });
 
+  it("reads the YouTube scheduleOnYouTube choice as a boolean", () => {
+    expect(normalizeConfig("YOUTUBE", { scheduleOnYouTube: true })).toEqual({ scheduleOnYouTube: true });
+    expect(exitCodeOf(() => normalizeConfig("YOUTUBE", { scheduleOnYouTube: "yes please" }))).toBe(
+      ExitCode.VALIDATION,
+    );
+  });
+
   it("checks Instagram audio keys and volumes", () => {
     expect(normalizeConfig("INSTAGRAM", { audio: "901" })).toEqual({ audio: { audioId: "901" } });
     expect(exitCodeOf(() => normalizeConfig("INSTAGRAM", { audio: { audioId: "901", volume: 50 } }))).toBe(ExitCode.VALIDATION);

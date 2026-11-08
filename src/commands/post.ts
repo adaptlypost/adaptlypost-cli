@@ -230,6 +230,7 @@ interface ContentOptions {
   ytTitle?: string;
   ytAiGenerated?: boolean;
   ytAudioLanguage?: string;
+  ytScheduleOnYoutube?: boolean;
   pinterestBoard?: string;
   pinterestBoardName?: string;
   documentTitle?: string;
@@ -478,6 +479,9 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
 
   if (options.ytTitle !== undefined) mergeConfig("YOUTUBE", { videoTitle: options.ytTitle });
   if (options.ytAiGenerated !== undefined) mergeConfig("YOUTUBE", { aiGenerated: options.ytAiGenerated });
+  if (options.ytScheduleOnYoutube !== undefined) {
+    mergeConfig("YOUTUBE", { scheduleOnYouTube: options.ytScheduleOnYoutube });
+  }
   if (options.ytAudioLanguage !== undefined) {
     const language = options.ytAudioLanguage.trim();
     mergeConfig("YOUTUBE", { defaultAudioLanguage: language.toLowerCase() === "none" ? null : language });
@@ -1170,6 +1174,7 @@ function storedConfig(target: SocialPostPlatform): ConfigEntry | undefined {
         categoryId: target.youtubeCategoryId,
         playlistId: target.youtubePlaylistId,
         defaultAudioLanguage: target.youtubeDefaultAudioLanguage,
+        scheduleOnYouTube: target.youtubeScheduleOnYouTube,
       });
     case "LINKEDIN":
       return definedOnly({ documentTitle: target.linkedinDocumentTitle, reshareOf: target.linkedinReshareOf });
@@ -2325,6 +2330,10 @@ const withContentOptions = (command: Command): Command =>
     .option(
       "--yt-audio-language <tag>",
       "Language spoken in the YouTube video's original audio, as a BCP-47 tag such as en, pt-BR or es-419. Does not turn off automatic dubbing. none clears a saved language",
+    )
+    .option(
+      "--yt-schedule-on-youtube",
+      "Upload the YouTube video when the post is scheduled, as a private video that YouTube publishes at --at, so you can set up Test & Compare in YouTube Studio first. Needs privacy public or unset, and no repeat",
     )
     .option(
       "--pinterest-board <id>",

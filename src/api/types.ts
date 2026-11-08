@@ -560,6 +560,7 @@ export interface YouTubePostConfig {
   categoryId?: string;
   playlistId?: string;
   defaultAudioLanguage?: string | null;
+  scheduleOnYouTube?: boolean;
 }
 
 export const LINKEDIN_RESHARE_OF_MAX_LENGTH = 500;
@@ -697,6 +698,8 @@ export interface SocialPostPlatform {
   youtubeCategoryId?: string;
   youtubePlaylistId?: string;
   youtubeDefaultAudioLanguage?: string | null;
+  youtubeScheduleOnYouTube?: boolean;
+  youtubeScheduledVideoId?: string;
   twitterKeepLinks?: boolean;
   twitterQuoteOf?: string;
   linkedinReshareOf?: string;

@@ -198,6 +198,7 @@ export const CONFIG_KEYS: Partial<Record<PlatformType, readonly string[]>> = {
     "categoryId",
     "playlistId",
     "defaultAudioLanguage",
+    "scheduleOnYouTube",
   ],
   LINKEDIN: ["documentTitle", "reshareOf"],
   TWITTER: ["quoteOf"],
@@ -1831,6 +1832,7 @@ export function normalizeConfig(platform: PlatformType, config: FrontmatterMap):
       ...config,
       aiGenerated: configBoolean(config.aiGenerated, "YOUTUBE aiGenerated"),
       defaultAudioLanguage: normalizeYouTubeAudioLanguage(config.defaultAudioLanguage),
+      scheduleOnYouTube: configBoolean(config.scheduleOnYouTube, "YOUTUBE scheduleOnYouTube"),
     });
   }
 
