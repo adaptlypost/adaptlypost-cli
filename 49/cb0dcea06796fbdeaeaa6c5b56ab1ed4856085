@@ -1,0 +1,21 @@
+package-lock.json
+  s_50fcd3887b10ce::t_5ded18c801b865 3,9
+package.json
+  s_50fcd3887b10ce::t_daa9d874954d4a 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "49cb0dcea06796fbdeaeaa6c5b56ab1ed4856085",
+  "prompts": {},
+  "sessions": {
+    "s_50fcd3887b10ce": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ea76381a-917d-4983-be94-10ccf3abfe45",
+        "model": "unknown"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}
