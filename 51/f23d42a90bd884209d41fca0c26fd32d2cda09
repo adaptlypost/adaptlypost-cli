@@ -1,0 +1,49 @@
+src/commands/inbox.ts
+  s_50fcd3887b10ce::t_d0091d0c87e1d1 1-790
+test/commands/inbox.test.ts
+  s_50fcd3887b10ce::t_861d7d0fccd9e5 1-384
+README.md
+  s_50fcd3887b10ce::t_ab871ae7ca6509 3,312-313,321,365,405-406,422,425,429-478,483-488,492-493,514
+src/api/client.ts
+  s_50fcd3887b10ce::t_1171107e877677 29-48,426-583
+src/api/types.ts
+  s_50fcd3887b10ce::t_4133d0559cc806 194,293,302-311,565-567,571-576,615,701-702,998,1011,1017,1030,1036,1219-1428
+src/cli.ts
+  s_50fcd3887b10ce::t_17df0bf35eb51d 120-123
+src/commands/analytics.ts
+  s_50fcd3887b10ce::t_90a4ea3be22c4f 74,217-219,254,334,387,453,504-510,551,711-713,715-728
+src/commands/open.ts
+  s_50fcd3887b10ce::t_d3df01b867e356 19
+src/commands/post-input.ts
+  s_50fcd3887b10ce::t_c743024633664b 157,202-203
+src/commands/post.ts
+  s_50fcd3887b10ce::t_9199f4327e963b 236-237,500-501,1175-1177,1708,1710-1716,2341-2348
+src/commands/webhook.ts
+  s_50fcd3887b10ce::t_a36dbff310c318 11-17,45,52-53,56-72,102,121-123,133,171-174,180-181,184,246,252-257,280,284-285
+test/commands/analytics-lists.test.ts
+  s_50fcd3887b10ce::t_112680eb0b0a0c 61-70
+test/commands/analytics.test.ts
+  s_50fcd3887b10ce::t_041d45cb053716 61
+test/commands/post-input.test.ts
+  s_50fcd3887b10ce::t_6709d5758a4b50 482-509,1024-1029,1035
+test/commands/post.test.ts
+  s_50fcd3887b10ce::t_6ef1611c2b2740 260-283,788-799
+test/commands/webhook.test.ts
+  s_50fcd3887b10ce::t_19a08c5b4ec3c5 16-18,90-122,165-180
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "51f23d42a90bd884209d41fca0c26fd32d2cda09",
+  "prompts": {},
+  "sessions": {
+    "s_50fcd3887b10ce": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ea76381a-917d-4983-be94-10ccf3abfe45",
+        "model": "unknown"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}
