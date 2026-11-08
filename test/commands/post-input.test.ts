@@ -479,6 +479,34 @@ describe("buildPostBody", () => {
     expect(body.linkedinConfigs).toEqual([{ connectionId: "li_22aa", documentTitle: "Q3 report" }]);
   });
 
+  it("builds twitterConfigs with quoteOf and linkedinConfigs with reshareOf", () => {
+    const body = buildPostBody(
+      {
+        text: "Worth a read",
+        accounts: ["tw_4d1b", "li_22aa"],
+        platformConfigs: {
+          TWITTER: { quoteOf: "https://x.com/acme/status/1850000000000000000" },
+          LINKEDIN: { reshareOf: "urn:li:share:7200000000000000000" },
+        },
+      },
+      { accounts },
+    );
+
+    expect(body.twitterConfigs).toEqual([
+      { connectionId: "tw_4d1b", quoteOf: "https://x.com/acme/status/1850000000000000000" },
+    ]);
+    expect(body.linkedinConfigs).toEqual([{ connectionId: "li_22aa", reshareOf: "urn:li:share:7200000000000000000" }]);
+  });
+
+  it("refuses an unknown X config key and names the real one", () => {
+    expect(() =>
+      buildPostBody(
+        { text: "hi", accounts: ["tw_4d1b"], platformConfigs: { TWITTER: { quote_of: "123" } } },
+        { accounts },
+      ),
+    ).toThrow(/quoteOf/);
+  });
+
   it("refuses DOCUMENT on any platform but LinkedIn", () => {
     expect(
       exitCodeOf(() =>
@@ -993,12 +1021,18 @@ describe("buildPlatformExtras", () => {
     });
   });
 
+  it("takes a Threads first comment of up to 500 characters", () => {
+    expect(buildPlatformExtras({ firstComments: { THREADS: "x".repeat(500) } })).toEqual({
+      firstComments: [{ platform: "THREADS", text: "x".repeat(500) }],
+    });
+  });
+
   it("refuses what the API would reject", () => {
     const cases = [
       { firstComments: { TIKTOK: "hi" } },
       { firstComments: { INSTAGRAM: "x".repeat(2201) } },
       { firstComments: { TWITTER: "   " } },
-      { firstComments: { THREADS: "hi" } },
+      { firstComments: { THREADS: "x".repeat(501) } },
       { firstComments: { TWITTER: "x".repeat(281) } },
       { platformThumbnails: { THREADS: { thumbnailUrl: "https://cdn/a.png" } } },
       { platformThumbnails: { TIKTOK: { thumbnailUrl: "https://cdn/a.png" } } },

@@ -118,6 +118,10 @@ const MODULES: Array<{ names: string[]; load: () => Promise<Registrar> }> = [
     load: async () => (await import('./commands/webhook.js')).registerWebhookCommands,
   },
   {
+    names: ['inbox'],
+    load: async () => (await import('./commands/inbox.js')).registerInboxCommands,
+  },
+  {
     names: ['ai'],
     load: async () => (await import('./commands/ai.js')).registerAiCommands,
   },

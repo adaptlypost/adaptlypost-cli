@@ -154,6 +154,7 @@ export const CONFIG_FIELD: Partial<Record<PlatformType, keyof PostTargets>> = {
   PINTEREST: "pinterestConfigs",
   YOUTUBE: "youtubeConfigs",
   LINKEDIN: "linkedinConfigs",
+  TWITTER: "twitterConfigs",
   TUMBLR: "tumblrConfigs",
   WORDPRESS: "wordpressConfigs",
   GOOGLE_BUSINESS: "googleBusinessConfigs",
@@ -198,7 +199,8 @@ export const CONFIG_KEYS: Partial<Record<PlatformType, readonly string[]>> = {
     "playlistId",
     "defaultAudioLanguage",
   ],
-  LINKEDIN: ["documentTitle"],
+  LINKEDIN: ["documentTitle", "reshareOf"],
+  TWITTER: ["quoteOf"],
   TUMBLR: ["tags", "title", "sourceUrl"],
   WORDPRESS: ["title", "excerpt", "categoryIds", "tags"],
   GOOGLE_BUSINESS: [

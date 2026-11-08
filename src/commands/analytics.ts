@@ -71,6 +71,7 @@ export interface RangeOptions {
   from?: string;
   to?: string;
   platform?: PlatformType[];
+  account?: string[];
 }
 
 export interface TimeseriesOptions extends RangeOptions {
@@ -213,6 +214,9 @@ const rangeHeader = (range: DateRange, platforms: readonly PlatformType[] = []):
 const platformsOf = (options: RangeOptions): PlatformType[] | undefined =>
   options.platform && options.platform.length > 0 ? options.platform : undefined;
 
+const connectionIdsOf = (options: RangeOptions): string[] | undefined =>
+  options.account && options.account.length > 0 ? options.account : undefined;
+
 const withProgress = async <T>(label: string, operation: () => Promise<T>): Promise<T> => {
   const progress = isQuiet() || isMachine() ? null : spinner(label);
   try {
@@ -247,7 +251,7 @@ const OVERVIEW_COLUMNS: Column<OverviewRow>[] = [
 const runOverview = async (options: RangeOptions): Promise<void> => {
   const range = resolveDateRange(options.from, options.to);
   const overview = await withProgress('Loading overview…', () =>
-    getAnalyticsOverview({ ...range, platforms: platformsOf(options) }),
+    getAnalyticsOverview({ ...range, platforms: platformsOf(options), connectionIds: connectionIdsOf(options) }),
   );
 
   if (isMachine()) {
@@ -327,6 +331,7 @@ const runTimeseries = async (options: TimeseriesOptions): Promise<void> => {
       ...range,
       granularity: options.granularity,
       platforms: platformsOf(options),
+      connectionIds: connectionIdsOf(options),
     }),
   );
 
@@ -379,7 +384,7 @@ const runBreakdown = async (options: RangeOptions): Promise<void> => {
 
   const range = resolveDateRange(options.from, options.to);
   const { platforms } = await withProgress('Loading platform breakdown…', () =>
-    getPlatformBreakdown(range),
+    getPlatformBreakdown({ ...range, connectionIds: connectionIdsOf(options) }),
   );
 
   if (isMachine()) {
@@ -445,6 +450,7 @@ const runPosts = async (options: PostsOptions): Promise<void> => {
         listPostAnalytics({
           ...range,
           platforms,
+          connectionIds: connectionIdsOf(options),
           sortBy: options.sortBy,
           page,
           limit,
@@ -495,7 +501,13 @@ const runTop = async (options: TopOptions): Promise<void> => {
   const range = resolveDateRange(options.from, options.to);
   const limit = validateLimit(Number(options.limit ?? DEFAULT_TOP_LIMIT), 1, MAX_TOP_LIMIT);
   const { posts } = await withProgress('Loading top posts…', () =>
-    listTopPosts({ ...range, platforms: platformsOf(options), sortBy: options.sortBy, limit }),
+    listTopPosts({
+      ...range,
+      platforms: platformsOf(options),
+      connectionIds: connectionIdsOf(options),
+      sortBy: options.sortBy,
+      limit,
+    }),
   );
 
   if (isMachine()) {
@@ -536,7 +548,7 @@ const runDiscovered = async (options: DiscoveredOptions): Promise<void> => {
   const range = resolveDateRange(options.from, options.to);
   const limit = validateLimit(Number(options.limit ?? DEFAULT_DISCOVERED_LIMIT), 1, MAX_DISCOVERED_LIMIT);
   const { posts } = await withProgress('Loading discovered posts…', () =>
-    listDiscoveredPosts({ ...range, platforms: platformsOf(options), limit }),
+    listDiscoveredPosts({ ...range, platforms: platformsOf(options), connectionIds: connectionIdsOf(options), limit }),
   );
 
   if (isMachine()) {
@@ -696,12 +708,24 @@ const withRange = (command: Command): Command =>
     .option('--from <date>', 'start of the window, ISO 8601 or an offset like -7d (default: 30 days ago)')
     .option('--to <date>', 'end of the window, ISO 8601 (default: now)');
 
-const withPlatforms = (command: Command): Command =>
+const collectAccount = (value: string, previous: string[]): string[] => [...previous, value];
+
+const withAccounts = (command: Command): Command =>
   command.option(
-    '--platform <platform>',
-    'limit to a platform, repeatable. MASTODON, TELEGRAM, TUMBLR and WORDPRESS have no analytics',
-    collectPlatform,
-    [] as PlatformType[],
+    '--account <id>',
+    'limit to an account by the id from accounts list, repeatable',
+    collectAccount,
+    [] as string[],
+  );
+
+const withPlatforms = (command: Command): Command =>
+  withAccounts(
+    command.option(
+      '--platform <platform>',
+      'limit to a platform, repeatable. MASTODON, TELEGRAM, TUMBLR and WORDPRESS have no analytics',
+      collectPlatform,
+      [] as PlatformType[],
+    ),
   );
 
 export const registerAnalyticsCommands = (program: Command): void => {

@@ -58,6 +58,16 @@ describe('analytics top', () => {
     expect(stdoutJson()).toMatchObject({ ok: true, command: 'analytics.top', data: [], meta: { sortBy: 'LIKES', limit: 5 } });
   });
 
+  it('sends repeated --account flags as connectionIds', async () => {
+    vi.mocked(client.listTopPosts).mockResolvedValue({ posts: [] });
+
+    await run(['analytics', 'top', '--account', 'ig_1', '--account', 'li_2']);
+
+    expect(client.listTopPosts).toHaveBeenCalledWith(
+      expect.objectContaining({ connectionIds: ['ig_1', 'li_2'] }),
+    );
+  });
+
   it('refuses a limit above the endpoint maximum of 50', async () => {
     await expect(run(['analytics', 'top', '--limit', '51'])).rejects.toMatchObject({ exitCode: 2 });
     expect(client.listTopPosts).not.toHaveBeenCalled();

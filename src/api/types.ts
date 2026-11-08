@@ -191,6 +191,7 @@ export const ASPECT_RATIOS_BY_PLATFORM: Partial<Record<PlatformType, readonly Me
 export const FIRST_COMMENT_MAX_LENGTH: Partial<Record<PlatformType, number>> = {
   LINKEDIN: 1250,
   TWITTER: 280,
+  THREADS: 500,
   BLUESKY: 300,
   MASTODON: 500,
   YOUTUBE: 10000,
@@ -289,7 +290,7 @@ export const CAPTION_PLATFORMS = [
 ] as const;
 export type CaptionPlatform = (typeof CAPTION_PLATFORMS)[number];
 
-export const WEBHOOK_EVENTS = [
+export const DEFAULT_WEBHOOK_EVENTS = [
   'post.published',
   'post.partially_failed',
   'post.failed',
@@ -298,6 +299,16 @@ export const WEBHOOK_EVENTS = [
   'image.completed',
   'image.failed',
 ] as const;
+
+export const INBOX_WEBHOOK_EVENTS = [
+  'comment.created',
+  'comment.replied',
+  'mention.created',
+  'message.received',
+  'review.created',
+] as const;
+
+export const WEBHOOK_EVENTS = [...DEFAULT_WEBHOOK_EVENTS, ...INBOX_WEBHOOK_EVENTS] as const;
 export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
 
 export interface Pagination {
@@ -551,9 +562,18 @@ export interface YouTubePostConfig {
   defaultAudioLanguage?: string | null;
 }
 
+export const LINKEDIN_RESHARE_OF_MAX_LENGTH = 500;
+export const TWITTER_QUOTE_OF_MAX_LENGTH = 200;
+
 export interface LinkedInPostConfig {
   connectionId: string;
   documentTitle?: string;
+  reshareOf?: string;
+}
+
+export interface TwitterPostConfig {
+  connectionId: string;
+  quoteOf?: string;
 }
 
 export interface TumblrPostConfig {
@@ -592,6 +612,7 @@ export interface PostTargets {
   facebookConfigs?: FacebookPostConfig[];
   youtubeConfigs?: YouTubePostConfig[];
   linkedinConfigs?: LinkedInPostConfig[];
+  twitterConfigs?: TwitterPostConfig[];
   tumblrConfigs?: TumblrPostConfig[];
   wordpressConfigs?: WordPressPostConfig[];
   googleBusinessConfigs?: GoogleBusinessPostConfig[];
@@ -677,6 +698,8 @@ export interface SocialPostPlatform {
   youtubePlaylistId?: string;
   youtubeDefaultAudioLanguage?: string | null;
   twitterKeepLinks?: boolean;
+  twitterQuoteOf?: string;
+  linkedinReshareOf?: string;
   tumblrTags?: string[];
   tumblrTitle?: string;
   tumblrSourceUrl?: string;
@@ -972,6 +995,7 @@ export interface Webhook {
   lastSuccessAt: string | null;
   lastFailureAt: string | null;
   disabledAt: string | null;
+  events?: WebhookEvent[];
 }
 
 export interface CreatedWebhook extends Webhook {
@@ -984,11 +1008,13 @@ export interface WebhooksResponse {
 
 export interface CreateWebhookRequest {
   url: string;
+  events?: WebhookEvent[];
 }
 
 export interface UpdateWebhookRequest {
   url?: string;
   active?: boolean;
+  events?: WebhookEvent[];
 }
 
 export interface WebhookTestResult {
@@ -1001,11 +1027,13 @@ export type AnalyticsRangeQuery = {
   from: string;
   to: string;
   platforms?: PlatformType[];
+  connectionIds?: string[];
 };
 
 export type AnalyticsBreakdownQuery = {
   from: string;
   to: string;
+  connectionIds?: string[];
 };
 
 export type AnalyticsTimeseriesQuery = AnalyticsRangeQuery & {
@@ -1187,4 +1215,214 @@ export interface ImageJob {
   imageUrl: string | null;
   imageId: string | null;
   error: string | null;
+}
+
+export const INBOX_STATUSES = ['UNREAD', 'READ', 'DONE'] as const;
+export type InboxStatus = (typeof INBOX_STATUSES)[number];
+
+export const INBOX_CHANNEL_ACCESS = ['AVAILABLE', 'RECONNECT_REQUIRED', 'UNSUPPORTED'] as const;
+export type InboxChannelAccess = (typeof INBOX_CHANNEL_ACCESS)[number];
+
+export const INBOX_LIST_MAX_LIMIT = 100;
+export const INBOX_LIST_DEFAULT_LIMIT = 25;
+export const INBOX_STATUS_MAX_IDS = 100;
+export const INBOX_LIST_MAX_ACCOUNTS = 50;
+
+export type InboxListQuery = {
+  accountIds?: string[];
+  platforms?: PlatformType[];
+  statuses?: InboxStatus[];
+  since?: string;
+  search?: string;
+  limit?: number;
+  cursor?: string;
+};
+
+export type InboxCommentsQuery = InboxListQuery & {
+  postId?: string;
+  platformPostId?: string;
+};
+
+export type InboxReviewsQuery = InboxListQuery & {
+  ratings?: number[];
+  replied?: boolean;
+};
+
+export interface InboxPage {
+  total: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
+export interface InboxPerson {
+  id: string | null;
+  name: string;
+  username: string | null;
+  avatarUrl: string | null;
+}
+
+export interface InboxComment {
+  id: string;
+  accountId: string;
+  platform: PlatformType;
+  accountName: string;
+  postId: string | null;
+  platformPostId: string;
+  postText: string | null;
+  postPermalink: string | null;
+  platformCommentId: string;
+  parentPlatformCommentId: string | null;
+  isReply: boolean;
+  author: InboxPerson;
+  text: string;
+  permalink: string | null;
+  likeCount: number | null;
+  createdAt: string;
+  status: InboxStatus;
+  isHidden: boolean;
+  isOwn: boolean;
+  replied: boolean;
+  repliedAt: string | null;
+  likedByAccount: boolean;
+  capabilities: { canReply: boolean; canHide: boolean; canDelete: boolean; canLike: boolean };
+}
+
+export interface InboxCommentsResponse extends InboxPage {
+  comments: InboxComment[];
+}
+
+export interface InboxCommentThread {
+  comment: InboxComment;
+  parent: InboxComment | null;
+  replies: InboxComment[];
+}
+
+export interface InboxMention {
+  id: string;
+  accountId: string;
+  platform: PlatformType;
+  accountName: string;
+  platformMentionId: string;
+  author: InboxPerson;
+  text: string;
+  permalink: string | null;
+  thumbnailUrl: string | null;
+  createdAt: string;
+  status: InboxStatus;
+  replied: boolean;
+  repliedAt: string | null;
+  capabilities: { canReply: boolean };
+  replies: { id: string; text: string; permalink: string | null; createdAt: string }[];
+}
+
+export interface InboxMentionsResponse extends InboxPage {
+  mentions: InboxMention[];
+}
+
+export interface InboxConversation {
+  id: string;
+  accountId: string;
+  platform: PlatformType;
+  accountName: string;
+  participant: InboxPerson;
+  lastMessageText: string | null;
+  lastMessageAt: string;
+  lastMessageIsOwn: boolean;
+  status: InboxStatus;
+  repliedAt: string | null;
+  replyWindowEndsAt: string | null;
+  maxMessageLength: number;
+  capabilities: { canReply: boolean };
+}
+
+export interface InboxConversationsResponse extends InboxPage {
+  conversations: InboxConversation[];
+}
+
+export interface InboxMessage {
+  id: string;
+  isOwn: boolean;
+  text: string;
+  hasAttachments: boolean;
+  createdAt: string;
+}
+
+export interface InboxConversationThread {
+  conversation: InboxConversation;
+  messages: InboxMessage[];
+}
+
+export interface SentInboxMessage {
+  conversation: InboxConversation;
+  message: InboxMessage;
+}
+
+export interface InboxReview {
+  id: string;
+  accountId: string;
+  platform: PlatformType;
+  accountName: string;
+  platformReviewId: string;
+  reviewer: { name: string; avatarUrl: string | null; isAnonymous: boolean };
+  rating: number;
+  text: string | null;
+  reply: { text: string; updatedAt: string } | null;
+  createdAt: string;
+  updatedAt: string;
+  status: InboxStatus;
+  repliedAt: string | null;
+  maxReplyLength: number;
+  capabilities: { canReply: boolean };
+}
+
+export interface InboxReviewsResponse extends InboxPage {
+  reviews: InboxReview[];
+}
+
+export interface InboxSummaryAccount {
+  accountId: string;
+  platform: PlatformType;
+  accountName: string;
+  avatarUrl: string | null;
+  needsReconnect: boolean;
+  lastSyncedAt: string | null;
+  lastErrorCode: string | null;
+  comments: InboxChannelAccess;
+  mentions: InboxChannelAccess;
+  messages: InboxChannelAccess;
+  reviews: InboxChannelAccess;
+}
+
+export interface InboxSummary {
+  unread: { comments: number; mentions: number; conversations: number; reviews: number };
+  accounts: InboxSummaryAccount[];
+}
+
+export interface InboxTextRequest {
+  text: string;
+}
+
+export interface InboxStatusRequest {
+  ids: string[];
+  status: InboxStatus;
+}
+
+export interface InboxCommentsStatusResponse {
+  comments: InboxComment[];
+  unreadCount: number;
+}
+
+export interface InboxMentionsStatusResponse {
+  mentions: InboxMention[];
+  unreadCount: number;
+}
+
+export interface InboxConversationsStatusResponse {
+  conversations: InboxConversation[];
+  unreadCount: number;
+}
+
+export interface InboxReviewsStatusResponse {
+  reviews: InboxReview[];
+  unreadCount: number;
 }

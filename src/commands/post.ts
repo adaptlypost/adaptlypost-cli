@@ -233,6 +233,8 @@ interface ContentOptions {
   pinterestBoard?: string;
   pinterestBoardName?: string;
   documentTitle?: string;
+  liReshare?: string;
+  xQuote?: string;
   tumblrTag: string[];
   tumblrTitle?: string;
   tumblrSourceUrl?: string;
@@ -495,6 +497,8 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
   if (options.documentTitle !== undefined) {
     mergeConfig("LINKEDIN", { documentTitle: options.documentTitle });
   }
+  if (options.liReshare !== undefined) mergeConfig("LINKEDIN", { reshareOf: options.liReshare.trim() });
+  if (options.xQuote !== undefined) mergeConfig("TWITTER", { quoteOf: options.xQuote.trim() });
   if (options.tumblrTag.length > 0) mergeConfig("TUMBLR", { tags: options.tumblrTag });
   if (options.tumblrTitle !== undefined) mergeConfig("TUMBLR", { title: options.tumblrTitle });
   if (options.tumblrSourceUrl !== undefined) mergeConfig("TUMBLR", { sourceUrl: options.tumblrSourceUrl });
@@ -1168,7 +1172,9 @@ function storedConfig(target: SocialPostPlatform): ConfigEntry | undefined {
         defaultAudioLanguage: target.youtubeDefaultAudioLanguage,
       });
     case "LINKEDIN":
-      return definedOnly({ documentTitle: target.linkedinDocumentTitle });
+      return definedOnly({ documentTitle: target.linkedinDocumentTitle, reshareOf: target.linkedinReshareOf });
+    case "TWITTER":
+      return definedOnly({ quoteOf: target.twitterQuoteOf });
     case "TUMBLR":
       return definedOnly({ tags: target.tumblrTags, title: target.tumblrTitle, sourceUrl: target.tumblrSourceUrl });
     case "WORDPRESS":
@@ -1699,9 +1705,15 @@ interface BulkRow {
 function refuseDocumentRows(rows: BulkRow[]): void {
   for (const row of rows) {
     if (row.item.contentType === "DOCUMENT" || row.configs?.LINKEDIN) {
-      throw new CliError(`Row ${row.line}: LinkedIn document posts cannot be bulk scheduled.`, {
+      throw new CliError(`Row ${row.line}: LinkedIn document posts and reshares cannot be bulk scheduled.`, {
         exitCode: ExitCode.VALIDATION,
-        hint: 'Create each one with "adaptlypost post create --type DOCUMENT"',
+        hint: 'Create each one with "adaptlypost post create --type DOCUMENT" or "--li-reshare"',
+      });
+    }
+    if (row.configs?.TWITTER) {
+      throw new CliError(`Row ${row.line}: X quotes cannot be bulk scheduled.`, {
+        exitCode: ExitCode.VALIDATION,
+        hint: 'Create each one with "adaptlypost post create --x-quote"',
       });
     }
   }
@@ -2325,6 +2337,14 @@ const withContentOptions = (command: Command): Command =>
     .option(
       "--document-title <title>",
       "LinkedIn document title, max 100 characters. Defaults to the file name; ignored for non-DOCUMENT posts",
+    )
+    .option(
+      "--li-reshare <urn|url>",
+      "Reshare a LinkedIn post with the text as the commentary: a urn:li:share: or urn:li:ugcPost: URN, or a linkedin.com/feed/update/<urn> link. Media is not attached on LinkedIn",
+    )
+    .option(
+      "--x-quote <url|id>",
+      "Quote one of the X account's own posts with the text as the commentary: a post link or its numeric id. Media is not attached on X",
     )
     .option(
       "--tumblr-tag <tag>",

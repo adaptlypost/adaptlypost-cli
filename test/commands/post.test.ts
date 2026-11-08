@@ -257,6 +257,30 @@ describe("post create", () => {
     expect(client.createPost).not.toHaveBeenCalled();
   });
 
+  it("quotes an X post with --x-quote and reshares a LinkedIn post with --li-reshare", async () => {
+    await run([
+      "post",
+      "create",
+      "-t",
+      "Worth a read",
+      "-a",
+      "tw_4d1b",
+      "-a",
+      "li_22aa",
+      "--x-quote",
+      "https://x.com/acme/status/1850000000000000000",
+      "--li-reshare",
+      "urn:li:share:7200000000000000000",
+      "--print-body",
+    ]);
+
+    expect(stdoutJson().data).toMatchObject({
+      twitterConfigs: [{ connectionId: "tw_4d1b", quoteOf: "https://x.com/acme/status/1850000000000000000" }],
+      linkedinConfigs: [{ connectionId: "li_22aa", reshareOf: "urn:li:share:7200000000000000000" }],
+    });
+    expect(client.createPost).not.toHaveBeenCalled();
+  });
+
   it("publishes an Instagram reel as a trial reel from --ig-type and --ig-trial", async () => {
     await run([
       "post",
@@ -758,6 +782,18 @@ describe("post bulk", () => {
         exitCode: 5,
       });
     }
+    expect(client.bulkSchedulePosts).not.toHaveBeenCalled();
+  });
+
+  it("refuses config_TWITTER, since bulk takes no X quotes", async () => {
+    const path = csvPath(
+      ["text,scheduledAt,config_TWITTER", 'Quote,2026-09-19T09:00:00Z,"{""quoteOf"":""1850000000000000000""}"', ""].join("\n"),
+    );
+
+    await expect(run(["post", "bulk", "--csv", path, "-P", "TWITTER"])).rejects.toMatchObject({
+      exitCode: 5,
+      message: expect.stringMatching(/X quotes cannot be bulk scheduled/),
+    });
     expect(client.bulkSchedulePosts).not.toHaveBeenCalled();
   });
 

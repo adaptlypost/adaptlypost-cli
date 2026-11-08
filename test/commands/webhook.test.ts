@@ -13,7 +13,9 @@ vi.mock('../../src/api/client.js', () => ({
 }));
 
 const client = await import('../../src/api/client.js');
-const { buildWebhookUpdate, registerWebhookCommands, webhookState } = await import('../../src/commands/webhook.js');
+const { buildWebhookUpdate, parseWebhookEvents, registerWebhookCommands, webhookState } = await import(
+  '../../src/commands/webhook.js'
+);
 const { initOutput } = await import('../../src/core/output.js');
 const { setInteractive } = await import('../../src/core/prompt.js');
 
@@ -85,6 +87,39 @@ describe('webhook create', () => {
     expect(stdoutJson()).toMatchObject({ ok: true, command: 'webhook.create', data: { secret: 'whsec_1' } });
   });
 
+  it('sends the repeated --event flags as events', async () => {
+    vi.mocked(client.createWebhook).mockResolvedValue({
+      ...webhook,
+      events: ['comment.created', 'review.created'],
+      secret: 'whsec_1',
+    });
+
+    await run([
+      'webhook',
+      'create',
+      '--url',
+      'https://example.com/hooks',
+      '--event',
+      'comment.created',
+      '--event',
+      'Review.Created',
+      '--event',
+      'comment.created',
+    ]);
+
+    expect(client.createWebhook).toHaveBeenCalledWith({
+      url: 'https://example.com/hooks',
+      events: ['comment.created', 'review.created'],
+    });
+  });
+
+  it('refuses an unknown event before sending', async () => {
+    await expect(
+      run(['webhook', 'create', '--url', 'https://example.com/hooks', '--event', 'comment.deleted']),
+    ).rejects.toMatchObject({ exitCode: 2 });
+    expect(client.createWebhook).not.toHaveBeenCalled();
+  });
+
   it('refuses a missing or malformed url before sending', async () => {
     await expect(run(['webhook', 'create'])).rejects.toMatchObject({ exitCode: 2 });
     await expect(run(['webhook', 'create', '--url', 'example.com/hooks'])).rejects.toMatchObject({ exitCode: 2 });
@@ -125,6 +160,22 @@ describe('webhook update', () => {
       url: 'https://new.example.com',
       active: true,
     });
+  });
+
+  it('replaces the events, or sends an empty list for the default set', () => {
+    expect(buildWebhookUpdate({ event: ['message.received', 'mention.created'] })).toEqual({
+      events: ['message.received', 'mention.created'],
+    });
+    expect(buildWebhookUpdate({ defaultEvents: true })).toEqual({ events: [] });
+    expect(() => buildWebhookUpdate({ event: ['post.failed'], defaultEvents: true })).toThrow(/not both/);
+  });
+
+  it('knows every event the API sends', () => {
+    expect(parseWebhookEvents(['post.published', 'comment.replied', 'image.failed'])).toEqual([
+      'post.published',
+      'comment.replied',
+      'image.failed',
+    ]);
   });
 
   it('refuses both --active and --inactive, and an empty update', () => {

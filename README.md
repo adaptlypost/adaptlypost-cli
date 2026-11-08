@@ -1,6 +1,6 @@
 # AdaptlyPost CLI
 
-Schedule, publish and measure social posts from your terminal.
+Schedule, publish and measure social posts, and answer comments, messages and reviews, from your terminal.
 
 `adaptlypost` talks to the AdaptlyPost REST API and nothing else. It writes posts from markdown files or stdin, uploads media over presigned URLs, watches a post until every platform reports back, bulk-schedules a month from a CSV, and prints everything as a table for humans or as one JSON document for `jq`.
 
@@ -309,6 +309,8 @@ Per-platform flags on `post create` and `post update`:
 | `--pinterest-board <id>` | `pinterestConfigs[].boardId`, the board the pin goes to. Optional. Without it the pin goes to a public board named AdaptlyPost, which AdaptlyPost creates on the Pinterest account the first time it is needed. Find ids with `accounts pinterest-boards` |
 | `--pinterest-board-name <name>` | `pinterestConfigs[].boardName`, the board picked by its name on each Pinterest account of the post. The API trims the name, takes the one board with exactly that name, and otherwise the one board with that name in any case. No match, or several, is a 400, and the pin never goes to another board. `--print-body` looks the name up and shows the board's name and id, and exits 5 when no board or several boards match. `--dry-run` reports the same refusal as a `PINTEREST_BOARD_NOT_FOUND` or `PINTEREST_BOARD_AMBIGUOUS` issue. Not with `--pinterest-board` |
 | `--document-title <title>` | `linkedinConfigs[].documentTitle`, the title LinkedIn shows on a DOCUMENT post. Max 100 characters, defaults to the file name, ignored for other content types |
+| `--li-reshare <urn\|url>` | `linkedinConfigs[].reshareOf`, reshare a LinkedIn post from the account with the text as the commentary. Takes a `urn:li:share:` or `urn:li:ugcPost:` URN, such as the `platformPostId` from `post results`, or a `https://www.linkedin.com/feed/update/<urn>` link. `urn:li:activity:` links are refused, because LinkedIn cannot reshare them through its API. Media on the post is not attached on LinkedIn |
+| `--x-quote <url\|id>` | `twitterConfigs[].quoteOf`, quote one of the X account's own posts with the text as the commentary. Takes a post link such as `https://x.com/<handle>/status/<id>` or the numeric id. X only lets an account quote its own posts or posts that mention it, so a link naming another handle is refused. The text is required and media on the post is not attached on X |
 | `--tumblr-tag <tag>` | `tumblrConfigs[].tags`, repeatable, up to 30 tags of up to 140 characters each. One tag per flag: a tag with a comma exits 5, because Tumblr would split it. A leading `#` is dropped and a repeated tag keeps its first spelling |
 | `--tumblr-title <title>` | `tumblrConfigs[].title`, a heading shown above the media and the text. Max 4096 characters |
 | `--tumblr-source-url <url>` | `tumblrConfigs[].sourceUrl`, the source link of the post. Max 2048 characters |
@@ -316,7 +318,7 @@ Per-platform flags on `post create` and `post update`:
 | `--wordpress-excerpt <text>` | `wordpressConfigs[].excerpt`, the summary WordPress shows in post lists and feeds. Max 1000 characters |
 | `--wordpress-category <id>` | `wordpressConfigs[].categoryIds`, repeatable, up to 50 category ids of the site. Without it WordPress files the post under the site's default category. Find ids with `accounts wordpress-categories` |
 | `--wordpress-tag <tag>` | `wordpressConfigs[].tags`, repeatable, one tag name per flag, up to 50 tags of up to 100 characters each. A repeated tag keeps its first spelling. A tag the site does not have yet is created when the WordPress user may manage tags, and skipped otherwise |
-| `--first-comment <PLATFORM=text>` | `firstComments`, a comment posted from the same account about 10 seconds after the post goes out (60 on YouTube). One flag per platform: LINKEDIN (1250 characters), TWITTER (280), BLUESKY (300), MASTODON (500), YOUTUBE (10000), FACEBOOK (8000), INSTAGRAM (2200). Facebook and Instagram stories take none, and a Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect, or its comment fails. A comment that fails never fails the post; `post get` shows its status. On `post update` the flags replace every stored first comment |
+| `--first-comment <PLATFORM=text>` | `firstComments`, a comment posted from the same account about 10 seconds after the post goes out (60 on YouTube). One flag per platform: LINKEDIN (1250 characters), TWITTER (280), THREADS (500), BLUESKY (300), MASTODON (500), YOUTUBE (10000), FACEBOOK (8000), INSTAGRAM (2200). Facebook and Instagram stories take none, and a Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect, or its comment fails. A comment that fails never fails the post; `post get` shows its status. On `post update` the flags replace every stored first comment |
 | `--thread-reply <PLATFORM=text>` | `threadReplies`, which turns the post into a thread: the post opens it, and each reply goes out from the same account under the one before, starting about 10 seconds after the post publishes. Repeat the flag once per reply, in order, as in `--thread-reply "X=Second post" --thread-reply "X=Third post"`. Everything after the first `=` is the text, commas and `=` included. `X=` with nothing after it is a reply that only carries images. TWITTER (280 characters per reply, more on X Premium), THREADS (500), BLUESKY (300), MASTODON (500, or the instance's limit), up to 25 replies per platform. A platform with `--first-comment` cannot have a thread too. A thread that fails never fails the post; `post get` shows its status. On `post update` the flags replace every stored thread |
 | `--thread-media <PLATFORM:N=path\|url>` | `threadReplies[].mediaUrls`, an image for reply N of that platform's `--thread-reply` flags, counted from 1. Repeat it for each image, up to 4 per reply, as in `--thread-media "X:2=./chart.png"`. JPEG, PNG, GIF or WebP; local JPEG, PNG and WebP files are uploaded first, and a GIF has to be an https URL. No videos |
 | `--thumbnail-for <PLATFORM=url>` | `platformThumbnails[].thumbnailUrl`, a thumbnail image for one platform of a VIDEO post. YOUTUBE, FACEBOOK, LINKEDIN, INSTAGRAM, PINTEREST, TELEGRAM |
@@ -360,7 +362,7 @@ adaptlypost post create -t "Slides from today's talk" -a li_22aa -a tw_4d1b \
   --first-comment "TWITTER=Deck link in the next post"
 ```
 
-Like the other config flags, the Instagram, Facebook, Google Business Profile, Tumblr and WordPress flags reach the API on `post update` only together with `--platform` or `--account`. `--first-comment`, the thumbnail and aspect ratio flags and `--x-keep-links` work on their own.
+Like the other config flags, the Instagram, Facebook, Google Business Profile, Tumblr and WordPress flags, `--x-quote` and `--li-reshare` reach the API on `post update` only together with `--platform` or `--account`. `post bulk` refuses LinkedIn document posts, LinkedIn reshares and X quotes, because the bulk endpoint takes neither `linkedinConfigs` nor `twitterConfigs`. `--first-comment`, the thumbnail and aspect ratio flags and `--x-keep-links` work on their own.
 
 Repeat flags, `post create` only:
 
@@ -400,7 +402,8 @@ Per-platform config keys, for `--config`, frontmatter platform blocks and `confi
 | `TIKTOK` | `privacyLevel`, `title`, `caption`, `allowComments`, `allowDuet`, `allowStitch`, `sendAsDraft`, `aiGenerated`, `brandedContent`, `brandedContentOwnBrand`, `autoAddMusic` |
 | `PINTEREST` | `boardId`, `boardName`, `title`, `link`. Set `boardId` or `boardName`, not both. `boardName` picks the board by its name, the same way `--pinterest-board-name` does. With neither, the pin goes to a board named AdaptlyPost |
 | `YOUTUBE` | `postType`, `videoTitle`, `tags`, `privacyStatus`, `license`, `notifySubscribers`, `allowEmbedding`, `madeForKids`, `aiGenerated`, `categoryId`, `playlistId`, `defaultAudioLanguage` |
-| `LINKEDIN` | `documentTitle` |
+| `LINKEDIN` | `documentTitle`, `reshareOf` |
+| `TWITTER` | `quoteOf` |
 | `TUMBLR` | `tags` (a list, one tag per item, no commas), `title`, `sourceUrl` |
 | `WORDPRESS` | `title`, `excerpt`, `categoryIds` (a list of category ids), `tags` (a list, one tag per item) |
 | `GOOGLE_BUSINESS` | `topicType`, `callToActionType`, `callToActionUrl`, `eventTitle`, `eventStart`, `eventEnd`, `offerCouponCode`, `offerRedeemUrl`, `offerTerms`. `topicType` defaults to `STANDARD` |
@@ -416,25 +419,77 @@ Per-platform config keys, for `--config`, frontmatter platform blocks and `confi
 
 | Command | Key flags | Notes |
 |---|---|---|
-| `webhook create` | `--url` | The only place the signing secret is ever returned, so store it then |
+| `webhook create` | `--url`, `--event` (repeatable) | The only place the signing secret is ever returned, so store it then. Without `--event` the webhook gets the default set: `post.published`, `post.partially_failed`, `post.failed`, `post.scheduled`, `account.unauthorized`, `image.completed` and `image.failed`. Inbox events (`comment.created`, `comment.replied`, `mention.created`, `message.received`, `review.created`) arrive only when you name them, and a webhook with `--event` gets only the events it names |
 | `webhook list` | | Status is `active`, `inactive` or `disabled`. The API disables a webhook whose deliveries keep failing |
 | `webhook get <id>` | | |
-| `webhook update <id>` | `--url`, `--active`, `--inactive` | Events are not editable |
+| `webhook update <id>` | `--url`, `--active`, `--inactive`, `--event` (repeatable), `--default-events` | `--event` replaces the stored events. `--default-events` goes back to the default set |
 | `webhook delete <id>` | `--yes` | Confirms first |
 | `webhook test <id>` | | Sends a test delivery. Exits 1 when the endpoint does not answer 2xx |
+
+### inbox
+
+Comments on the account's posts, mentions, direct messages and Google Business Profile reviews. Comments come from Facebook, Instagram, Threads, YouTube, Bluesky, Mastodon and LinkedIn; mentions from Facebook, Instagram, Threads, Bluesky and Mastodon; messages from Facebook, Instagram, Bluesky and Mastodon; reviews from Google Business Profile. TikTok and X have no inbox. Reading needs the `inbox.read` permission and every change needs `inbox.reply` and an active plan.
+
+| Command | Key flags | Notes |
+|---|---|---|
+| `inbox summary` | | Unread counts per channel, and per account whether each channel works (`yes`), needs a reconnect (`reconnect`) or does not exist on that platform (`—`) |
+| `inbox refresh` | | Queues a sync now. The inbox also syncs every 10 minutes per account |
+| `inbox comments list` | list flags below, `--post`, `--platform-post` | `--post` takes an AdaptlyPost post id from `post list`, `--platform-post` the platform's own post id |
+| `inbox comments get <id>` | | The comment, the comment it answers and its replies. `can` lists what the platform allows on it: reply, hide, delete, like |
+| `inbox comments reply <id>` | `-t/--text` | The platform's comment limit applies: LinkedIn 1250, Threads 500, Bluesky 300, Mastodon 500, YouTube 10000, Facebook 8000, Instagram 2200 |
+| `inbox comments hide <id>`, `unhide <id>` | | |
+| `inbox comments like <id>`, `unlike <id>` | | Facebook, Bluesky, Mastodon and LinkedIn |
+| `inbox comments delete <id>` | `--yes` | Facebook, Instagram and LinkedIn delete any comment on the account's posts; YouTube, Threads, Bluesky and Mastodon only the account's own replies. Asks first unless you pass `--yes` |
+| `inbox comments status <ids...>` | `--to` | `UNREAD`, `READ` or `DONE` for up to 100 ids. `-` reads one id per line from stdin |
+| `inbox mentions list` | list flags below | |
+| `inbox mentions reply <id>` | `-t/--text` | |
+| `inbox mentions status <ids...>` | `--to` | |
+| `inbox conversations list` | list flags below | Latest message first. Alias `dm` |
+| `inbox conversations get <id>` | | The messages, oldest first. `reply until` is the end of the 24-hour window on Facebook and Instagram |
+| `inbox conversations send <id>` | `-t/--text` | Up to the conversation's `max length` |
+| `inbox conversations status <ids...>` | `--to` | |
+| `inbox reviews list` | list flags below, `--rating` (repeatable, 1 to 5), `--replied`, `--unreplied` | |
+| `inbox reviews reply <id>` | `-t/--text` | Google allows one reply per review, so this replaces any reply already there. Up to 4096 bytes |
+| `inbox reviews delete-reply <id>` | `--yes` | |
+| `inbox reviews status <ids...>` | `--to` | |
+
+List flags, on every `list`:
+
+| Flag | Sends |
+|---|---|
+| `-a, --account <id>` | `accountIds`, repeatable, up to 50. The id from `accounts list` |
+| `-P, --platform <platform>` | `platforms`, repeatable |
+| `--status <status>` | `statuses`, repeatable: `UNREAD`, `READ`, `DONE` |
+| `--since <date>` | `since`, only items created on the platform at or after it. An ISO 8601 date-time or an offset such as `-7d` |
+| `--search <text>` | `search` |
+| `--limit <n>` | `limit`, 1 to 100, 25 by default |
+| `--cursor <cursor>` | `cursor`, the `nextCursor` of the previous page. The table prints it as `next: --cursor ...` and `--json` returns it in `meta.nextCursor` |
+| `--all` | Follows `nextCursor` 100 items at a time until the last page, up to 50 requests |
+
+`-t -` reads the text from stdin. Each inbox refusal comes with a hint. `inbox_reconnect_required` (exit 10) means the account lacks the permission for that channel or its login expired. Channels still waiting on the platform's review answer the same way. Reconnect the account on the Connectors page. `inbox_reply_invalid` means the text is empty or too long. `inbox_messaging_window_closed` means the 24-hour window on Facebook or Instagram has passed. `inbox_action_unsupported` means the platform does not allow that action on this item. `inbox_rate_limited` (exit 7) and `inbox_platform_error` (exit 1) can be retried later.
+
+```bash
+adaptlypost inbox comments list --status UNREAD --since -1d
+adaptlypost inbox comments reply cm_8f2a -t "Thanks, it is back in stock on Friday"
+adaptlypost inbox reviews list --rating 1 --rating 2 --unreplied --json | jq -r '.data[].id' \
+  | adaptlypost inbox reviews status - --to READ
+adaptlypost webhook create --url https://example.com/hooks/inbox --event comment.created --event review.created
+```
 
 ### analytics
 
 | Command | Key flags | Notes |
 |---|---|---|
-| `analytics overview` | `--from`, `--to`, `--platform` | Defaults to the last 30 days and prints the resolved window |
-| `analytics timeseries` | `--from`, `--to`, `--granularity`, `--platform` | Table plus a views sparkline |
-| `analytics breakdown` | `--from`, `--to` | `--platform` is a usage error here; the API ignores it |
-| `analytics posts` | `--sort-by`, `--page`, `--limit`, `--all`, `--platform` | |
-| `analytics top` | `--from`, `--to`, `--platform`, `--sort-by`, `--limit` | The best posts in the window by one metric. Sorts by `VIEWS` and returns 10 unless told otherwise, 50 at most |
-| `analytics discovered` | `--from`, `--to`, `--platform`, `--limit` | Posts found on the connected accounts that were not published through AdaptlyPost. 200 by default, 1000 at most |
+| `analytics overview` | `--from`, `--to`, `--platform`, `--account` | Defaults to the last 30 days and prints the resolved window |
+| `analytics timeseries` | `--from`, `--to`, `--granularity`, `--platform`, `--account` | Table plus a views sparkline |
+| `analytics breakdown` | `--from`, `--to`, `--account` | `--platform` is a usage error here; the API ignores it |
+| `analytics posts` | `--sort-by`, `--page`, `--limit`, `--all`, `--platform`, `--account` | |
+| `analytics top` | `--from`, `--to`, `--platform`, `--account`, `--sort-by`, `--limit` | The best posts in the window by one metric. Sorts by `VIEWS` and returns 10 unless told otherwise, 50 at most |
+| `analytics discovered` | `--from`, `--to`, `--platform`, `--account`, `--limit` | Posts found on the connected accounts that were not published through AdaptlyPost. 200 by default, 1000 at most |
 | `analytics sync-status` | | Per-account sync and discovery state |
 | `analytics sync` | `--wait` | One run per workspace per ten minutes |
+
+`--account` is repeatable and takes the account id from `accounts list`; it sends `connectionIds`, so the numbers cover only those accounts.
 
 Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, LinkedIn, YouTube, X and Google Business Profile. Google Business Profile reports how often a location was seen, with no per-post numbers. Mastodon, Telegram, Tumblr and WordPress have no analytics, and `--platform` ignores them. Connecting an account imports its posts from the last 180 days, and a post keeps refreshing for 180 days after it is published.
 
@@ -456,7 +511,7 @@ Insufficient credits come back as exit 9, not a generic failure. A failed image 
 | `logout` | `--profile`, `--all` | |
 | `whoami` | | Workspace, role, what the key can do, and which source the token and the API URL came from |
 | `config list \| get \| set \| unset \| path` | | Reads and writes `config.json` |
-| `open [what] [id]` | | `dashboard`, `post <id>`, `accounts`, `analytics`, `tokens`, `webhooks` |
+| `open [what] [id]` | | `dashboard`, `post <id>`, `accounts`, `analytics`, `inbox`, `tokens`, `webhooks` |
 | `doctor` | `--json` | Node version, files, permissions, token, role, API reachability, rate limit |
 | `completion <shell>` | | `bash`, `zsh`, `fish`, `powershell` |
 | `mcp` | `--client`, `--local`, `--install` | Prints or installs the MCP client config |

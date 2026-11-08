@@ -16,6 +16,7 @@ const TARGETS: Record<string, Target> = {
   drafts: { path: () => '/drafts', needsId: false },
   accounts: { path: () => '/connectors', needsId: false },
   analytics: { path: () => '/analytics', needsId: false },
+  inbox: { path: () => '/inbox', needsId: false },
   tokens: { path: () => '/api-tokens', needsId: false },
   billing: { path: () => '/billing', needsId: false },
   settings: { path: () => '/settings/general', needsId: false },

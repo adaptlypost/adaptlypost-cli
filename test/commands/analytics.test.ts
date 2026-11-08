@@ -58,7 +58,7 @@ describe('registerAnalyticsCommands', () => {
 
     for (const name of ['overview', 'timeseries', 'breakdown', 'posts', 'top', 'discovered']) {
       expect(optionNames(subcommand(program, name))).toEqual(
-        expect.arrayContaining(['--from', '--to', '--platform']),
+        expect.arrayContaining(['--from', '--to', '--platform', '--account']),
       );
     }
   });

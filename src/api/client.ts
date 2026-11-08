@@ -26,6 +26,26 @@ import type {
   GenerateImageRequest,
   GenerateImageResponse,
   ImageJob,
+  InboxComment,
+  InboxCommentThread,
+  InboxCommentsQuery,
+  InboxCommentsResponse,
+  InboxCommentsStatusResponse,
+  InboxConversationThread,
+  InboxConversationsResponse,
+  InboxConversationsStatusResponse,
+  InboxListQuery,
+  InboxMention,
+  InboxMentionsResponse,
+  InboxMentionsStatusResponse,
+  InboxReview,
+  InboxReviewsQuery,
+  InboxReviewsResponse,
+  InboxReviewsStatusResponse,
+  InboxStatusRequest,
+  InboxSummary,
+  InboxTextRequest,
+  SentInboxMessage,
   InstagramAudioResponse,
   ListPostAnalyticsResponse,
   ListPostsQuery,
@@ -402,4 +422,162 @@ export const getImageJob = (jobId: string): Promise<ImageJob> =>
   request<ImageJob>({
     method: 'GET',
     path: `/ai/images/${segment(jobId)}`,
+  });
+
+export const getInboxSummary = (): Promise<InboxSummary> =>
+  request<InboxSummary>({ method: 'GET', path: '/inbox/summary' });
+
+export const refreshInbox = (): Promise<{ queued: boolean }> =>
+  request<{ queued: boolean }>({ method: 'POST', path: '/inbox/refresh', idempotent: true });
+
+export const listInboxComments = (
+  inboxCommentsQuery: InboxCommentsQuery = {},
+): Promise<InboxCommentsResponse> =>
+  request<InboxCommentsResponse>({ method: 'GET', path: '/inbox/comments', query: inboxCommentsQuery });
+
+export const getInboxComment = (commentId: string): Promise<InboxCommentThread> =>
+  request<InboxCommentThread>({ method: 'GET', path: `/inbox/comments/${segment(commentId)}` });
+
+export const replyToInboxComment = (
+  commentId: string,
+  inboxTextRequest: InboxTextRequest,
+): Promise<InboxComment> =>
+  request<InboxComment>({
+    method: 'POST',
+    path: `/inbox/comments/${segment(commentId)}/reply`,
+    body: inboxTextRequest,
+  });
+
+export const hideInboxComment = (commentId: string): Promise<InboxComment> =>
+  request<InboxComment>({
+    method: 'POST',
+    path: `/inbox/comments/${segment(commentId)}/hide`,
+    idempotent: true,
+  });
+
+export const unhideInboxComment = (commentId: string): Promise<InboxComment> =>
+  request<InboxComment>({
+    method: 'POST',
+    path: `/inbox/comments/${segment(commentId)}/unhide`,
+    idempotent: true,
+  });
+
+export const likeInboxComment = (commentId: string): Promise<InboxComment> =>
+  request<InboxComment>({
+    method: 'POST',
+    path: `/inbox/comments/${segment(commentId)}/like`,
+    idempotent: true,
+  });
+
+export const unlikeInboxComment = (commentId: string): Promise<InboxComment> =>
+  request<InboxComment>({
+    method: 'DELETE',
+    path: `/inbox/comments/${segment(commentId)}/like`,
+    idempotent: true,
+  });
+
+export const deleteInboxComment = (commentId: string): Promise<DeletedResponse> =>
+  request<DeletedResponse>({ method: 'DELETE', path: `/inbox/comments/${segment(commentId)}` });
+
+export const setInboxCommentsStatus = (
+  inboxStatusRequest: InboxStatusRequest,
+): Promise<InboxCommentsStatusResponse> =>
+  request<InboxCommentsStatusResponse>({
+    method: 'POST',
+    path: '/inbox/comments/status',
+    body: inboxStatusRequest,
+    idempotent: true,
+  });
+
+export const listInboxMentions = (
+  inboxListQuery: InboxListQuery = {},
+): Promise<InboxMentionsResponse> =>
+  request<InboxMentionsResponse>({ method: 'GET', path: '/inbox/mentions', query: inboxListQuery });
+
+export const replyToInboxMention = (
+  mentionId: string,
+  inboxTextRequest: InboxTextRequest,
+): Promise<InboxMention> =>
+  request<InboxMention>({
+    method: 'POST',
+    path: `/inbox/mentions/${segment(mentionId)}/reply`,
+    body: inboxTextRequest,
+  });
+
+export const setInboxMentionsStatus = (
+  inboxStatusRequest: InboxStatusRequest,
+): Promise<InboxMentionsStatusResponse> =>
+  request<InboxMentionsStatusResponse>({
+    method: 'POST',
+    path: '/inbox/mentions/status',
+    body: inboxStatusRequest,
+    idempotent: true,
+  });
+
+export const listInboxConversations = (
+  inboxListQuery: InboxListQuery = {},
+): Promise<InboxConversationsResponse> =>
+  request<InboxConversationsResponse>({ method: 'GET', path: '/inbox/conversations', query: inboxListQuery });
+
+export const getInboxConversation = (conversationId: string): Promise<InboxConversationThread> =>
+  request<InboxConversationThread>({
+    method: 'GET',
+    path: `/inbox/conversations/${segment(conversationId)}`,
+  });
+
+export const sendInboxMessage = (
+  conversationId: string,
+  inboxTextRequest: InboxTextRequest,
+): Promise<SentInboxMessage> =>
+  request<SentInboxMessage>({
+    method: 'POST',
+    path: `/inbox/conversations/${segment(conversationId)}/messages`,
+    body: inboxTextRequest,
+  });
+
+export const setInboxConversationsStatus = (
+  inboxStatusRequest: InboxStatusRequest,
+): Promise<InboxConversationsStatusResponse> =>
+  request<InboxConversationsStatusResponse>({
+    method: 'POST',
+    path: '/inbox/conversations/status',
+    body: inboxStatusRequest,
+    idempotent: true,
+  });
+
+export const listInboxReviews = (
+  inboxReviewsQuery: InboxReviewsQuery = {},
+): Promise<InboxReviewsResponse> =>
+  request<InboxReviewsResponse>({
+    method: 'GET',
+    path: '/inbox/reviews',
+    query: { ...inboxReviewsQuery, ratings: inboxReviewsQuery.ratings?.map(String) },
+  });
+
+export const replyToInboxReview = (
+  reviewId: string,
+  inboxTextRequest: InboxTextRequest,
+): Promise<InboxReview> =>
+  request<InboxReview>({
+    method: 'PUT',
+    path: `/inbox/reviews/${segment(reviewId)}/reply`,
+    body: inboxTextRequest,
+    idempotent: true,
+  });
+
+export const deleteInboxReviewReply = (reviewId: string): Promise<InboxReview> =>
+  request<InboxReview>({
+    method: 'DELETE',
+    path: `/inbox/reviews/${segment(reviewId)}/reply`,
+    idempotent: true,
+  });
+
+export const setInboxReviewsStatus = (
+  inboxStatusRequest: InboxStatusRequest,
+): Promise<InboxReviewsStatusResponse> =>
+  request<InboxReviewsStatusResponse>({
+    method: 'POST',
+    path: '/inbox/reviews/status',
+    body: inboxStatusRequest,
+    idempotent: true,
   });

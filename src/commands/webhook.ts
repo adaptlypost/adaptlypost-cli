@@ -8,7 +8,13 @@ import {
   testWebhook,
   updateWebhook,
 } from '../api/client.js';
-import { WEBHOOK_EVENTS, type UpdateWebhookRequest, type Webhook } from '../api/types.js';
+import {
+  DEFAULT_WEBHOOK_EVENTS,
+  WEBHOOK_EVENTS,
+  type UpdateWebhookRequest,
+  type Webhook,
+  type WebhookEvent,
+} from '../api/types.js';
 import {
   CliError,
   ExitCode,
@@ -36,13 +42,33 @@ interface GlobalOptions {
 
 interface CreateOptions {
   url?: string;
+  event: string[];
 }
 
 interface UpdateOptions {
   url?: string;
   active?: boolean;
   inactive?: boolean;
+  event?: string[];
+  defaultEvents?: boolean;
 }
+
+const collect = (value: string, previous: string[]): string[] => [...previous, value];
+
+export const parseWebhookEvents = (values: readonly string[]): WebhookEvent[] => {
+  const events: WebhookEvent[] = [];
+  for (const value of values) {
+    const event = value.trim().toLowerCase();
+    if (!(WEBHOOK_EVENTS as readonly string[]).includes(event)) {
+      throw usageError(`Unknown event "${value}".`, `Events: ${WEBHOOK_EVENTS.join(', ')}`);
+    }
+    if (!events.includes(event as WebhookEvent)) events.push(event as WebhookEvent);
+  }
+  return events;
+};
+
+export const eventsOf = (webhook: Webhook): readonly string[] =>
+  webhook.events && webhook.events.length > 0 ? webhook.events : DEFAULT_WEBHOOK_EVENTS;
 
 export const assertWebhookUrl = (value: string): string => {
   const url = value.trim();
@@ -73,6 +99,7 @@ const detailsOf = (webhook: Webhook): [string, string][] => [
   ['id', webhook.id],
   ['url', webhook.url],
   ['status', webhookState(webhook)],
+  ['events', webhook.events && webhook.events.length > 0 ? webhook.events.join(', ') : 'default set'],
   ['last success', when(webhook.lastSuccessAt)],
   ['last failure', when(webhook.lastFailureAt)],
   ...(webhook.disabledAt ? [['disabled', when(webhook.disabledAt)] as [string, string]] : []),
@@ -91,7 +118,9 @@ async function runCreate(options: CreateOptions): Promise<void> {
     throw usageError('--url is required.', 'webhook create --url https://example.com/hooks/adaptlypost');
   }
 
-  const created = await createWebhook({ url: assertWebhookUrl(options.url) });
+  const url = assertWebhookUrl(options.url);
+  const events = parseWebhookEvents(options.event);
+  const created = await createWebhook(events.length > 0 ? { url, events } : { url });
 
   if (isMachine()) {
     printResult('webhook.create', created);
@@ -101,7 +130,7 @@ async function runCreate(options: CreateOptions): Promise<void> {
   success(`Webhook created  ${formatId(created.id)}`);
   printKeyValues([...detailsOf(created), ['secret', created.secret]]);
   warn('The signing secret is shown only now. Store it where your receiver can read it.');
-  hint(`Events: ${WEBHOOK_EVENTS.join(', ')}. Send a test with: ${PRODUCT.binName} webhook test ${created.id}`);
+  hint(`Events: ${eventsOf(created).join(', ')}. Send a test with: ${PRODUCT.binName} webhook test ${created.id}`);
 }
 
 async function runList(): Promise<void> {
@@ -139,14 +168,20 @@ export function buildWebhookUpdate(options: UpdateOptions): UpdateWebhookRequest
   if (options.active && options.inactive) {
     throw usageError('Pass --active or --inactive, not both.');
   }
+  const events = parseWebhookEvents(options.event ?? []);
+  if (options.defaultEvents && events.length > 0) {
+    throw usageError('Pass --event or --default-events, not both.');
+  }
 
   const body: UpdateWebhookRequest = {};
   if (options.url !== undefined) body.url = assertWebhookUrl(options.url);
   if (options.active) body.active = true;
   if (options.inactive) body.active = false;
+  if (events.length > 0) body.events = events;
+  if (options.defaultEvents) body.events = [];
 
   if (Object.keys(body).length === 0) {
-    throw usageError('Nothing to update.', 'Pass --url, --active or --inactive. Events are not editable');
+    throw usageError('Nothing to update.', 'Pass --url, --active, --inactive, --event or --default-events');
   }
   return body;
 }
@@ -208,12 +243,18 @@ export function registerWebhookCommands(program: Command): void {
   const webhook = program
     .command('webhook')
     .alias('webhooks')
-    .description('Webhooks that receive post and account events');
+    .description('Webhooks that receive post, account, image and inbox events');
 
   webhook
     .command('create')
     .description('Register a webhook; the signing secret is returned only here')
     .option('--url <url>', 'HTTPS endpoint that receives the events')
+    .option(
+      '--event <name>',
+      'event to receive, repeatable. Without it the webhook gets the default set, which has no inbox events',
+      collect,
+      [] as string[],
+    )
     .action(async (options: CreateOptions) => {
       await runCreate(options);
     });
@@ -236,10 +277,12 @@ export function registerWebhookCommands(program: Command): void {
 
   webhook
     .command('update <id>')
-    .description('Change the URL or turn a webhook on or off. Events are not editable')
+    .description('Change the URL or the events, or turn a webhook on or off')
     .option('--url <url>', 'New endpoint')
     .option('--active', 'Turn deliveries on')
     .option('--inactive', 'Turn deliveries off')
+    .option('--event <name>', 'event to receive, repeatable. Replaces the stored list', collect, [] as string[])
+    .option('--default-events', 'go back to the default set, which has no inbox events')
     .action(async (id: string, options: UpdateOptions) => {
       await runUpdate(id, options);
     });
