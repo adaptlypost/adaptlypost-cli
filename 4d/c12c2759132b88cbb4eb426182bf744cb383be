@@ -1,0 +1,29 @@
+README.md
+  s_c160ab201e73bd::t_0a9a53270a58fc 143,208-230,279-280,313-314,353-354,394
+src/api/types.ts
+  s_c160ab201e73bd::t_6ed7c06b1f11f5 161,483-488,500,662-663
+src/commands/post-input.ts
+  s_c160ab201e73bd::t_1f55894319edb4 18,47,116,136-140,779,795-801,869-875,906-911,1109,1976-2015,2097-2101,2105-2141,2154,2161
+src/commands/post.ts
+  s_c160ab201e73bd::t_8cb3cdedc08664 52,130,135,140,255-256,356-379,642-645,861-862,865-868,870,873-874,1010,1045-1049,1065,1075-1077,1145,1347-1356,1381,1425,1429,1758-1763,1796-1797,1930-1939,2124-2130,2146,2496-2507,2628
+test/commands/post-input.test.ts
+  s_c160ab201e73bd::t_f7b10da6f479c8 881-917,1465-1535
+test/commands/post.test.ts
+  s_c160ab201e73bd::t_278aada76b7e1b 1438-1588,2296-2353
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4dc12c2759132b88cbb4eb426182bf744cb383be",
+  "prompts": {},
+  "sessions": {
+    "s_c160ab201e73bd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "33b3449d-905c-4204-9471-7f42bb33a1c3",
+        "model": "unknown"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}
