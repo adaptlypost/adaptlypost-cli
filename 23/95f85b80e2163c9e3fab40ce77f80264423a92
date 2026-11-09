@@ -1,0 +1,29 @@
+README.md
+  s_63e5f441086c72::t_4e5339c93731c8 143,278
+src/api/client.ts
+  s_63e5f441086c72::t_f4cf35b85f5f83 50,56,134-142
+src/api/types.ts
+  s_63e5f441086c72::t_a4534aa21e5120 387-404
+src/commands/account.ts
+  s_63e5f441086c72::t_f565c29c40b882 8,15,20,30,33,36,482-550,625-634
+test/api/client.test.ts
+  s_63e5f441086c72::t_11f4ff489c9577 48-56
+test/commands/account.test.ts
+  s_63e5f441086c72::t_a27fb22410b109 9,17,27,41,43,46,85,103,112,271-352
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2395f85b80e2163c9e3fab40ce77f80264423a92",
+  "prompts": {},
+  "sessions": {
+    "s_63e5f441086c72": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "21ad4cdf-63a9-4919-aa0a-711814a31bdb",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}
