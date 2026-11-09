@@ -6,6 +6,7 @@ const {
   listPinterestBoards,
   listSocialAccounts,
   listWordPressCategories,
+  lookupLinkedInOrganization,
   removeSocialAccount,
   searchInstagramAudio,
 } = vi.hoisted(() => ({
@@ -13,6 +14,7 @@ const {
   listPinterestBoards: vi.fn(),
   listSocialAccounts: vi.fn(),
   listWordPressCategories: vi.fn(),
+  lookupLinkedInOrganization: vi.fn(),
   removeSocialAccount: vi.fn(),
   searchInstagramAudio: vi.fn(),
 }));
@@ -22,6 +24,7 @@ vi.mock('../../src/api/client.js', () => ({
   listPinterestBoards,
   listSocialAccounts,
   listWordPressCategories,
+  lookupLinkedInOrganization,
   removeSocialAccount,
   searchInstagramAudio,
 }));
@@ -35,10 +38,12 @@ import {
   filterAccounts,
   findAccount,
   needsReauthorisation,
+  normalizeLinkedInOrganizationQuery,
   registerAccountCommands,
+  withLinkedInOrganizationHint,
 } from '../../src/commands/account.js';
 import type { SocialAccount } from '../../src/api/types.js';
-import { setOutputMode } from '../../src/core/index.js';
+import { ApiError, setOutputMode } from '../../src/core/index.js';
 import { setInteractive } from '../../src/core/prompt.js';
 
 const account = (overrides: Partial<SocialAccount> = {}): SocialAccount =>
@@ -77,6 +82,7 @@ beforeEach(() => {
   listPinterestBoards.mockReset();
   listSocialAccounts.mockReset();
   listWordPressCategories.mockReset();
+  lookupLinkedInOrganization.mockReset();
   removeSocialAccount.mockReset();
   searchInstagramAudio.mockReset();
   setOutputMode('machine');
@@ -94,7 +100,7 @@ beforeEach(() => {
 });
 
 describe('registerAccountCommands', () => {
-  it('registers list, view, check, remove, instagram-audio, pinterest-boards and wordpress-categories', () => {
+  it('registers list, view, check, remove, instagram-audio, pinterest-boards, wordpress-categories and linkedin-organization', () => {
     expect(accountsCommand(buildProgram()).commands.map((command) => command.name())).toEqual([
       'list',
       'view',
@@ -103,6 +109,7 @@ describe('registerAccountCommands', () => {
       'instagram-audio',
       'pinterest-boards',
       'wordpress-categories',
+      'linkedin-organization',
     ]);
   });
 });
@@ -258,6 +265,88 @@ describe('accounts wordpress-categories', () => {
     await expect(run(['wordpress-categories', 'acc_1'])).rejects.toThrow(/no WordPress categories/);
     await expect(run(['wordpress-categories', 'wp_missing'])).rejects.toThrow(/No account with id/);
     expect(listWordPressCategories).not.toHaveBeenCalled();
+  });
+});
+
+describe('accounts linkedin-organization', () => {
+  const organization = {
+    id: '2414183',
+    name: 'Devtestco',
+    vanityName: 'devtestco',
+    urn: 'urn:li:organization:2414183',
+    mention: '@[Devtestco](urn:li:organization:2414183)',
+  };
+
+  it('looks the page up by its trimmed query and prints the API payload', async () => {
+    lookupLinkedInOrganization.mockResolvedValue({ organization });
+
+    await run(['linkedin-organization', ' https://www.linkedin.com/company/devtestco/ ']);
+
+    expect(lookupLinkedInOrganization).toHaveBeenCalledWith({
+      query: 'https://www.linkedin.com/company/devtestco/',
+    });
+    expect(listSocialAccounts).not.toHaveBeenCalled();
+    expect(JSON.parse(stdout.join(''))).toMatchObject({
+      command: 'accounts.linkedin-organization',
+      data: organization,
+    });
+  });
+
+  it('prints the id, urn and mention, and where the mention goes', async () => {
+    lookupLinkedInOrganization.mockResolvedValue({ organization: { ...organization, vanityName: null } });
+    setOutputMode('human');
+
+    await run(['li-org', '@devtestco']);
+
+    const out = stdout.join('');
+    expect(out.split('\n')[0]).toBe('Devtestco');
+    expect(out).toMatch(/id\s+2414183/);
+    expect(out).toMatch(/vanity name\s+—/);
+    expect(out).toMatch(/urn\s+urn:li:organization:2414183/);
+    expect(out).toContain('@[Devtestco](urn:li:organization:2414183)');
+    expect(stderr.join('')).toContain('--text-for "LINKEDIN=…"');
+  });
+
+  it('refuses an empty or too long query before calling the API', async () => {
+    await expect(run(['linkedin-organization', '  '])).rejects.toThrow(/query is empty/);
+    await expect(run(['linkedin-organization', 'a'.repeat(301)])).rejects.toThrow(/limit is 300/);
+    expect(lookupLinkedInOrganization).not.toHaveBeenCalled();
+    expect(normalizeLinkedInOrganizationQuery('a'.repeat(300))).toHaveLength(300);
+  });
+
+  it('adds what to do next to each lookup refusal', async () => {
+    lookupLinkedInOrganization.mockRejectedValue(
+      new ApiError({
+        status: 400,
+        body: {
+          statusCode: 400,
+          code: 'linkedin_organization_lookup_unavailable',
+          message: 'No LinkedIn account of this workspace could look up the page',
+        },
+      }),
+    );
+
+    await expect(run(['linkedin-organization', 'devtestco'])).rejects.toMatchObject({
+      code: 'linkedin_organization_lookup_unavailable',
+      message: 'No LinkedIn account of this workspace could look up the page',
+      hint: expect.stringMatching(/Connect or reconnect a LinkedIn account/),
+    });
+
+    const notFound = withLinkedInOrganizationHint(
+      new ApiError({ status: 404, body: { code: 'linkedin_organization_not_found', message: 'Not found' } }),
+    ) as InstanceType<typeof ApiError>;
+    expect(notFound.status).toBe(404);
+    expect(notFound.hint).toMatch(/exact vanity name/);
+
+    const invalid = withLinkedInOrganizationHint(
+      new ApiError({ status: 400, body: { code: 'linkedin_organization_query_invalid', message: 'Invalid' } }),
+    ) as InstanceType<typeof ApiError>;
+    expect(invalid.hint).toMatch(/linkedin\.com\/company\/acme/);
+  });
+
+  it('leaves other errors alone', () => {
+    const other = new ApiError({ status: 403, body: { code: 'permission_denied', message: 'No' } });
+    expect(withLinkedInOrganizationHint(other)).toBe(other);
   });
 });
 

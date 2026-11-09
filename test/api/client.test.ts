@@ -46,6 +46,15 @@ describe('endpoint mapping', () => {
       { method: 'GET', path: '/social-accounts/wp_7e2a/wordpress-categories' },
     ],
     [
+      'lookupLinkedInOrganization',
+      () => client.lookupLinkedInOrganization({ query: 'https://www.linkedin.com/company/devtestco/' }),
+      {
+        method: 'GET',
+        path: '/linkedin-organizations/lookup',
+        query: { query: 'https://www.linkedin.com/company/devtestco/' },
+      },
+    ],
+    [
       'createUploadUrls',
       () =>
         client.createUploadUrls({

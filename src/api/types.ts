@@ -384,6 +384,24 @@ export interface WordPressCategoriesResponse {
   categories: WordPressCategory[];
 }
 
+export const LINKEDIN_ORGANIZATION_QUERY_MAX_LENGTH = 300;
+
+export type LookupLinkedInOrganizationQuery = {
+  query: string;
+};
+
+export interface LinkedInOrganization {
+  id: string;
+  name: string;
+  vanityName: string | null;
+  urn: string;
+  mention: string;
+}
+
+export interface LinkedInOrganizationLookupResponse {
+  organization: LinkedInOrganization;
+}
+
 export type TokenType = 'api_token' | 'oauth';
 
 export interface Me {

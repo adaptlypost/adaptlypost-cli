@@ -47,11 +47,13 @@ import type {
   InboxTextRequest,
   SentInboxMessage,
   InstagramAudioResponse,
+  LinkedInOrganizationLookupResponse,
   ListPostAnalyticsResponse,
   ListPostsQuery,
   ListPostsResponse,
   ListRecurringPostsQuery,
   ListRecurringPostsResponse,
+  LookupLinkedInOrganizationQuery,
   Me,
   PinterestBoardsResponse,
   WordPressCategoriesResponse,
@@ -127,6 +129,15 @@ export const listWordPressCategories = (
   request<WordPressCategoriesResponse>({
     method: 'GET',
     path: `/social-accounts/${segment(accountId)}/wordpress-categories`,
+  });
+
+export const lookupLinkedInOrganization = (
+  lookupLinkedInOrganizationQuery: LookupLinkedInOrganizationQuery,
+): Promise<LinkedInOrganizationLookupResponse> =>
+  request<LinkedInOrganizationLookupResponse>({
+    method: 'GET',
+    path: '/linkedin-organizations/lookup',
+    query: lookupLinkedInOrganizationQuery,
   });
 
 export const createUploadUrls = (

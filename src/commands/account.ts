@@ -5,16 +5,19 @@ import {
   listPinterestBoards,
   listSocialAccounts,
   listWordPressCategories,
+  lookupLinkedInOrganization,
   removeSocialAccount,
   searchInstagramAudio,
 } from '../api/client.js';
 import {
   INSTAGRAM_AUDIO_SEARCH_MAX_LENGTH,
   INSTAGRAM_AUDIO_TYPES,
+  LINKEDIN_ORGANIZATION_QUERY_MAX_LENGTH,
   PLATFORM_TYPES,
   SOCIAL_ACCOUNT_STATUSES,
   type InstagramAudio,
   type InstagramAudioType,
+  type LinkedInOrganization,
   type PinterestBoard,
   type PlatformType,
   type SocialAccount,
@@ -24,10 +27,13 @@ import {
   type WordPressCategory,
 } from '../api/types.js';
 import {
+  ApiError,
   CliError,
   ExitCode,
+  PRODUCT,
   formatId,
   hint,
+  isApiError,
   isMachine,
   isQuiet,
   notFoundError,
@@ -473,6 +479,75 @@ const runWordPressCategories = async (id: string): Promise<void> => {
   hint('file a post under one: adaptlypost post create --wordpress-category <categoryId> …');
 };
 
+export const LINKEDIN_ORGANIZATION_REFUSAL_HINTS: Record<string, string> = {
+  linkedin_organization_query_invalid:
+    'Pass a company page URL such as https://www.linkedin.com/company/acme/, its vanity name (acme) or @acme.',
+  linkedin_organization_not_found:
+    'LinkedIn matches the exact vanity name, the part after linkedin.com/company/ in the page URL. It does not search by name, so copy it from the page URL.',
+  linkedin_organization_lookup_unavailable: `No LinkedIn account in this workspace could run the lookup. Connect or reconnect a LinkedIn account on the Connectors page in ${PRODUCT.displayName}, ideally a company page you administer.`,
+};
+
+export function withLinkedInOrganizationHint(error: unknown): unknown {
+  if (!isApiError(error)) return error;
+  const extra = LINKEDIN_ORGANIZATION_REFUSAL_HINTS[error.code];
+  if (extra === undefined) return error;
+  return new ApiError({
+    status: error.status,
+    body: error.body,
+    requestId: error.requestId,
+    code: error.code,
+    method: error.method,
+    path: error.path,
+    hint: extra,
+    cause: error,
+  });
+}
+
+export const normalizeLinkedInOrganizationQuery = (value: string): string => {
+  const query = value.trim();
+  if (query.length === 0) {
+    throw usageError('The query is empty', 'pass a company page URL, its vanity name or @vanity');
+  }
+  if (query.length > LINKEDIN_ORGANIZATION_QUERY_MAX_LENGTH) {
+    throw usageError(
+      `The query is ${query.length} characters; the limit is ${LINKEDIN_ORGANIZATION_QUERY_MAX_LENGTH}`,
+    );
+  }
+  return query;
+};
+
+const runLinkedInOrganization = async (value: string): Promise<void> => {
+  const query = normalizeLinkedInOrganizationQuery(value);
+
+  const progress = isQuiet() || isMachine() ? null : spinner('Asking LinkedIn…');
+  let organization: LinkedInOrganization;
+  try {
+    ({ organization } = await lookupLinkedInOrganization({ query }));
+  } catch (error) {
+    throw withLinkedInOrganizationHint(error);
+  } finally {
+    progress?.stop();
+  }
+
+  if (isMachine()) {
+    printResult('accounts.linkedin-organization', organization);
+    return;
+  }
+
+  print(organization.name || organization.id);
+  print();
+  printKeyValues([
+    ['id', organization.id],
+    ['vanity name', organization.vanityName ?? '—'],
+    ['urn', organization.urn],
+    ['mention', organization.mention],
+  ]);
+  print();
+  hint(
+    'mention it in a LinkedIn post: paste the mention into -t as is, or into --text-for "LINKEDIN=…" when the post also goes to other platforms',
+  );
+};
+
 export const registerAccountCommands = (program: Command): void => {
   const accounts = program
     .command('accounts')
@@ -546,5 +621,15 @@ export const registerAccountCommands = (program: Command): void => {
     .description('list the categories of a WordPress site, to pass their ids to post create --wordpress-category')
     .action(async (id: string) => {
       await runWordPressCategories(id);
+    });
+
+  accounts
+    .command('linkedin-organization <query>')
+    .alias('li-org')
+    .description(
+      'look up a LinkedIn company page by its URL, vanity name or @vanity, for the mention to put in a LinkedIn post',
+    )
+    .action(async (query: string) => {
+      await runLinkedInOrganization(query);
     });
 };
