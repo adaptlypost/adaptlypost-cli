@@ -49,6 +49,7 @@ import {
   type ContentType,
   type PinterestBoard,
   type PinterestPostConfig,
+  type PlatformMedia,
   type PlatformText,
   type PlatformThreadReplies,
   type PlatformType,
@@ -126,14 +127,17 @@ import {
   normalizeWeekday,
   parsePostInput,
   pickPinterestBoard,
+  platformMediaReferences,
   readSource,
   readStdin,
   setFirstComment,
   setPlatformAspectRatio,
+  setPlatformMedia,
   setPlatformThumbnail,
   setThreadReplies,
   threadReplyMediaReferences,
   uploadLocalMedia,
+  withPlatformMediaUrls,
   withThreadReplyMediaUrls,
   type PostInput,
   type ThreadReplyInput,
@@ -248,6 +252,8 @@ interface ContentOptions {
   threadMedia: string[];
   thumbnailFor: string[];
   thumbnailMsFor: string[];
+  mediaFor: string[];
+  altFor: string[];
   aspectRatio: string[];
   fit: string[];
   igShareToStory?: boolean;
@@ -345,6 +351,30 @@ function threadRepliesFromOptions(options: ContentOptions): PostInput["threadRep
   }
 
   return Object.keys(threads).length > 0 ? threads : undefined;
+}
+
+function platformMediaFromOptions(options: ContentOptions): PostInput["platformMedia"] {
+  const entries: NonNullable<PostInput["platformMedia"]> = {};
+
+  for (const entry of options.mediaFor) {
+    const [platform, reference] = parsePair(entry, "--media-for");
+    if (reference.trim() === "") {
+      throw new CliError(`--media-for ${platform} has no file.`, {
+        exitCode: ExitCode.USAGE,
+        hint: 'Write --media-for "PLATFORM=path-or-url", one file per flag',
+      });
+    }
+    const key = normalizePlatformName(platform);
+    entries[key] = { ...entries[key], media: [...(entries[key]?.media ?? []), reference] };
+  }
+
+  for (const entry of options.altFor) {
+    const [platform, text] = parsePair(entry, "--alt-for");
+    const key = normalizePlatformName(platform);
+    entries[key] = { ...entries[key], alt: [...(entries[key]?.alt ?? []), text] };
+  }
+
+  return Object.keys(entries).length > 0 ? entries : undefined;
 }
 
 function recurrenceFromOptions(options: ContentOptions): PostInput["recurrence"] {
@@ -609,6 +639,10 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
     setPlatformThumbnail(input, normalizePlatformName(platform), { thumbnailTimestampMs: ms });
   }
 
+  for (const [platform, media] of Object.entries(platformMediaFromOptions(options) ?? {})) {
+    setPlatformMedia(input, platform as PlatformType, media ?? {});
+  }
+
   for (const entry of options.aspectRatio) {
     const [platform, ratio] = parsePair(entry, "--aspect-ratio");
     setPlatformAspectRatio(input, normalizePlatformName(platform), { aspectRatio: normalizeAspectRatio(ratio) });
@@ -824,19 +858,20 @@ async function resolveMedia(input: PostInput, quiet: boolean): Promise<string[]>
   }
 }
 
-async function uploadThreadReplyMedia(
-  body: { threadReplies?: PlatformThreadReplies[] },
+async function uploadExtrasMedia(
+  body: { threadReplies?: PlatformThreadReplies[]; platformMedia?: PlatformMedia[] },
   quiet: boolean,
 ): Promise<void> {
-  const references = [...new Set(threadReplyMediaReferences(body.threadReplies))].filter(
-    (reference) => !isRemoteMedia(reference),
-  );
-  if (references.length === 0 || !body.threadReplies) return;
+  const references = [
+    ...new Set([...threadReplyMediaReferences(body.threadReplies), ...platformMediaReferences(body.platformMedia)]),
+  ].filter((reference) => !isRemoteMedia(reference));
+  if (references.length === 0) return;
 
-  const urls = await withProgress(`Uploading ${references.length} thread image(s)…`, quiet, () =>
+  const urls = await withProgress(`Uploading ${references.length} file(s)…`, quiet, () =>
     uploadLocalMedia(references),
   );
-  body.threadReplies = withThreadReplyMediaUrls(body.threadReplies, urls);
+  if (body.threadReplies) body.threadReplies = withThreadReplyMediaUrls(body.threadReplies, urls);
+  if (body.platformMedia) body.platformMedia = withPlatformMediaUrls(body.platformMedia, urls);
 }
 
 interface ListOptions extends GlobalOptions {
@@ -972,6 +1007,7 @@ async function runView(id: string, options: GlobalOptions): Promise<void> {
       ? [{ header: "FIRST COMMENT", value: firstCommentCell }]
       : []),
     ...(targets.some((target) => target.threadStatus) ? [{ header: "THREAD", value: threadCell }] : []),
+    ...(targets.some((target) => target.mediaOverrideUrls?.length) ? [{ header: "MEDIA", value: mediaCell }] : []),
     { header: "ERROR", value: (target) => target.errorMessage ?? "—" },
   ]);
 }
@@ -1006,6 +1042,11 @@ const threadCell = (target: SocialPostPlatform): string => {
   return target.threadStatus === "FAILED" && target.threadError ? `${summary}: ${target.threadError}` : summary;
 };
 
+const mediaCell = (target: SocialPostPlatform): string => {
+  const count = target.mediaOverrideUrls?.length ?? 0;
+  return count > 0 ? `own, ${plural(count, "file")}` : "post";
+};
+
 interface CreateOptions extends ContentOptions, GlobalOptions {
   watch?: boolean;
   dryRun?: boolean;
@@ -1021,7 +1062,7 @@ async function runCreate(options: CreateOptions): Promise<void> {
 
   const body = buildPostBody(input, { accounts, mediaUrls });
 
-  if (!options.printBody) await uploadThreadReplyMedia(body, quiet);
+  if (!options.printBody) await uploadExtrasMedia(body, quiet);
 
   if (options.printBody) {
     const boards = await resolvePinterestBoardNames(pinterestConfigsOf(body), quiet);
@@ -1031,7 +1072,9 @@ async function runCreate(options: CreateOptions): Promise<void> {
     }
     print(JSON.stringify(body, null, 2));
     printPinterestBoardChoices(boards);
-    const local = mediaUrls.filter((url) => !/^https?:\/\//i.test(url));
+    const local = [...mediaUrls, ...platformMediaReferences(body.platformMedia)].filter(
+      (url) => !isRemoteMedia(url),
+    );
     hint(
       local.length > 0
         ? `nothing was sent; ${local.length} local file(s) would be uploaded first`
@@ -1099,6 +1142,7 @@ interface UpdateOptions extends ContentOptions, GlobalOptions {
   dryRun?: boolean;
   printBody?: boolean;
   clearThreads?: boolean;
+  clearPlatformMedia?: boolean;
 }
 
 type ConfigEntry = Record<string, unknown>;
@@ -1300,6 +1344,16 @@ async function runUpdate(id: string, options: UpdateOptions): Promise<void> {
     input.threadReplies = {};
   }
 
+  if (options.clearPlatformMedia) {
+    if (Object.keys(input.platformMedia ?? {}).length > 0) {
+      throw new CliError("Pass --clear-platform-media or the per-platform media to keep, not both.", {
+        exitCode: ExitCode.USAGE,
+        hint: "The per-platform media you pass replaces every stored override, so --clear-platform-media is only needed to remove them all",
+      });
+    }
+    input.platformMedia = {};
+  }
+
   const accounts = (input.accounts ?? []).length > 0 ? await loadAccounts(quiet) : [];
   const mediaUrls = options.media.length > 0 ? await resolveMedia(input, quiet) : [];
 
@@ -1324,6 +1378,7 @@ async function runUpdate(id: string, options: UpdateOptions): Promise<void> {
   if (input.threadReplies !== undefined) body.threadReplies = full.threadReplies ?? [];
   if (input.platformThumbnails !== undefined) body.platformThumbnails = full.platformThumbnails;
   if (input.platformAspectRatios !== undefined) body.platformAspectRatios = full.platformAspectRatios;
+  if (input.platformMedia !== undefined) body.platformMedia = full.platformMedia ?? [];
 
   if (targetsChanged) {
     const { platforms, ...rest } = full;
@@ -1367,11 +1422,11 @@ async function runUpdate(id: string, options: UpdateOptions): Promise<void> {
   if (Object.keys(body).length === 0) {
     throw new CliError("Nothing to update.", {
       exitCode: ExitCode.USAGE,
-      hint: "Pass at least one of --text, --file, --at, --timezone, --type, --thumbnail, --alt, --first-comment, --thread-reply, --clear-threads, --thumbnail-for, --aspect-ratio, --x-keep-links or --platform",
+      hint: "Pass at least one of --text, --file, --at, --timezone, --type, --thumbnail, --alt, --first-comment, --thread-reply, --clear-threads, --thumbnail-for, --media-for, --clear-platform-media, --aspect-ratio, --x-keep-links or --platform",
     });
   }
 
-  if (!options.dryRun && !options.printBody) await uploadThreadReplyMedia(body, quiet);
+  if (!options.dryRun && !options.printBody) await uploadExtrasMedia(body, quiet);
 
   if (options.dryRun || options.printBody) {
     const boards = await resolvePinterestBoardNames(pinterestConfigsOf(body), quiet);
@@ -1700,6 +1755,12 @@ const splitList = (value: string | undefined): string[] =>
     .map((entry) => entry.trim())
     .filter((entry) => entry !== "");
 
+const altLines = (value: string): string[] => {
+  const lines = value.split(/\r?\n/).map((line) => line.trim());
+  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  return lines;
+};
+
 interface BulkRow {
   line: number;
   item: BulkPostInput;
@@ -1732,6 +1793,8 @@ const PLATFORM_COLUMN_PREFIXES = [
   "threadMedia",
   "thumbnail",
   "thumbnailMs",
+  "media",
+  "alt",
   "aspectRatio",
   "fit",
 ] as const;
@@ -1861,6 +1924,16 @@ function bulkRowFromRecord(
         throw new CliError(`Row ${line}: ${column} must be a whole number.`, { exitCode: ExitCode.VALIDATION });
       }
       setPlatformThumbnail(extrasInput, platform, { thumbnailTimestampMs: ms });
+      continue;
+    }
+
+    if (target.prefix === "media") {
+      setPlatformMedia(extrasInput, platform, { media: splitList(value) });
+      continue;
+    }
+
+    if (target.prefix === "alt") {
+      setPlatformMedia(extrasInput, platform, { alt: altLines(value) });
       continue;
     }
 
@@ -2048,7 +2121,13 @@ async function runBulk(options: BulkOptions): Promise<void> {
   if (!isMachine()) print(`Read ${rows.length} rows from ${sourceLabel}`);
 
   const references = [
-    ...new Set(rows.flatMap((row) => [...row.mediaRefs, ...threadReplyMediaReferences(row.item.threadReplies)])),
+    ...new Set(
+      rows.flatMap((row) => [
+        ...row.mediaRefs,
+        ...threadReplyMediaReferences(row.item.threadReplies),
+        ...platformMediaReferences(row.item.platformMedia),
+      ]),
+    ),
   ];
   const uploaded =
     references.length === 0 || options.printBody
@@ -2064,6 +2143,7 @@ async function runBulk(options: BulkOptions): Promise<void> {
 
   for (const row of rows) {
     if (row.item.threadReplies) row.item.threadReplies = withThreadReplyMediaUrls(row.item.threadReplies, uploaded);
+    if (row.item.platformMedia) row.item.platformMedia = withPlatformMediaUrls(row.item.platformMedia, uploaded);
     if (row.mediaRefs.length === 0) continue;
     const urls = row.mediaRefs.map((reference) => uploaded.get(reference) ?? reference);
     row.item.mediaUrls = urls;
@@ -2414,6 +2494,18 @@ const withContentOptions = (command: Command): Command =>
       [],
     )
     .option(
+      "--media-for <PLATFORM=path|url>",
+      'Media for one platform in place of --media, one file per flag, repeatable, in order, as in --media-for "TIKTOK=./short.mp4". Local files are uploaded first. It must fit --type: one video, image or document, or two or more items for a CAROUSEL. That platform skips --thumbnail and --thumbnail-ms, so give it --thumbnail-for or --thumbnail-ms-for',
+      collect,
+      [],
+    )
+    .option(
+      "--alt-for <PLATFORM=text>",
+      'Alt text for the --media-for file of PLATFORM at the same position, one text per flag, repeatable. Everything after the first = is the text, commas included, and "PLATFORM=" skips a file',
+      collect,
+      [],
+    )
+    .option(
       "--aspect-ratio <PLATFORM=ratio>",
       "Reframe the images on one platform, repeatable: SQUARE, PORTRAIT, VERTICAL or LANDSCAPE. INSTAGRAM (no VERTICAL) and TIKTOK",
       collect,
@@ -2533,6 +2625,7 @@ export function registerPostCommands(program: Command): void {
   withContentOptions(post.command("update <id>"))
     .description("Update a draft or scheduled post. A scheduled post cannot move into the past")
     .option("--clear-threads", "Remove every thread from the post")
+    .option("--clear-platform-media", "Remove every platform's own media, so each platform uses the post media again")
     .option("--dry-run", "Print the request body and exit")
     .option("--print-body", "Print the request body and exit")
     .action(async (id: string, _options: UpdateOptions, command: Command) => {

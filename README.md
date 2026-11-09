@@ -140,7 +140,7 @@ Shipping the CLI today. Schedule, publish and check results without
 leaving your terminal.
 ```
 
-A platform block takes the platform's text and config keys plus a few options of its own: `firstComment`, `thread` (see below), `thumbnail` (an image URL), `thumbnailMs` (a video frame), `aspectRatio` with `fit`, and `keepLinks` in the `twitter:` block. On LinkedIn, mention a company page in the text with `@[Page Name](urn:li:organization:<id>)`, using the page name exactly as LinkedIn shows it. `accounts linkedin-organization <url|vanity>` prints that mention ready to paste. Put it in the `linkedin:` block, or in `--text-for "LINKEDIN=…"`, when the post goes to other platforms too, because they show the syntax as raw text.
+A platform block takes the platform's text and config keys plus a few options of its own: `firstComment`, `thread` (see below), `thumbnail` (an image URL), `thumbnailMs` (a video frame), `aspectRatio` with `fit`, `media` with `alt` (the platform's own media, see below), and `keepLinks` in the `twitter:` block. On LinkedIn, mention a company page in the text with `@[Page Name](urn:li:organization:<id>)`, using the page name exactly as LinkedIn shows it. `accounts linkedin-organization <url|vanity>` prints that mention ready to paste. Put it in the `linkedin:` block, or in `--text-for "LINKEDIN=…"`, when the post goes to other platforms too, because they show the syntax as raw text.
 
 ```markdown
 ---
@@ -205,6 +205,29 @@ facebook:
 New in this week.
 ```
 
+**One platform, its own media.** When the post media does not fit a platform, such as a video too long for TikTok or more images than X takes, give that platform its own files with `--media-for "PLATFORM=path-or-url"`, one file per flag in order, and `--alt-for "PLATFORM=text"`, one alt text per flag in the same order. Everything after the first `=` is the alt text, commas included, and `--alt-for "PLATFORM="` skips a file. In a file, put `media:` and `alt:` in the platform block, with `alt:` as a YAML list of one item per file and `""` to skip one. Local files are uploaded first. The other platforms keep the post media. The files must fit the post type: one video for VIDEO, one image for IMAGE, one document for DOCUMENT, two or more items for CAROUSEL, and none on a TEXT post. Alt texts go up to 1000 characters each. A platform with its own media skips `--thumbnail` and `--thumbnail-ms`, so give it `--thumbnail-for` or `--thumbnail-ms-for`.
+
+```bash
+adaptlypost post create -t "Launch day" -a tt_77aa -a yt_1 -m ./launch-full.mp4 \
+  --media-for "TIKTOK=./launch-60s.mp4" --alt-for "TIKTOK=The launch, cut to 60 seconds" \
+  --tiktok-privacy PUBLIC_TO_EVERYONE
+```
+
+```markdown
+---
+accounts: [tw_4d1b, ig_7c3e]
+media: [./1.png, ./2.png, ./3.png, ./4.png, ./5.png, ./6.png]
+twitter:
+  media: [./1.png, ./2.png, ./3.png, ./4.png]
+  alt:
+    - The storefront at dawn, before opening
+    - ""
+    - Fresh loaves, one with a slice cut
+    - The team, waving
+---
+Six photos from opening week.
+```
+
 **LinkedIn document posts.** `--type DOCUMENT` publishes one PDF, PPT, PPTX, DOC or DOCX file (max 100 MB, 300 pages) as a LinkedIn document post. DOCUMENT is LinkedIn only, and `--media` must hold exactly that one file. A single document file with no `--type` is inferred as DOCUMENT. `--document-title` sets the title LinkedIn shows (max 100 characters, defaults to the uploaded file name, ignored for non-DOCUMENT posts); it is sent as `linkedinConfigs` for every LinkedIn account on the post. In frontmatter use `documentTitle:` (or `document-title:`, `linkedinDocumentTitle:`), or `documentTitle` inside a `linkedin:` block.
 
 ```bash
@@ -253,6 +276,8 @@ until: 2026-12-31
 | `threadMedia<N>_<PLATFORM>` | The images of reply N (`;`-separated, up to 4). A reply with images can leave its `thread<N>_<PLATFORM>` cell empty |
 | `thumbnail_<PLATFORM>` | `platformThumbnails[].thumbnailUrl` |
 | `thumbnailMs_<PLATFORM>` | `platformThumbnails[].thumbnailTimestampMs` |
+| `media_<PLATFORM>` | `platformMedia[].mediaUrls`, the platform's own media in place of `media` (`;`-separated) |
+| `alt_<PLATFORM>` | `platformMedia[].mediaAltTexts`, one alt text per line of the cell, in the same order as `media_<PLATFORM>`. An empty line skips a file. Needs `media_<PLATFORM>` |
 | `aspectRatio_<PLATFORM>` | `platformAspectRatios[].aspectRatio`: `SQUARE`, `PORTRAIT`, `VERTICAL` or `LANDSCAPE` |
 | `fit_<PLATFORM>` | `platformAspectRatios[].fit`: `CROP` or `PAD`. Needs `aspectRatio_<PLATFORM>` |
 
@@ -285,8 +310,8 @@ Google Business Profile locations show up as `GOOGLE_BUSINESS` accounts, named a
 |---|---|---|
 | `post create` | `-t/--text`, `-f/--file`, `-P/--platform`, `-a/--account`, `-m/--media`, `--alt`, `--type`, `-s/--at`, `--timezone`, `--draft`, `--repeat`, `--every`, `--on` (repeatable), `--until`, `--count`, `--watch`, `--dry-run`, `--print-body` | `-` on `--text` or `--file` reads stdin. `--alt` is the alt text for the `--media` image at the same position. `--type` is `TEXT`, `IMAGE`, `VIDEO`, `CAROUSEL` or `DOCUMENT`, inferred from `--media` when omitted. `--repeat` needs `--at`. `--draft` with `--at` saves a draft with that planned date, and `post publish` later schedules it for that date. `--dry-run` sends the post to `POST /social-posts/validate`, which runs every check a real create runs plus the ones that usually fail at publish time, and creates nothing. It prints one line per account with its problems and exits 5 when the post would be refused. Local media is uploaded first so the server can inspect it. `--print-body` prints the request body without contacting the server |
 | `post list` | `--status`, `--platform`, `--from`, `--to`, `--sort`, `--limit`, `--offset`, `--all` | |
-| `post get <id>` | | Post header plus one row per platform. A story shared next to an Instagram or Facebook post shows as its own `story` row, and a `FIRST COMMENT` column appears when any platform has one. A `THREAD` column appears when any platform has a thread: its status (`PENDING`, `PUBLISHED` or `FAILED`), how many replies went out, how many images the replies carry, and why it stopped, as in `FAILED · 1/3 replies sent: <error>`. `--json` returns `threadReplies`, `threadReplyMediaUrls`, `threadStatus`, `threadReplyIds`, `threadError` and `threadPublishedAt` per platform |
-| `post update <id>` | Same as `create` minus `--draft`, `--watch` and the repeat flags, plus `--clear-threads` | `--platform` replaces every target on the post, so it confirms first. Thread replies sent on update replace every stored thread, so resend the thread of each platform you want to keep; `--clear-threads` removes them all, and `thread: []` in a platform block of `--file` sends that platform's thread as empty. The API saves alt text only when the targets are sent too, so `--alt` (or `alt:` in `--file`) without `--platform` reads the post first and sends its current targets back unchanged. Moving a scheduled post more than a minute into the past fails with a 400 |
+| `post get <id>` | | Post header plus one row per platform. A story shared next to an Instagram or Facebook post shows as its own `story` row, and a `FIRST COMMENT` column appears when any platform has one. A `THREAD` column appears when any platform has a thread: its status (`PENDING`, `PUBLISHED` or `FAILED`), how many replies went out, how many images the replies carry, and why it stopped, as in `FAILED · 1/3 replies sent: <error>`. `--json` returns `threadReplies`, `threadReplyMediaUrls`, `threadStatus`, `threadReplyIds`, `threadError` and `threadPublishedAt` per platform. A `MEDIA` column appears when any platform has its own media, and `--json` returns it as `mediaOverrideUrls` and `mediaOverrideAltTexts`, while each platform's `mediaUrls` is what it publishes |
+| `post update <id>` | Same as `create` minus `--draft`, `--watch` and the repeat flags, plus `--clear-threads` and `--clear-platform-media` | `--platform` replaces every target on the post, so it confirms first. Per-platform media sent on update replaces every stored override, so resend the media of each platform you want to keep. Without `--media-for` or `media:` in a platform block the stored overrides stay, `--clear-platform-media` removes them all, and `media: []` in a platform block of `--file` leaves that platform out. Thread replies sent on update replace every stored thread, so resend the thread of each platform you want to keep; `--clear-threads` removes them all, and `thread: []` in a platform block of `--file` sends that platform's thread as empty. The API saves alt text only when the targets are sent too, so `--alt` (or `alt:` in `--file`) without `--platform` reads the post first and sends its current targets back unchanged. Moving a scheduled post more than a minute into the past fails with a 400 |
 | `post delete <id>` | `--yes` | |
 | `post results <id>` | | The only source of truth for what published |
 | `post retry <id>` | `--platform-id` (repeatable), `-P, --platform` (repeatable), `--failed` | No flags retries every FAILED platform server-side. `--platform BLUESKY` retries every failed entry of that platform. `--failed` resolves the ids locally first |
@@ -325,6 +350,8 @@ Per-platform flags on `post create` and `post update`:
 | `--thread-media <PLATFORM:N=path\|url>` | `threadReplies[].mediaUrls`, an image for reply N of that platform's `--thread-reply` flags, counted from 1. Repeat it for each image, up to 4 per reply, as in `--thread-media "X:2=./chart.png"`. JPEG, PNG, GIF or WebP; local JPEG, PNG and WebP files are uploaded first, and a GIF has to be an https URL. No videos |
 | `--thumbnail-for <PLATFORM=url>` | `platformThumbnails[].thumbnailUrl`, a thumbnail image for one platform of a VIDEO post. YOUTUBE, FACEBOOK, LINKEDIN, INSTAGRAM, PINTEREST, TELEGRAM |
 | `--thumbnail-ms-for <PLATFORM=ms>` | `platformThumbnails[].thumbnailTimestampMs`, a video frame for one platform. YOUTUBE, FACEBOOK, LINKEDIN, INSTAGRAM, PINTEREST, TELEGRAM, TIKTOK. When a platform gets both an image and a frame, the image wins, except on TIKTOK, which takes only a frame. A platform without either flag uses `--thumbnail` and `--thumbnail-ms` |
+| `--media-for <PLATFORM=path\|url>` | `platformMedia[].mediaUrls`, media for one platform in place of `--media`. One file per flag, repeated in order. It must fit the post type, and the post must go to that platform. Local files are uploaded first |
+| `--alt-for <PLATFORM=text>` | `platformMedia[].mediaAltTexts`, the alt text for the `--media-for` file of that platform at the same position. One text per flag, up to 1000 characters; `PLATFORM=` skips a file |
 | `--aspect-ratio <PLATFORM=ratio>` | `platformAspectRatios[].aspectRatio` for IMAGE and CAROUSEL posts: `SQUARE` (1:1), `PORTRAIT` (4:5), `VERTICAL` (9:16) or `LANDSCAPE` (1.91:1). INSTAGRAM takes all but VERTICAL, TIKTOK takes all four |
 | `--fit <PLATFORM=fit>` | `platformAspectRatios[].fit`: `CROP` (the default, cut from the center) or `PAD` (keep the whole image on a blurred fill) |
 | `--ig-share-to-story` | `instagramConfigs[].shareToStory`: also publish the media as a story next to the feed post or reel. The story is its own platform entry and skips the caption, first comment, cover, collaborators, trial and audio. Videos up to 60 seconds |
@@ -364,7 +391,7 @@ adaptlypost post create -t "Slides from today's talk" -a li_22aa -a tw_4d1b \
   --first-comment "TWITTER=Deck link in the next post"
 ```
 
-Like the other config flags, the Instagram, Facebook, Google Business Profile, Tumblr and WordPress flags, `--x-quote` and `--li-reshare` reach the API on `post update` only together with `--platform` or `--account`. `post bulk` refuses LinkedIn document posts, LinkedIn reshares and X quotes, because the bulk endpoint takes neither `linkedinConfigs` nor `twitterConfigs`. `--first-comment`, the thumbnail and aspect ratio flags and `--x-keep-links` work on their own.
+Like the other config flags, the Instagram, Facebook, Google Business Profile, Tumblr and WordPress flags, `--x-quote` and `--li-reshare` reach the API on `post update` only together with `--platform` or `--account`. `post bulk` refuses LinkedIn document posts, LinkedIn reshares and X quotes, because the bulk endpoint takes neither `linkedinConfigs` nor `twitterConfigs`. `--first-comment`, the thumbnail, media and aspect ratio flags and `--x-keep-links` work on their own.
 
 Repeat flags, `post create` only:
 

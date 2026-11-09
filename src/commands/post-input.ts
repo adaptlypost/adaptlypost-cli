@@ -15,6 +15,7 @@ import {
   INSTAGRAM_AUDIO_VOLUME_MIN,
   INSTAGRAM_COLLABORATORS_MAX,
   INSTAGRAM_USER_TAGS_MAX,
+  MEDIA_ALT_TEXT_MAX_LENGTH,
   MEDIA_ASPECT_RATIOS,
   MEDIA_ASPECT_RATIO_FITS,
   PINTEREST_BOARD_NAME_MAX_LENGTH,
@@ -43,6 +44,7 @@ import {
   type MediaAspectRatioFit,
   type PinterestBoard,
   type PlatformExtras,
+  type PlatformMedia,
   type PlatformText,
   type PlatformThreadReplies,
   type PlatformType,
@@ -111,6 +113,7 @@ export interface PostInput {
   threadReplies?: Partial<Record<PlatformType, ThreadReplyInput[]>>;
   platformThumbnails?: Partial<Record<PlatformType, ThumbnailInput>>;
   platformAspectRatios?: Partial<Record<PlatformType, AspectRatioInput>>;
+  platformMedia?: Partial<Record<PlatformType, PlatformMediaInput>>;
   twitterKeepLinks?: boolean;
   recurrence?: RecurrenceInput;
 }
@@ -128,6 +131,11 @@ export interface ThumbnailInput {
 export interface AspectRatioInput {
   aspectRatio?: MediaAspectRatio;
   fit?: MediaAspectRatioFit;
+}
+
+export interface PlatformMediaInput {
+  media?: string[];
+  alt?: string[];
 }
 
 export const CONNECTION_FIELD: Record<PlatformType, keyof PostTargets> = {
@@ -768,7 +776,7 @@ function platformKey(key: string): PlatformType | undefined {
 
 const BLOCK_EXTRA_KEYS: Record<
   string,
-  "firstComment" | "thread" | "thumbnailUrl" | "thumbnailTimestampMs" | "aspectRatio" | "fit" | "keepLinks"
+  "firstComment" | "thread" | "thumbnailUrl" | "thumbnailTimestampMs" | "aspectRatio" | "fit" | "keepLinks" | "media" | "alt"
 > = {
   firstcomment: "firstComment",
   comment: "firstComment",
@@ -784,6 +792,13 @@ const BLOCK_EXTRA_KEYS: Record<
   fit: "fit",
   aspectratiofit: "fit",
   keeplinks: "keepLinks",
+  media: "media",
+  mediaurls: "media",
+  alt: "alt",
+  alts: "alt",
+  alttext: "alt",
+  alttexts: "alt",
+  mediaalttexts: "alt",
 };
 
 export function setFirstComment(input: PostInput, platform: PlatformType, text: string): void {
@@ -851,6 +866,13 @@ export function setPlatformAspectRatio(input: PostInput, platform: PlatformType,
   };
 }
 
+export function setPlatformMedia(input: PostInput, platform: PlatformType, media: PlatformMediaInput): void {
+  input.platformMedia = {
+    ...input.platformMedia,
+    [platform]: { ...input.platformMedia?.[platform], ...media },
+  };
+}
+
 function takePlatformExtras(
   input: PostInput,
   platform: PlatformType,
@@ -880,6 +902,12 @@ function takePlatformExtras(
     }
     if (extra === "fit") {
       setPlatformAspectRatio(input, platform, { fit: normalizeAspectRatioFit(asString(value, label), ExitCode.VALIDATION) });
+    }
+    if (extra === "media") setPlatformMedia(input, platform, { media: asStringList(value, label) });
+    if (extra === "alt") {
+      setPlatformMedia(input, platform, {
+        alt: Array.isArray(value) ? value.map((item) => asString(item, label)) : [asString(value, label)],
+      });
     }
     if (extra === "keepLinks") {
       if (platform !== "TWITTER") {
@@ -1078,7 +1106,7 @@ export function mergePostInput(base: PostInput, override: PostInput): PostInput 
     merged.threadReplies = { ...base.threadReplies, ...override.threadReplies };
   }
 
-  for (const key of ["platformThumbnails", "platformAspectRatios"] as const) {
+  for (const key of ["platformThumbnails", "platformAspectRatios", "platformMedia"] as const) {
     if (!base[key] && !override[key]) continue;
     const combined: Record<string, object> = { ...base[key] };
     for (const [platform, entry] of Object.entries(override[key] ?? {})) {
@@ -1945,7 +1973,46 @@ export const withThreadReplyMediaUrls = (
       : entry,
   );
 
-/** Builds firstComments, threadReplies, platformThumbnails and platformAspectRatios, refusing what the API would 400 on. */
+export const platformMediaReferences = (entries: readonly PlatformMedia[] = []): string[] =>
+  entries.flatMap((entry) => entry.mediaUrls);
+
+export const withPlatformMediaUrls = (
+  entries: readonly PlatformMedia[],
+  urls: ReadonlyMap<string, string>,
+): PlatformMedia[] =>
+  entries.map((entry) => ({ ...entry, mediaUrls: entry.mediaUrls.map((reference) => urls.get(reference) ?? reference) }));
+
+function buildPlatformMedia(platform: PlatformType, entry: PlatformMediaInput, context: string): PlatformMedia | undefined {
+  const media = entry.media ?? [];
+  const alt = entry.alt ?? [];
+  if (media.length === 0) {
+    if (alt.length === 0) return undefined;
+    throw extraError(context, `${platform} has alt text but no media of its own.`, `Give ${platform} its own media, or drop its alt text`);
+  }
+  if (media.some((reference) => reference.trim() === "")) {
+    throw extraError(context, `${platform} has an empty media entry.`);
+  }
+  if (media.some((reference) => /^data:/i.test(reference.trim()))) {
+    throw extraError(context, `${platform} media cannot be a data URI.`, "Pass a file path or an https URL");
+  }
+  if (alt.length > media.length) {
+    throw extraError(context, `${platform} has ${alt.length} alt texts for ${media.length} media file(s).`, "Give one alt text per file, in the same order");
+  }
+  const tooLong = alt.findIndex((text) => text.length > MEDIA_ALT_TEXT_MAX_LENGTH);
+  if (tooLong !== -1) {
+    throw extraError(
+      context,
+      `Alt text ${tooLong + 1} of ${platform} is ${alt[tooLong]?.length} characters; the limit is ${MEDIA_ALT_TEXT_MAX_LENGTH}.`,
+    );
+  }
+  return {
+    platform,
+    mediaUrls: media.map((reference) => reference.trim()),
+    ...(alt.length > 0 ? { mediaAltTexts: [...alt] } : {}),
+  };
+}
+
+/** Builds firstComments, threadReplies, platformThumbnails, platformAspectRatios and platformMedia, refusing what the API would 400 on. */
 export function buildPlatformExtras(input: PostInput, context = ""): PlatformExtras {
   const extras: PlatformExtras = {};
 
@@ -2027,7 +2094,49 @@ export function buildPlatformExtras(input: PostInput, context = ""): PlatformExt
     ];
   }
 
+  for (const [platform, entry] of Object.entries(input.platformMedia ?? {})) {
+    const built = buildPlatformMedia(platform as PlatformType, entry ?? {}, context);
+    if (built) extras.platformMedia = [...(extras.platformMedia ?? []), built];
+  }
+
   return extras;
+}
+
+type MediaKind = "image" | "video" | "document";
+
+const MEDIA_KIND_BY_CONTENT_TYPE: Partial<Record<ContentType, MediaKind>> = {
+  IMAGE: "image",
+  VIDEO: "video",
+  DOCUMENT: "document",
+};
+
+function knownMediaKind(reference: string): MediaKind | undefined {
+  const mimeType = guessMimeType(reference);
+  if (isImageOrVideoReference(reference)) return mimeType.startsWith("video/") ? "video" : "image";
+  return isDocumentMimeType(mimeType) ? "document" : undefined;
+}
+
+function assertPlatformMediaFitsPost(entry: PlatformMedia, contentType: ContentType, context: string): void {
+  const { platform, mediaUrls } = entry;
+  if (contentType === "TEXT") {
+    throw extraError(context, `A TEXT post takes no media, so ${platform} cannot have its own.`);
+  }
+  if (contentType === "CAROUSEL") {
+    if (mediaUrls.length < 2) {
+      throw extraError(context, `${platform} media for a CAROUSEL post needs two or more items, got ${mediaUrls.length}.`);
+    }
+    const document = mediaUrls.find((reference) => knownMediaKind(reference) === "document");
+    if (document !== undefined) throw extraError(context, `A CAROUSEL takes images and videos, not ${document}.`);
+    return;
+  }
+  const expected = MEDIA_KIND_BY_CONTENT_TYPE[contentType];
+  if (mediaUrls.length !== 1) {
+    throw extraError(context, `${platform} media for a ${contentType} post needs exactly one ${expected}, got ${mediaUrls.length} items.`);
+  }
+  const kind = knownMediaKind(mediaUrls[0] ?? "");
+  if (kind !== undefined && kind !== expected) {
+    throw extraError(context, `${platform} media for a ${contentType} post must be a ${expected}, not a ${kind}.`);
+  }
 }
 
 export function assertExtrasFitPost(
@@ -2042,12 +2151,14 @@ export function assertExtrasFitPost(
   if (extras.platformAspectRatios?.length && contentType !== "IMAGE" && contentType !== "CAROUSEL") {
     throw extraError(context, "Per-platform aspect ratios only apply to IMAGE and CAROUSEL posts.");
   }
+  for (const entry of extras.platformMedia ?? []) assertPlatformMediaFitsPost(entry, contentType, context);
   if (!platforms) return;
   const entries = [
     ...(extras.firstComments ?? []),
     ...(extras.threadReplies ?? []).filter((entry) => entry.texts.length > 0),
     ...(extras.platformThumbnails ?? []),
     ...(extras.platformAspectRatios ?? []),
+    ...(extras.platformMedia ?? []),
   ];
   const stray = entries.find((entry) => !platforms.includes(entry.platform));
   if (stray) {

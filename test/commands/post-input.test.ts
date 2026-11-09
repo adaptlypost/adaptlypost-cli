@@ -878,6 +878,43 @@ describe("per-platform options in frontmatter", () => {
     expect(merged.firstComments).toEqual({ TWITTER: "a", LINKEDIN: "b" });
     expect(merged.platformAspectRatios).toEqual({ INSTAGRAM: { aspectRatio: "SQUARE", fit: "PAD" } });
   });
+
+  it("reads a platform's own media and alt texts, one alt text per list item, commas kept", () => {
+    const input = parsePostInput(
+      [
+        "---",
+        "media: [./long.mp4]",
+        "tiktok:",
+        "  media: [./short.mp4]",
+        "  alt:",
+        '    - "A 30 second cut, with captions"',
+        "twitter:",
+        "  mediaUrls:",
+        "    - https://cdn/a.png",
+        "    - https://cdn/b.png",
+        "  alt: One alt text, not two",
+        "---",
+        "Hi",
+      ].join("\n"),
+    );
+
+    expect(input.platformMedia).toEqual({
+      TIKTOK: { media: ["./short.mp4"], alt: ["A 30 second cut, with captions"] },
+      TWITTER: { media: ["https://cdn/a.png", "https://cdn/b.png"], alt: ["One alt text, not two"] },
+    });
+    expect(input.platformConfigs).toBeUndefined();
+  });
+
+  it("lets a flag's platform media replace the file's and keeps the file's alt text", () => {
+    const merged = mergePostInput(
+      { platformMedia: { TIKTOK: { media: ["./a.mp4"], alt: ["Cut"] }, TWITTER: { media: ["./x.png"] } } },
+      { platformMedia: { TIKTOK: { media: ["./b.mp4"] } } },
+    );
+    expect(merged.platformMedia).toEqual({
+      TIKTOK: { media: ["./b.mp4"], alt: ["Cut"] },
+      TWITTER: { media: ["./x.png"] },
+    });
+  });
 });
 
 describe("thread replies in frontmatter", () => {
@@ -1423,6 +1460,77 @@ describe("buildPostBody with the new platforms and options", () => {
     expect(
       exitCodeOf(() => buildPostBody({ text: "Hi", accounts: ["tw_4d1b"], firstComments: { LINKEDIN: "More" } }, { accounts })),
     ).toBe(ExitCode.VALIDATION);
+  });
+
+  it("sends a platform's own media with its alt texts and leaves out a platform with an empty list", () => {
+    expect(
+      buildPlatformExtras({
+        platformMedia: {
+          TIKTOK: { media: [" https://cdn/short.mp4 "], alt: ["Short cut"] },
+          TWITTER: { media: ["https://cdn/a.png", "https://cdn/b.png"] },
+          LINKEDIN: { media: [] },
+        },
+      }),
+    ).toEqual({
+      platformMedia: [
+        { platform: "TIKTOK", mediaUrls: ["https://cdn/short.mp4"], mediaAltTexts: ["Short cut"] },
+        { platform: "TWITTER", mediaUrls: ["https://cdn/a.png", "https://cdn/b.png"] },
+      ],
+    });
+  });
+
+  it("refuses platform media the API would reject", () => {
+    const cases = [
+      { platformMedia: { TIKTOK: { alt: ["No media"] } } },
+      { platformMedia: { TIKTOK: { media: ["data:video/mp4;base64,AAAA"] } } },
+      { platformMedia: { TIKTOK: { media: ["https://cdn/a.mp4"], alt: ["One", "Two"] } } },
+      { platformMedia: { TIKTOK: { media: ["https://cdn/a.mp4"], alt: ["x".repeat(1001)] } } },
+    ];
+    for (const input of cases) {
+      expect(exitCodeOf(() => buildPlatformExtras(input))).toBe(ExitCode.VALIDATION);
+    }
+    expect(
+      buildPlatformExtras({ platformMedia: { TIKTOK: { media: ["https://cdn/a.mp4"], alt: ["x".repeat(1000)] } } })
+        .platformMedia,
+    ).toHaveLength(1);
+  });
+
+  it("checks platform media against the post's content type and platforms", () => {
+    const body = buildPostBody(
+      {
+        text: "Clip",
+        accounts: ["tt_77aa", "tw_4d1b"],
+        platformConfigs: { TIKTOK: { privacyLevel: "SELF_ONLY" } },
+        platformMedia: { TIKTOK: { media: ["https://cdn/short.mp4"] } },
+      },
+      { accounts: moreAccounts, mediaUrls: ["https://cdn/long.mp4"] },
+    );
+    expect(body.platformMedia).toEqual([{ platform: "TIKTOK", mediaUrls: ["https://cdn/short.mp4"] }]);
+
+    const refused = [
+      { mediaUrls: [] as string[], media: ["https://cdn/a.png"], accounts: ["tw_4d1b"] },
+      { mediaUrls: ["https://cdn/long.mp4"], media: ["https://cdn/a.mp4", "https://cdn/b.mp4"], accounts: ["tw_4d1b"] },
+      { mediaUrls: ["https://cdn/long.mp4"], media: ["https://cdn/a.png"], accounts: ["tw_4d1b"] },
+      { mediaUrls: ["https://cdn/a.png", "https://cdn/b.png"], media: ["https://cdn/c.png"], accounts: ["tw_4d1b"] },
+      { mediaUrls: ["https://cdn/long.mp4"], media: ["https://cdn/a.mp4"], accounts: ["li_22aa"] },
+    ];
+    for (const { mediaUrls, media, accounts: picked } of refused) {
+      expect(
+        exitCodeOf(() =>
+          buildPostBody(
+            { text: "Hi", accounts: picked, platformMedia: { TWITTER: { media } } },
+            { accounts: moreAccounts, mediaUrls },
+          ),
+        ),
+      ).toBe(ExitCode.VALIDATION);
+    }
+
+    expect(
+      buildPostBody(
+        { text: "Hi", accounts: ["tw_4d1b"], platformMedia: { TWITTER: { media: ["https://cdn/a.png", "https://cdn/b.mp4"] } } },
+        { accounts: moreAccounts, mediaUrls: ["https://cdn/c.png", "https://cdn/d.png", "https://cdn/e.png"] },
+      ).platformMedia,
+    ).toHaveLength(1);
   });
 
   it("refuses thumbnails on a non-video post and aspect ratios on a video", () => {

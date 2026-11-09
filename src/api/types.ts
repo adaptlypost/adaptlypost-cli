@@ -158,6 +158,7 @@ export const WORDPRESS_CATEGORIES_MAX = 50;
 export const WORDPRESS_TAGS_MAX = 50;
 export const WORDPRESS_TAG_MAX_LENGTH = 100;
 export const YOUTUBE_AUDIO_LANGUAGE_MAX_LENGTH = 35;
+export const MEDIA_ALT_TEXT_MAX_LENGTH = 1000;
 export const YOUTUBE_AUDIO_LANGUAGE_PATTERN = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 
 export const INSTAGRAM_AUDIO_TYPES = ['music', 'original_sound'] as const;
@@ -479,6 +480,12 @@ export interface PlatformThumbnail {
   thumbnailTimestampMs?: number;
 }
 
+export interface PlatformMedia {
+  platform: PlatformType;
+  mediaUrls: string[];
+  mediaAltTexts?: string[];
+}
+
 export interface PlatformAspectRatio {
   platform: PlatformType;
   aspectRatio: MediaAspectRatio;
@@ -490,6 +497,7 @@ export interface PlatformExtras {
   threadReplies?: PlatformThreadReplies[];
   platformThumbnails?: PlatformThumbnail[];
   platformAspectRatios?: PlatformAspectRatio[];
+  platformMedia?: PlatformMedia[];
 }
 
 export interface PinterestPostConfig {
@@ -651,6 +659,8 @@ export interface SocialPostPlatform {
   publishedAt?: string;
   mediaUrls: string[];
   mediaAltTexts: string[];
+  mediaOverrideUrls?: string[];
+  mediaOverrideAltTexts?: string[];
   mediaAspectRatio?: MediaAspectRatio;
   mediaAspectRatioFit?: MediaAspectRatioFit;
   thumbnailUrl?: string;

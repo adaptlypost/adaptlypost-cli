@@ -1435,6 +1435,157 @@ describe("per-platform options on create, update and bulk", () => {
     });
   });
 
+  it("gives one platform its own media and alt texts with --media-for and --alt-for", async () => {
+    await run([
+      "post",
+      "create",
+      "-t",
+      "Clip",
+      "-a",
+      "ig_7c3e",
+      "-a",
+      "li_22aa",
+      "-m",
+      "https://cdn/long.mp4",
+      "--media-for",
+      "ig=https://cdn/short.mp4",
+      "--alt-for",
+      "INSTAGRAM=A cut, with = signs",
+      "--thumbnail-ms-for",
+      "INSTAGRAM=500",
+      "--print-body",
+    ]);
+    expect(stdoutJson().data).toMatchObject({
+      contentType: "VIDEO",
+      mediaUrls: ["https://cdn/long.mp4"],
+      platformMedia: [
+        { platform: "INSTAGRAM", mediaUrls: ["https://cdn/short.mp4"], mediaAltTexts: ["A cut, with = signs"] },
+      ],
+      platformThumbnails: [{ platform: "INSTAGRAM", thumbnailTimestampMs: 500 }],
+    });
+
+    written = [];
+    await run([
+      "post",
+      "create",
+      "-t",
+      "Arrivals",
+      "-a",
+      "tw_4d1b",
+      "-a",
+      "ig_7c3e",
+      ...["-m", "https://cdn/a.png", "-m", "https://cdn/b.png", "-m", "https://cdn/c.png"],
+      ...["--media-for", "X=https://cdn/x1.png", "--media-for", "X=https://cdn/x2.png"],
+      ...["--alt-for", "X=", "--alt-for", "X=Second"],
+      "--print-body",
+    ]);
+    expect(stdoutJson().data).toMatchObject({
+      contentType: "CAROUSEL",
+      platformMedia: [
+        { platform: "TWITTER", mediaUrls: ["https://cdn/x1.png", "https://cdn/x2.png"], mediaAltTexts: ["", "Second"] },
+      ],
+    });
+  });
+
+  it("refuses --media-for without a file, for a platform the post skips, or that does not fit the post", async () => {
+    const base = ["post", "create", "-t", "Clip", "-a", "ig_7c3e", "-m", "https://cdn/long.mp4", "--print-body"];
+    await expect(run([...base, "--media-for", "INSTAGRAM="])).rejects.toMatchObject({ exitCode: 2 });
+    await expect(run([...base, "--media-for", "TWITTER=https://cdn/x.mp4"])).rejects.toMatchObject({ exitCode: 5 });
+    await expect(run([...base, "--alt-for", "INSTAGRAM=No media"])).rejects.toMatchObject({ exitCode: 5 });
+    await expect(run([...base, "--media-for", "INSTAGRAM=https://cdn/a.png"])).rejects.toMatchObject({
+      exitCode: 5,
+      message: expect.stringContaining("must be a video"),
+    });
+  });
+
+  it("uploads a local --media-for file before the dry run checks the post", async () => {
+    const video = join(workspace, "short.mp4");
+    writeFileSync(video, Buffer.from([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]));
+    vi.mocked(client.createUploadUrls).mockResolvedValueOnce({
+      urls: [
+        {
+          fileName: "short.mp4",
+          uploadUrl: "https://upload.test/short.mp4",
+          publicUrl: "https://cdn/short.mp4",
+          key: "k",
+          expiresAt: "2026-12-01T00:00:00Z",
+        },
+      ],
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 200 })));
+    vi.mocked(client.validatePost).mockResolvedValueOnce({
+      valid: true,
+      outcome: "PUBLISH_NOW",
+      requiredPermissions: [],
+      issues: [],
+      accounts: [],
+      notChecked: [],
+    });
+
+    try {
+      await run(["post", "create", "-t", "Clip", "-a", "ig_7c3e", "-m", "https://cdn/long.mp4", "--media-for", `INSTAGRAM=${video}`, "--dry-run"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(client.createUploadUrls).toHaveBeenCalledWith({ files: [{ fileName: "short.mp4", mimeType: "video/mp4" }] });
+    expect(client.validatePost).toHaveBeenCalledWith(
+      expect.objectContaining({ platformMedia: [{ platform: "INSTAGRAM", mediaUrls: ["https://cdn/short.mp4"] }] }),
+    );
+  });
+
+  it("sends platformMedia on update without the targets, and --clear-platform-media as an empty array", async () => {
+    await run(["post", "update", "post_1", "--media-for", "INSTAGRAM=https://cdn/short.mp4", "--print-body"]);
+    expect(stdoutJson().data).toEqual({
+      platformMedia: [{ platform: "INSTAGRAM", mediaUrls: ["https://cdn/short.mp4"] }],
+    });
+
+    written = [];
+    await run(["post", "update", "post_1", "--clear-platform-media", "--print-body"]);
+    expect(stdoutJson().data).toEqual({ platformMedia: [] });
+
+    const file = join(workspace, "clear-media.md");
+    writeFileSync(file, ["---", "instagram:", "  media: []", "---", ""].join("\n"));
+    written = [];
+    await run(["post", "update", "post_1", "--file", file, "--print-body"]);
+    expect(stdoutJson().data).toMatchObject({ platformMedia: [] });
+
+    await expect(
+      run(["post", "update", "post_1", "--clear-platform-media", "--media-for", "X=https://cdn/a.png", "--print-body"]),
+    ).rejects.toMatchObject({ exitCode: 2 });
+  });
+
+  it("shows a MEDIA column in post get when a platform has its own media", async () => {
+    setOutputMode("human");
+    const target = {
+      status: "PENDING" as const,
+      mediaUrls: [],
+      mediaAltTexts: [],
+      previewUrls: [],
+      createdAt: "2026-10-19T09:00:00Z",
+      updatedAt: "2026-10-19T09:00:00Z",
+    };
+    vi.mocked(client.getPost).mockResolvedValueOnce({
+      id: "post_1",
+      status: "SCHEDULED",
+      contentType: "VIDEO",
+      text: "Clip",
+      timezone: "UTC",
+      mediaUrls: ["https://cdn/long.mp4"],
+      platforms: [
+        { ...target, id: "pp_1", platform: "INSTAGRAM", connectionId: "ig_7c3e", mediaOverrideUrls: ["https://cdn/short.mp4"] },
+        { ...target, id: "pp_2", platform: "LINKEDIN", connectionId: "li_22aa", mediaOverrideUrls: [] },
+      ],
+    } as never);
+
+    await run(["post", "get", "post_1"]);
+
+    const out = written.join("");
+    expect(out).toContain("MEDIA");
+    expect(out).toContain("own, 1 file");
+    expect(out).toMatch(/LINKEDIN.*post/);
+  });
+
   it("sends a Tumblr blog as tumblrConnectionIds with tags, a title and a source link", async () => {
     await run([
       "post",
@@ -2139,6 +2290,64 @@ describe("per-platform options on create, update and bulk", () => {
     await expect(run(["post", "bulk", "--csv", path, "-P", "TIKTOK", "--print-body"])).rejects.toMatchObject({
       exitCode: 5,
       message: expect.stringContaining("Row 2"),
+    });
+  });
+
+  it("reads media_<PLATFORM> and alt_<PLATFORM> columns, one alt text per line of the cell", async () => {
+    const path = csvPath(
+      [
+        "text,scheduledAt,media,media_TWITTER,alt_TWITTER",
+        'Arrivals,2026-10-19T09:00:00Z,https://cdn/a.png;https://cdn/b.png;https://cdn/c.png,https://cdn/x1.png;https://cdn/x2.png,"First, with a comma; and a semicolon',
+        'Second"',
+        "",
+      ].join("\n"),
+    );
+
+    await run(["post", "bulk", "--csv", path, "-a", "tw_4d1b", "-a", "ig_7c3e", "--print-body"]);
+
+    const [batch] = stdoutJson().data as { posts: Record<string, unknown>[] }[];
+    expect(batch?.posts[0]).toMatchObject({
+      contentType: "CAROUSEL",
+      platformMedia: [
+        {
+          platform: "TWITTER",
+          mediaUrls: ["https://cdn/x1.png", "https://cdn/x2.png"],
+          mediaAltTexts: ["First, with a comma; and a semicolon", "Second"],
+        },
+      ],
+    });
+
+    const single = csvPath(
+      ["text,scheduledAt,media,media_TWITTER", "Arrivals,2026-10-19T09:00:00Z,https://cdn/a.png;https://cdn/b.png,https://cdn/x.png", ""].join("\n"),
+    );
+    await expect(run(["post", "bulk", "--csv", single, "-a", "tw_4d1b", "--print-body"])).rejects.toMatchObject({
+      exitCode: 5,
+      message: expect.stringContaining("Row 2"),
+    });
+  });
+
+  it("reads a platform's own media from --dir files", async () => {
+    const dir = mkdtempSync(join(workspace, "media-"));
+    writeFileSync(
+      join(dir, "01.md"),
+      [
+        "---",
+        "at: 2026-10-19T09:00:00Z",
+        "media: [https://cdn/long.mp4]",
+        "instagram:",
+        "  media: [https://cdn/short.mp4]",
+        "  alt: [Thirty seconds]",
+        "---",
+        "Clip",
+        "",
+      ].join("\n"),
+    );
+
+    await run(["post", "bulk", "--dir", dir, "-a", "ig_7c3e", "--print-body"]);
+
+    const [batch] = stdoutJson().data as { posts: Record<string, unknown>[] }[];
+    expect(batch?.posts[0]).toMatchObject({
+      platformMedia: [{ platform: "INSTAGRAM", mediaUrls: ["https://cdn/short.mp4"], mediaAltTexts: ["Thirty seconds"] }],
     });
   });
 
