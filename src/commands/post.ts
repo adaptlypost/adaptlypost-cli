@@ -121,6 +121,7 @@ import {
   mergePostInput,
   normalizeAspectRatio,
   normalizeAspectRatioFit,
+  normalizeWordPressStatus,
   normalizeContentType,
   normalizeFrequency,
   normalizePlatformName,
@@ -247,6 +248,7 @@ interface ContentOptions {
   wordpressExcerpt?: string;
   wordpressCategory: string[];
   wordpressTag: string[];
+  wordpressStatus?: string;
   firstComment: string[];
   threadReply: string[];
   threadMedia: string[];
@@ -540,6 +542,9 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
   if (options.wordpressExcerpt !== undefined) mergeConfig("WORDPRESS", { excerpt: options.wordpressExcerpt });
   if (options.wordpressCategory.length > 0) mergeConfig("WORDPRESS", { categoryIds: options.wordpressCategory });
   if (options.wordpressTag.length > 0) mergeConfig("WORDPRESS", { tags: options.wordpressTag });
+  if (options.wordpressStatus !== undefined) {
+    mergeConfig("WORDPRESS", { status: normalizeWordPressStatus(options.wordpressStatus) });
+  }
 
   if (options.igShareToStory !== undefined) mergeConfig("INSTAGRAM", { shareToStory: options.igShareToStory });
   if (options.igCollaborator.length > 0) mergeConfig("INSTAGRAM", { collaborators: options.igCollaborator });
@@ -1232,6 +1237,7 @@ function storedConfig(target: SocialPostPlatform): ConfigEntry | undefined {
         excerpt: target.wordpressExcerpt,
         categoryIds: target.wordpressCategoryIds,
         tags: target.wordpressTags,
+        status: target.wordpressStatus,
       });
     case "GOOGLE_BUSINESS":
       return target.googleBusinessTopicType === undefined
@@ -2462,6 +2468,10 @@ const withContentOptions = (command: Command): Command =>
       `WordPress tag name, repeatable, up to ${WORDPRESS_TAGS_MAX}, each up to ${WORDPRESS_TAG_MAX_LENGTH} characters. A tag the site lacks is created when the WordPress user may manage tags`,
       collect,
       [],
+    )
+    .option(
+      "--wordpress-status <status>",
+      "What the site gets at the post's time: publish (default) publishes it live, draft leaves a WordPress draft to finish and publish there, pending submits it for review",
     )
     .option(
       "--first-comment <PLATFORM=text>",

@@ -32,6 +32,7 @@ import {
   TUMBLR_TITLE_MAX_LENGTH,
   WORDPRESS_CATEGORIES_MAX,
   WORDPRESS_EXCERPT_MAX_LENGTH,
+  WORDPRESS_POST_STATUSES,
   WORDPRESS_TAGS_MAX,
   WORDPRESS_TAG_MAX_LENGTH,
   WORDPRESS_TITLE_MAX_LENGTH,
@@ -55,6 +56,7 @@ import {
   type UpdatePostRequest,
   type UploadMimeType,
   type Weekday,
+  type WordPressPostStatus,
 } from "../api/types.js";
 import { CliError, ExitCode, formatDate, type ExitCodeValue } from "../core/index.js";
 import {
@@ -211,7 +213,7 @@ export const CONFIG_KEYS: Partial<Record<PlatformType, readonly string[]>> = {
   LINKEDIN: ["documentTitle", "reshareOf"],
   TWITTER: ["quoteOf"],
   TUMBLR: ["tags", "title", "sourceUrl"],
-  WORDPRESS: ["title", "excerpt", "categoryIds", "tags"],
+  WORDPRESS: ["title", "excerpt", "categoryIds", "tags", "status"],
   GOOGLE_BUSINESS: [
     "topicType",
     "callToActionType",
@@ -434,6 +436,9 @@ function pickEnum<T extends string>(
 
 export const normalizeAspectRatio = (value: string, exitCode: ExitCodeValue = ExitCode.USAGE): MediaAspectRatio =>
   pickEnum(value, MEDIA_ASPECT_RATIOS, "aspect ratio", exitCode);
+
+export const normalizeWordPressStatus = (value: string, exitCode: ExitCodeValue = ExitCode.USAGE): WordPressPostStatus =>
+  pickEnum(value, WORDPRESS_POST_STATUSES, "WordPress status", exitCode);
 
 export const normalizeAspectRatioFit = (value: string, exitCode: ExitCodeValue = ExitCode.USAGE): MediaAspectRatioFit =>
   pickEnum(value, MEDIA_ASPECT_RATIO_FITS, "fit", exitCode);
@@ -1783,8 +1788,12 @@ function normalizeWordPressConfig(config: FrontmatterMap): FrontmatterMap {
     excerpt: wordpressText(config.excerpt, "excerpt", WORDPRESS_EXCERPT_MAX_LENGTH),
     categoryIds: normalizeWordPressCategoryIds(config.categoryIds),
     tags: normalizeWordPressTags(config.tags),
+    status: optionalWordPressStatus(configString(config.status, "WORDPRESS status")),
   });
 }
+
+const optionalWordPressStatus = (value: string | undefined): WordPressPostStatus | undefined =>
+  value === undefined ? undefined : normalizeWordPressStatus(value, ExitCode.VALIDATION);
 
 function normalizeYouTubeAudioLanguage(value: FrontmatterValue | undefined): string | null | undefined {
   if (value === null) return null;

@@ -1683,6 +1683,17 @@ describe("per-platform options on create, update and bulk", () => {
     expect(stdoutJson().data).toMatchObject({ platforms: ["WORDPRESS"] });
   });
 
+  it("sends --wordpress-status as wordpressConfigs[].status and refuses a status WordPress does not take", async () => {
+    await run(["post", "create", "-t", "Hi", "-a", "wp_1", "--wordpress-status", "draft", "--print-body"]);
+    expect(stdoutJson().data).toMatchObject({
+      wordpressConfigs: [{ connectionId: "wp_1", status: "DRAFT" }],
+    });
+
+    await expect(
+      run(["post", "create", "-t", "Hi", "-a", "wp_1", "--wordpress-status", "live", "--print-body"]),
+    ).rejects.toMatchObject({ exitCode: 2, message: expect.stringContaining("PUBLISH, DRAFT, PENDING") });
+  });
+
   it("refuses a WordPress category that is not an id and a WordPress flag without a WordPress account", async () => {
     await expect(
       run(["post", "create", "-t", "Hi", "-a", "wp_1", "--wordpress-category", "News", "--print-body"]),
@@ -2118,6 +2129,7 @@ describe("per-platform options on create, update and bulk", () => {
           wordpressExcerpt: "What shipped",
           wordpressCategoryIds: [12],
           wordpressTags: ["release"],
+          wordpressStatus: "PENDING",
           mediaUrls: [],
           mediaAltTexts: [],
           previewUrls: [],
@@ -2150,7 +2162,14 @@ describe("per-platform options on create, update and bulk", () => {
       wordpressConnectionIds: ["wp_1"],
       youtubeConnectionIds: ["yt_1"],
       wordpressConfigs: [
-        { connectionId: "wp_1", title: "Launch notes", excerpt: "What shipped", categoryIds: [12], tags: ["release"] },
+        {
+          connectionId: "wp_1",
+          title: "Launch notes",
+          excerpt: "What shipped",
+          categoryIds: [12],
+          tags: ["release"],
+          status: "PENDING",
+        },
       ],
       youtubeConfigs: [{ connectionId: "yt_1", defaultAudioLanguage: "pt-BR" }],
     });
@@ -2160,7 +2179,7 @@ describe("per-platform options on create, update and bulk", () => {
     const path = csvPath(
       [
         "text,scheduledAt,config_WORDPRESS",
-        'Notes,2026-10-19T09:00:00Z,"{""title"":""Launch notes"",""categoryIds"":[12],""tags"":[""release""]}"',
+        'Notes,2026-10-19T09:00:00Z,"{""title"":""Launch notes"",""categoryIds"":[12],""tags"":[""release""],""status"":""draft""}"',
         "",
       ].join("\n"),
     );
@@ -2171,7 +2190,7 @@ describe("per-platform options on create, update and bulk", () => {
     expect(batch).toMatchObject({
       platforms: ["WORDPRESS"],
       wordpressConnectionIds: ["wp_1"],
-      wordpressConfigs: [{ connectionId: "wp_1", title: "Launch notes", categoryIds: [12], tags: ["release"] }],
+      wordpressConfigs: [{ connectionId: "wp_1", title: "Launch notes", categoryIds: [12], tags: ["release"], status: "DRAFT" }],
     });
   });
 

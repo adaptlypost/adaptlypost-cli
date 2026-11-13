@@ -1282,6 +1282,13 @@ describe("normalizeConfig for WORDPRESS", () => {
     expect(exitCodeOf(() => normalizeConfig("WORDPRESS", { excerpt: "x".repeat(1001) }))).toBe(ExitCode.VALIDATION);
   });
 
+  it("reads the status in any case and refuses one WordPress does not take", () => {
+    expect(normalizeConfig("WORDPRESS", { status: "draft" })).toEqual({ status: "DRAFT" });
+    expect(normalizeConfig("WORDPRESS", { status: "Pending" })).toEqual({ status: "PENDING" });
+    expect(exitCodeOf(() => normalizeConfig("WORDPRESS", { status: "private" }))).toBe(ExitCode.VALIDATION);
+    expect(() => assertConfigKeys("WORDPRESS", { status: "DRAFT" })).not.toThrow();
+  });
+
   it("refuses a WordPress config key the API does not read", () => {
     expect(() => assertConfigKeys("WORDPRESS", { categories: [1] })).toThrow(/Did you mean "categoryIds"/);
   });

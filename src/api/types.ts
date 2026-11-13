@@ -157,6 +157,8 @@ export const WORDPRESS_EXCERPT_MAX_LENGTH = 1000;
 export const WORDPRESS_CATEGORIES_MAX = 50;
 export const WORDPRESS_TAGS_MAX = 50;
 export const WORDPRESS_TAG_MAX_LENGTH = 100;
+export const WORDPRESS_POST_STATUSES = ['PUBLISH', 'DRAFT', 'PENDING'] as const;
+export type WordPressPostStatus = (typeof WORDPRESS_POST_STATUSES)[number];
 export const YOUTUBE_AUDIO_LANGUAGE_MAX_LENGTH = 35;
 export const MEDIA_ALT_TEXT_MAX_LENGTH = 1000;
 export const YOUTUBE_AUDIO_LANGUAGE_PATTERN = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
@@ -616,6 +618,7 @@ export interface WordPressPostConfig {
   excerpt?: string;
   categoryIds?: number[];
   tags?: string[];
+  status?: WordPressPostStatus;
 }
 
 export interface PostTargets {
@@ -738,6 +741,7 @@ export interface SocialPostPlatform {
   wordpressExcerpt?: string;
   wordpressCategoryIds?: number[];
   wordpressTags?: string[];
+  wordpressStatus?: WordPressPostStatus;
   googleBusinessTopicType?: GoogleBusinessTopicType;
   googleBusinessCallToActionType?: GoogleBusinessCallToActionType;
   googleBusinessCallToActionUrl?: string;
