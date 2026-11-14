@@ -197,6 +197,8 @@ export const FIRST_COMMENT_MAX_LENGTH: Partial<Record<PlatformType, number>> = {
   INSTAGRAM: 2200,
 };
 
+export const FIRST_COMMENT_MAX_DELAY_MINUTES = 10080;
+
 export const FIRST_COMMENT_STATUSES = ['PENDING', 'PUBLISHED', 'FAILED'] as const satisfies readonly FirstCommentStatus[];
 export type FirstCommentStatus = Schemas['FirstCommentStatus'];
 

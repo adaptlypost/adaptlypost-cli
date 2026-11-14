@@ -8,6 +8,7 @@ import {
   CONTENT_TYPES,
   FACEBOOK_CAROUSEL_CARDS_MAX,
   FACEBOOK_IMAGE_LAYOUTS,
+  FIRST_COMMENT_MAX_DELAY_MINUTES,
   FIRST_COMMENT_MAX_LENGTH,
   GOOGLE_BUSINESS_CALL_TO_ACTION_TYPES,
   GOOGLE_BUSINESS_TOPIC_TYPES,
@@ -112,6 +113,7 @@ export interface PostInput {
   platformTexts?: Partial<Record<PlatformType, string>>;
   platformConfigs?: Partial<Record<PlatformType, Record<string, FrontmatterValue>>>;
   firstComments?: Partial<Record<PlatformType, string>>;
+  firstCommentDelays?: Partial<Record<PlatformType, number>>;
   threadReplies?: Partial<Record<PlatformType, ThreadReplyInput[]>>;
   platformThumbnails?: Partial<Record<PlatformType, ThumbnailInput>>;
   platformAspectRatios?: Partial<Record<PlatformType, AspectRatioInput>>;
@@ -781,10 +783,13 @@ function platformKey(key: string): PlatformType | undefined {
 
 const BLOCK_EXTRA_KEYS: Record<
   string,
-  "firstComment" | "thread" | "thumbnailUrl" | "thumbnailTimestampMs" | "aspectRatio" | "fit" | "keepLinks" | "media" | "alt"
+  "firstComment" | "firstCommentDelay" | "thread" | "thumbnailUrl" | "thumbnailTimestampMs" | "aspectRatio" | "fit" | "keepLinks" | "media" | "alt"
 > = {
   firstcomment: "firstComment",
   comment: "firstComment",
+  firstcommentdelay: "firstCommentDelay",
+  firstcommentdelayminutes: "firstCommentDelay",
+  commentdelay: "firstCommentDelay",
   thread: "thread",
   threadreplies: "thread",
   replies: "thread",
@@ -808,6 +813,10 @@ const BLOCK_EXTRA_KEYS: Record<
 
 export function setFirstComment(input: PostInput, platform: PlatformType, text: string): void {
   input.firstComments = { ...input.firstComments, [platform]: text };
+}
+
+export function setFirstCommentDelay(input: PostInput, platform: PlatformType, minutes: number): void {
+  input.firstCommentDelays = { ...input.firstCommentDelays, [platform]: minutes };
 }
 
 export function setThreadReplies(input: PostInput, platform: PlatformType, replies: ThreadReplyInput[]): void {
@@ -895,6 +904,7 @@ function takePlatformExtras(
       continue;
     }
     if (extra === "firstComment") setFirstComment(input, platform, asString(value, label));
+    if (extra === "firstCommentDelay") setFirstCommentDelay(input, platform, asNumber(value, label));
     if (extra === "thread") setThreadReplies(input, platform, asThreadReplies(value, label));
     if (extra === "thumbnailUrl") setPlatformThumbnail(input, platform, { thumbnailUrl: asString(value, label) });
     if (extra === "thumbnailTimestampMs") {
@@ -1105,6 +1115,10 @@ export function mergePostInput(base: PostInput, override: PostInput): PostInput 
 
   if (base.firstComments || override.firstComments) {
     merged.firstComments = { ...base.firstComments, ...override.firstComments };
+  }
+
+  if (base.firstCommentDelays || override.firstCommentDelays) {
+    merged.firstCommentDelays = { ...base.firstCommentDelays, ...override.firstCommentDelays };
   }
 
   if (base.threadReplies || override.threadReplies) {
@@ -2040,7 +2054,33 @@ export function buildPlatformExtras(input: PostInput, context = ""): PlatformExt
     if (text.length > limit) {
       throw extraError(context, `The ${platform} first comment is ${text.length} characters; the limit is ${limit}.`);
     }
-    extras.firstComments = [...(extras.firstComments ?? []), { platform, text }];
+    const delayMinutes = input.firstCommentDelays?.[platform];
+    extras.firstComments = [
+      ...(extras.firstComments ?? []),
+      delayMinutes === undefined ? { platform, text } : { platform, text, delayMinutes },
+    ];
+  }
+
+  for (const [rawPlatform, delayMinutes] of Object.entries(input.firstCommentDelays ?? {})) {
+    const platform = rawPlatform as PlatformType;
+    if (input.firstComments?.[platform] === undefined) {
+      throw extraError(
+        context,
+        `${platform} has a first comment delay but no first comment.`,
+        "Set the delay next to the comment it applies to",
+      );
+    }
+    if (
+      delayMinutes === undefined ||
+      !Number.isInteger(delayMinutes) ||
+      delayMinutes < 0 ||
+      delayMinutes > FIRST_COMMENT_MAX_DELAY_MINUTES
+    ) {
+      throw extraError(
+        context,
+        `The ${platform} first comment delay must be a whole number of minutes from 0 to ${FIRST_COMMENT_MAX_DELAY_MINUTES} (7 days).`,
+      );
+    }
   }
 
   const firstCommentPlatforms = Object.keys(input.firstComments ?? {});

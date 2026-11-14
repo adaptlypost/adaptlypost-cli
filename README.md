@@ -140,7 +140,7 @@ Shipping the CLI today. Schedule, publish and check results without
 leaving your terminal.
 ```
 
-A platform block takes the platform's text and config keys plus a few options of its own: `firstComment`, `thread` (see below), `thumbnail` (an image URL), `thumbnailMs` (a video frame), `aspectRatio` with `fit`, `media` with `alt` (the platform's own media, see below), and `keepLinks` in the `twitter:` block. On LinkedIn, mention a company page in the text with `@[Page Name](urn:li:organization:<id>)`, using the page name exactly as LinkedIn shows it. `accounts linkedin-organization <url|vanity>` prints that mention ready to paste. Put it in the `linkedin:` block, or in `--text-for "LINKEDIN=…"`, when the post goes to other platforms too, because they show the syntax as raw text.
+A platform block takes the platform's text and config keys plus a few options of its own: `firstComment` with `firstCommentDelay` (minutes after the post, see `--first-comment-delay`), `thread` (see below), `thumbnail` (an image URL), `thumbnailMs` (a video frame), `aspectRatio` with `fit`, `media` with `alt` (the platform's own media, see below), and `keepLinks` in the `twitter:` block. On LinkedIn, mention a company page in the text with `@[Page Name](urn:li:organization:<id>)`, using the page name exactly as LinkedIn shows it. `accounts linkedin-organization <url|vanity>` prints that mention ready to paste. Put it in the `linkedin:` block, or in `--text-for "LINKEDIN=…"`, when the post goes to other platforms too, because they show the syntax as raw text.
 
 ```markdown
 ---
@@ -148,6 +148,7 @@ accounts: [tw_4d1b, ig_7c3e, gbp_51e0]
 media: [./storefront.png]
 twitter:
   firstComment: Opening hours and directions in the replies
+  firstCommentDelay: 30
 instagram:
   aspectRatio: PORTRAIT
   fit: PAD
@@ -272,6 +273,7 @@ until: 2026-12-31
 | `text_<PLATFORM>` | `platformTexts` |
 | `config_<PLATFORM>` | The platform's config, as a JSON object. Rows with different configs go out as separate requests |
 | `firstComment_<PLATFORM>` | `firstComments`, the whole cell as one comment |
+| `firstCommentDelay_<PLATFORM>` | `firstComments[].delayMinutes`, a whole number of minutes from 0 to 10080 (7 days). Needs `firstComment_<PLATFORM>` |
 | `thread<N>_<PLATFORM>` | Reply N of the platform's thread in `threadReplies`, the whole cell as its text, N from 1 to 25. Number a row's replies from 1 without gaps; rows can have threads of different lengths |
 | `threadMedia<N>_<PLATFORM>` | The images of reply N (`;`-separated, up to 4). A reply with images can leave its `thread<N>_<PLATFORM>` cell empty |
 | `thumbnail_<PLATFORM>` | `platformThumbnails[].thumbnailUrl` |
@@ -346,7 +348,8 @@ Per-platform flags on `post create` and `post update`:
 | `--wordpress-category <id>` | `wordpressConfigs[].categoryIds`, repeatable, up to 50 category ids of the site. Without it WordPress files the post under the site's default category. Find ids with `accounts wordpress-categories` |
 | `--wordpress-tag <tag>` | `wordpressConfigs[].tags`, repeatable, one tag name per flag, up to 50 tags of up to 100 characters each. A repeated tag keeps its first spelling. A tag the site does not have yet is created when the WordPress user may manage tags, and skipped otherwise |
 | `--wordpress-status <status>` | `wordpressConfigs[].status`: `publish` (the default) publishes the post live on the site, `draft` leaves a WordPress draft you finish and publish or schedule in WordPress, `pending` submits it for review. For `draft` and `pending` the post link opens the post in the WordPress editor |
-| `--first-comment <PLATFORM=text>` | `firstComments`, a comment posted from the same account about 10 seconds after the post goes out (60 on YouTube). One flag per platform: LINKEDIN (1250 characters), TWITTER (280), THREADS (500), BLUESKY (300), MASTODON (500), YOUTUBE (10000), FACEBOOK (8000), INSTAGRAM (2200). Facebook and Instagram stories take none, and a Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect, or its comment fails. A comment that fails never fails the post; `post get` shows its status. On `post update` the flags replace every stored first comment |
+| `--first-comment <PLATFORM=text>` | `firstComments`, a comment posted from the same account within about a minute of the post going out (about two minutes on YouTube). One flag per platform: LINKEDIN (1250 characters), TWITTER (280), THREADS (500), BLUESKY (300), MASTODON (500), YOUTUBE (10000), FACEBOOK (8000), INSTAGRAM (2200). Facebook and Instagram stories take none, and a Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect, or its comment fails. A comment that fails never fails the post; `post get` shows its status. On `post update` the flags replace every stored first comment |
+| `--first-comment-delay <PLATFORM=minutes>` | `firstComments[].delayMinutes`: how many minutes after that platform publishes to post its `--first-comment`, from 0 to 10080 (7 days). The comment goes out within about a minute of that time. Omitted or 0 means no delay. One flag per platform, and the platform needs a `--first-comment`. Once the post is published the delay cannot be changed; deleting the post cancels a comment that has not gone out yet. `post get` shows when a pending comment is due |
 | `--thread-reply <PLATFORM=text>` | `threadReplies`, which turns the post into a thread: the post opens it, and each reply goes out from the same account under the one before, starting about 10 seconds after the post publishes. Repeat the flag once per reply, in order, as in `--thread-reply "X=Second post" --thread-reply "X=Third post"`. Everything after the first `=` is the text, commas and `=` included. `X=` with nothing after it is a reply that only carries images. TWITTER (280 characters per reply, more on X Premium), THREADS (500), BLUESKY (300), MASTODON (500, or the instance's limit), up to 25 replies per platform. A platform with `--first-comment` cannot have a thread too. A thread that fails never fails the post; `post get` shows its status. On `post update` the flags replace every stored thread |
 | `--thread-media <PLATFORM:N=path\|url>` | `threadReplies[].mediaUrls`, an image for reply N of that platform's `--thread-reply` flags, counted from 1. Repeat it for each image, up to 4 per reply, as in `--thread-media "X:2=./chart.png"`. JPEG, PNG, GIF or WebP; local JPEG, PNG and WebP files are uploaded first, and a GIF has to be an https URL. No videos |
 | `--thumbnail-for <PLATFORM=url>` | `platformThumbnails[].thumbnailUrl`, a thumbnail image for one platform of a VIDEO post. YOUTUBE, FACEBOOK, LINKEDIN, INSTAGRAM, PINTEREST, TELEGRAM |
@@ -389,10 +392,11 @@ adaptlypost post create -t "New reel" -a ig_7c3e -m ./reel.mp4 --ig-type REEL \
 
 adaptlypost post create -t "Slides from today's talk" -a li_22aa -a tw_4d1b \
   --first-comment "LINKEDIN=Download the deck: https://acme.example/deck" \
-  --first-comment "TWITTER=Deck link in the next post"
+  --first-comment "TWITTER=Deck link in the next post" \
+  --first-comment-delay LINKEDIN=60
 ```
 
-Like the other config flags, the Instagram, Facebook, Google Business Profile, Tumblr and WordPress flags, `--x-quote` and `--li-reshare` reach the API on `post update` only together with `--platform` or `--account`. `post bulk` refuses LinkedIn document posts, LinkedIn reshares and X quotes, because the bulk endpoint takes neither `linkedinConfigs` nor `twitterConfigs`. `--first-comment`, the thumbnail, media and aspect ratio flags and `--x-keep-links` work on their own.
+Like the other config flags, the Instagram, Facebook, Google Business Profile, Tumblr and WordPress flags, `--x-quote` and `--li-reshare` reach the API on `post update` only together with `--platform` or `--account`. `post bulk` refuses LinkedIn document posts, LinkedIn reshares and X quotes, because the bulk endpoint takes neither `linkedinConfigs` nor `twitterConfigs`. `--first-comment`, `--first-comment-delay`, the thumbnail, media and aspect ratio flags and `--x-keep-links` work on their own.
 
 Repeat flags, `post create` only:
 

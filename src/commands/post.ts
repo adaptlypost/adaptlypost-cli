@@ -23,6 +23,7 @@ import {
   CONTENT_TYPES,
   FACEBOOK_CAROUSEL_CARDS_MAX,
   FACEBOOK_IMAGE_LAYOUTS,
+  FIRST_COMMENT_MAX_DELAY_MINUTES,
   FIRST_COMMENT_MAX_LENGTH,
   GOOGLE_BUSINESS_CALL_TO_ACTION_TYPES,
   GOOGLE_BUSINESS_TOPIC_TYPES,
@@ -132,6 +133,7 @@ import {
   readSource,
   readStdin,
   setFirstComment,
+  setFirstCommentDelay,
   setPlatformAspectRatio,
   setPlatformMedia,
   setPlatformThumbnail,
@@ -250,6 +252,7 @@ interface ContentOptions {
   wordpressTag: string[];
   wordpressStatus?: string;
   firstComment: string[];
+  firstCommentDelay: string[];
   threadReply: string[];
   threadMedia: string[];
   thumbnailFor: string[];
@@ -622,6 +625,17 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
   for (const entry of options.firstComment) {
     const [platform, text] = parsePair(entry, "--first-comment");
     setFirstComment(input, normalizePlatformName(platform), text);
+  }
+
+  for (const entry of options.firstCommentDelay) {
+    const [platform, raw] = parsePair(entry, "--first-comment-delay");
+    const minutes = Number(raw);
+    if (raw.trim() === "" || !Number.isInteger(minutes) || minutes < 0) {
+      throw new CliError(`--first-comment-delay ${platform} must be a whole number of minutes.`, {
+        exitCode: ExitCode.USAGE,
+      });
+    }
+    setFirstCommentDelay(input, normalizePlatformName(platform), minutes);
   }
 
   for (const [platform, replies] of Object.entries(threadRepliesFromOptions(options) ?? {})) {
@@ -1029,6 +1043,12 @@ const firstCommentCell = (target: SocialPostPlatform): string => {
   if (target.firstCommentStatus === "FAILED" && target.firstCommentError) {
     return `FAILED: ${target.firstCommentError}`;
   }
+  if (target.firstCommentStatus === "PENDING" && target.firstCommentDueAt) {
+    return `PENDING, due ${formatRelative(new Date(target.firstCommentDueAt))}`;
+  }
+  if (target.firstCommentStatus === "PENDING" && target.firstCommentDelayMinutes) {
+    return `PENDING, ${plural(target.firstCommentDelayMinutes, "minute")} after the post`;
+  }
   return target.firstCommentStatus;
 };
 
@@ -1428,7 +1448,7 @@ async function runUpdate(id: string, options: UpdateOptions): Promise<void> {
   if (Object.keys(body).length === 0) {
     throw new CliError("Nothing to update.", {
       exitCode: ExitCode.USAGE,
-      hint: "Pass at least one of --text, --file, --at, --timezone, --type, --thumbnail, --alt, --first-comment, --thread-reply, --clear-threads, --thumbnail-for, --media-for, --clear-platform-media, --aspect-ratio, --x-keep-links or --platform",
+      hint: "Pass at least one of --text, --file, --at, --timezone, --type, --thumbnail, --alt, --first-comment, --first-comment-delay, --thread-reply, --clear-threads, --thumbnail-for, --media-for, --clear-platform-media, --aspect-ratio, --x-keep-links or --platform",
     });
   }
 
@@ -1801,6 +1821,7 @@ const PLATFORM_COLUMN_PREFIXES = [
   "text",
   "config",
   "firstComment",
+  "firstCommentDelay",
   "thread",
   "threadMedia",
   "thumbnail",
@@ -1912,6 +1933,15 @@ function bulkRowFromRecord(
 
     if (target.prefix === "firstComment") {
       setFirstComment(extrasInput, platform, value);
+      continue;
+    }
+
+    if (target.prefix === "firstCommentDelay") {
+      const minutes = Number(value);
+      if (!Number.isInteger(minutes) || minutes < 0) {
+        throw new CliError(`Row ${line}: ${column} must be a whole number of minutes.`, { exitCode: ExitCode.VALIDATION });
+      }
+      setFirstCommentDelay(extrasInput, platform, minutes);
       continue;
     }
 
@@ -2481,7 +2511,13 @@ const withContentOptions = (command: Command): Command =>
     )
     .option(
       "--first-comment <PLATFORM=text>",
-      `Comment posted from the same account right after the post, one flag per platform. Works on ${Object.entries(FIRST_COMMENT_MAX_LENGTH).map(([platform, limit]) => `${platform} (${limit})`).join(", ")}`,
+      `Comment posted from the same account within about a minute of the post (about two minutes on YouTube), one flag per platform. Works on ${Object.entries(FIRST_COMMENT_MAX_LENGTH).map(([platform, limit]) => `${platform} (${limit})`).join(", ")}`,
+      collect,
+      [],
+    )
+    .option(
+      "--first-comment-delay <PLATFORM=minutes>",
+      `Minutes after PLATFORM publishes to post its --first-comment, from 0 to ${FIRST_COMMENT_MAX_DELAY_MINUTES} (7 days), one flag per platform. The comment goes out within about a minute of that time. Omitted or 0 means no delay. Once the post is published the delay cannot be changed`,
       collect,
       [],
     )

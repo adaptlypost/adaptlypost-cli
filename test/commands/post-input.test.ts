@@ -795,6 +795,7 @@ describe("per-platform options in frontmatter", () => {
         "---",
         "twitter:",
         "  firstComment: Link in the reply",
+        "  firstCommentDelay: 20",
         "  keepLinks: true",
         "instagram:",
         "  postType: FEED",
@@ -820,6 +821,7 @@ describe("per-platform options in frontmatter", () => {
     );
 
     expect(input.firstComments).toEqual({ TWITTER: "Link in the reply" });
+    expect(input.firstCommentDelays).toEqual({ TWITTER: 20 });
     expect(input.twitterKeepLinks).toBe(true);
     expect(input.platformAspectRatios).toEqual({ INSTAGRAM: { aspectRatio: "PORTRAIT", fit: "PAD" } });
     expect(input.platformThumbnails).toEqual({
@@ -872,10 +874,19 @@ describe("per-platform options in frontmatter", () => {
 
   it("merges per-platform options field by field", () => {
     const merged = mergePostInput(
-      { firstComments: { TWITTER: "a" }, platformAspectRatios: { INSTAGRAM: { aspectRatio: "SQUARE" } } },
-      { firstComments: { LINKEDIN: "b" }, platformAspectRatios: { INSTAGRAM: { fit: "PAD" } } },
+      {
+        firstComments: { TWITTER: "a" },
+        firstCommentDelays: { TWITTER: 5 },
+        platformAspectRatios: { INSTAGRAM: { aspectRatio: "SQUARE" } },
+      },
+      {
+        firstComments: { LINKEDIN: "b" },
+        firstCommentDelays: { LINKEDIN: 60 },
+        platformAspectRatios: { INSTAGRAM: { fit: "PAD" } },
+      },
     );
     expect(merged.firstComments).toEqual({ TWITTER: "a", LINKEDIN: "b" });
+    expect(merged.firstCommentDelays).toEqual({ TWITTER: 5, LINKEDIN: 60 });
     expect(merged.platformAspectRatios).toEqual({ INSTAGRAM: { aspectRatio: "SQUARE", fit: "PAD" } });
   });
 
@@ -1058,6 +1069,20 @@ describe("buildPlatformExtras", () => {
     });
   });
 
+  it("puts each first comment delay on the comment of its platform, up to 10080 minutes", () => {
+    expect(
+      buildPlatformExtras({
+        firstComments: { LINKEDIN: "Later", TWITTER: "Now" },
+        firstCommentDelays: { LINKEDIN: 10080 },
+      }),
+    ).toEqual({
+      firstComments: [
+        { platform: "LINKEDIN", text: "Later", delayMinutes: 10080 },
+        { platform: "TWITTER", text: "Now" },
+      ],
+    });
+  });
+
   it("takes a Threads first comment of up to 500 characters", () => {
     expect(buildPlatformExtras({ firstComments: { THREADS: "x".repeat(500) } })).toEqual({
       firstComments: [{ platform: "THREADS", text: "x".repeat(500) }],
@@ -1071,6 +1096,10 @@ describe("buildPlatformExtras", () => {
       { firstComments: { TWITTER: "   " } },
       { firstComments: { THREADS: "x".repeat(501) } },
       { firstComments: { TWITTER: "x".repeat(281) } },
+      { firstCommentDelays: { TWITTER: 30 } },
+      { firstComments: { TWITTER: "hi" }, firstCommentDelays: { TWITTER: 10081 } },
+      { firstComments: { TWITTER: "hi" }, firstCommentDelays: { TWITTER: -1 } },
+      { firstComments: { TWITTER: "hi" }, firstCommentDelays: { TWITTER: 2.5 } },
       { platformThumbnails: { THREADS: { thumbnailUrl: "https://cdn/a.png" } } },
       { platformThumbnails: { TIKTOK: { thumbnailUrl: "https://cdn/a.png" } } },
       { platformAspectRatios: { FACEBOOK: { aspectRatio: "SQUARE" as const } } },

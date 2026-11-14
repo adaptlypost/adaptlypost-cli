@@ -1391,6 +1391,70 @@ describe("per-platform options on create, update and bulk", () => {
     expect(stdoutJson().data).toMatchObject({ firstComments: [{ platform: "INSTAGRAM", text: "Link in bio" }] });
   });
 
+  it("sends a first comment delay with the comment of its platform", async () => {
+    await run([
+      "post",
+      "create",
+      "-t",
+      "Hi",
+      "-a",
+      "tw_4d1b",
+      "-a",
+      "li_22aa",
+      "--first-comment",
+      "TWITTER=Reply",
+      "--first-comment",
+      "LINKEDIN=Comment",
+      "--first-comment-delay",
+      "li=90",
+      "--print-body",
+    ]);
+
+    expect(stdoutJson().data).toMatchObject({
+      firstComments: [
+        { platform: "TWITTER", text: "Reply" },
+        { platform: "LINKEDIN", text: "Comment", delayMinutes: 90 },
+      ],
+    });
+    expect((stdoutJson().data as { firstComments: object[] }).firstComments[0]).not.toHaveProperty("delayMinutes");
+  });
+
+  it("refuses a first comment delay without a comment, out of range or not a whole number", async () => {
+    await expect(
+      run(["post", "create", "-t", "Hi", "-a", "tw_4d1b", "--first-comment-delay", "TWITTER=30", "--print-body"]),
+    ).rejects.toMatchObject({ exitCode: 5 });
+    await expect(
+      run([
+        "post",
+        "create",
+        "-t",
+        "Hi",
+        "-a",
+        "tw_4d1b",
+        "--first-comment",
+        "TWITTER=Reply",
+        "--first-comment-delay",
+        "TWITTER=10081",
+        "--print-body",
+      ]),
+    ).rejects.toMatchObject({ exitCode: 5 });
+    await expect(
+      run([
+        "post",
+        "create",
+        "-t",
+        "Hi",
+        "-a",
+        "tw_4d1b",
+        "--first-comment",
+        "TWITTER=Reply",
+        "--first-comment-delay",
+        "TWITTER=1.5",
+        "--print-body",
+      ]),
+    ).rejects.toMatchObject({ exitCode: 2 });
+  });
+
   it("refuses a first comment on a platform without one, Telegram included", async () => {
     await expect(
       run(["post", "create", "-t", "Hi", "-a", "ig_7c3e", "--first-comment", "TIKTOK=hi", "--print-body"]),
@@ -1754,6 +1818,70 @@ describe("per-platform options on create, update and bulk", () => {
       twitterKeepLinks: false,
       firstComments: [{ platform: "TWITTER", text: "Updated reply" }],
     });
+  });
+
+  it("sends a first comment delay on update", async () => {
+    await run([
+      "post",
+      "update",
+      "post_1",
+      "--first-comment",
+      "TWITTER=Updated reply",
+      "--first-comment-delay",
+      "TWITTER=0",
+      "--print-body",
+    ]);
+
+    expect(stdoutJson().data).toEqual({
+      firstComments: [{ platform: "TWITTER", text: "Updated reply", delayMinutes: 0 }],
+    });
+  });
+
+  it("shows when a delayed first comment is due in post get", async () => {
+    setOutputMode("human");
+    const target = {
+      status: "PUBLISHED" as const,
+      mediaUrls: [],
+      mediaAltTexts: [],
+      previewUrls: [],
+      createdAt: "2026-10-19T09:00:00Z",
+      updatedAt: "2026-10-19T09:00:00Z",
+    };
+    vi.mocked(client.getPost).mockResolvedValueOnce({
+      id: "post_1",
+      status: "COMPLETED",
+      contentType: "TEXT",
+      text: "Hi",
+      timezone: "UTC",
+      platforms: [
+        {
+          ...target,
+          id: "pp_1",
+          platform: "LINKEDIN",
+          connectionId: "li_22aa",
+          firstComment: "Later",
+          firstCommentStatus: "PENDING",
+          firstCommentDelayMinutes: 120,
+          firstCommentDueAt: new Date(Date.now() + 90 * 60 * 1000).toISOString(),
+        },
+        {
+          ...target,
+          id: "pp_2",
+          platform: "TWITTER",
+          status: "PENDING" as const,
+          connectionId: "tw_4d1b",
+          firstComment: "Reply",
+          firstCommentStatus: "PENDING",
+          firstCommentDelayMinutes: 30,
+        },
+      ],
+    } as never);
+
+    await run(["post", "get", "post_1"]);
+
+    const out = written.join("");
+    expect(out).toMatch(/PENDING, due in /);
+    expect(out).toContain("PENDING, 30 minutes after the post");
   });
 
   it("resends one Instagram target with shareToStory, collaborators, the AI label and audio when the post has a story sibling", async () => {
@@ -2248,8 +2376,8 @@ describe("per-platform options on create, update and bulk", () => {
   it("reads the per-platform CSV columns into each bulk item and GOOGLE_BUSINESS configs into the batch", async () => {
     const path = csvPath(
       [
-        "text,scheduledAt,media,firstComment_TWITTER,aspectRatio_INSTAGRAM,fit_INSTAGRAM,text_GOOGLE_BUSINESS,config_GOOGLE_BUSINESS",
-        'Photo,2026-10-19T09:00:00Z,https://cdn/a.png,"Reply, with a comma",square,pad,Shorter,"{""topicType"":""STANDARD"",""callToActionType"":""CALL""}"',
+        "text,scheduledAt,media,firstComment_TWITTER,firstCommentDelay_TWITTER,aspectRatio_INSTAGRAM,fit_INSTAGRAM,text_GOOGLE_BUSINESS,config_GOOGLE_BUSINESS",
+        'Photo,2026-10-19T09:00:00Z,https://cdn/a.png,"Reply, with a comma",45,square,pad,Shorter,"{""topicType"":""STANDARD"",""callToActionType"":""CALL""}"',
         "",
       ].join("\n"),
     );
@@ -2264,7 +2392,7 @@ describe("per-platform options on create, update and bulk", () => {
     });
     expect((batch?.posts as Record<string, unknown>[])[0]).toMatchObject({
       platformTexts: [{ platform: "GOOGLE_BUSINESS", text: "Shorter" }],
-      firstComments: [{ platform: "TWITTER", text: "Reply, with a comma" }],
+      firstComments: [{ platform: "TWITTER", text: "Reply, with a comma", delayMinutes: 45 }],
       platformAspectRatios: [{ platform: "INSTAGRAM", aspectRatio: "SQUARE", fit: "PAD" }],
     });
   });
@@ -2399,14 +2527,23 @@ describe("per-platform options on create, update and bulk", () => {
     const dir = mkdtempSync(join(workspace, "posts-"));
     writeFileSync(
       join(dir, "01.md"),
-      ["---", "at: 2026-10-19T09:00:00Z", "linkedin:", "  firstComment: Slides in the comments", "---", "Talk", ""].join("\n"),
+      [
+        "---",
+        "at: 2026-10-19T09:00:00Z",
+        "linkedin:",
+        "  firstComment: Slides in the comments",
+        "  firstCommentDelay: 15",
+        "---",
+        "Talk",
+        "",
+      ].join("\n"),
     );
 
     await run(["post", "bulk", "--dir", dir, "-P", "LINKEDIN", "--print-body"]);
 
     const [batch] = stdoutJson().data as { posts: Record<string, unknown>[] }[];
     expect(batch?.posts[0]).toMatchObject({
-      firstComments: [{ platform: "LINKEDIN", text: "Slides in the comments" }],
+      firstComments: [{ platform: "LINKEDIN", text: "Slides in the comments", delayMinutes: 15 }],
     });
 
     writeFileSync(
