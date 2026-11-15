@@ -1,0 +1,33 @@
+package-lock.json
+  s_090e595bff8e94::t_60e03f06f0a7b8 16,32-34
+package.json
+  s_090e595bff8e94::t_1c25a3a6be95c2 56
+src/api/types.ts
+  s_298ae88299614d::t_6fbcea76960d50 346-349,367-398
+src/commands/post-input.ts
+  s_298ae88299614d::t_2353c86d931a73 2225-2227,2320
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6799afc473939eac92e2cbfcf2144c008870b82d",
+  "prompts": {},
+  "sessions": {
+    "s_090e595bff8e94": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "054a1bee-e925-48f1-aabb-c88c834a8d54",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    },
+    "s_298ae88299614d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4044cf45-ca23-4818-9196-ddd678b04cbf",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}
