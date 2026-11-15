@@ -12,8 +12,10 @@ import {
   hint,
   isMachine,
   parseWhen,
+  print,
   printKeyValues,
   printResult,
+  printRows,
   profileDefaults,
   promptConfirm,
   success,
@@ -33,6 +35,7 @@ export interface ConnectCreateOptions {
   maxAccounts?: string;
   expires?: string;
   neverExpires?: boolean;
+  returnUrl?: string;
   timezone?: string;
 }
 
@@ -47,6 +50,18 @@ const parseMaxAccounts = (value: string): number => {
     throw usageError(`--max-accounts "${value}" is not a whole number of 1 or more`);
   }
   return count;
+};
+
+const RETURN_URL_MAX_LENGTH = 2048;
+
+const parseReturnUrl = (value: string): string => {
+  if (value.length > RETURN_URL_MAX_LENGTH || !URL.canParse(value)) {
+    throw usageError(
+      `--return-url "${value}" is not a URL`,
+      `use an absolute https URL of at most ${RETURN_URL_MAX_LENGTH} characters, such as https://app.example.com/connected`,
+    );
+  }
+  return value;
 };
 
 const parseExpiry = (value: string, timezone: string): string => {
@@ -75,6 +90,7 @@ export const toCreateConnectLinkRequest = (options: ConnectCreateOptions): Creat
     ...(options.maxAccounts !== undefined && { maxAccounts: parseMaxAccounts(options.maxAccounts) }),
     ...(options.expires !== undefined && { expiresAt: parseExpiry(options.expires, timezone) }),
     ...(options.neverExpires && { neverExpires: true }),
+    ...(options.returnUrl !== undefined && { returnUrl: parseReturnUrl(options.returnUrl) }),
   };
 };
 
@@ -103,7 +119,15 @@ async function runCreate(options: ConnectCreateOptions): Promise<void> {
     ['platforms', link.allowedPlatforms?.length ? link.allowedPlatforms.join(', ') : 'all'],
     ['max accounts', link.maxAccounts ? String(link.maxAccounts) : 'no limit'],
     ['expires', expiryOf(link)],
+    ['return url', link.returnUrl ?? '—'],
   ]);
+  if (link.startUrls.length > 0) {
+    print();
+    printRows(
+      ['PLATFORM', 'START URL'],
+      link.startUrls.map((start) => [start.platform, start.url]),
+    );
+  }
   hint(`Send the url to the person who owns the accounts. Revoke it with: ${PRODUCT.binName} connect revoke ${link.token}`);
 }
 
@@ -140,6 +164,7 @@ export function registerConnectCommands(program: Command): void {
     .option('--max-accounts <n>', 'Stop the link once this many accounts are connected through it')
     .option('--expires <when>', 'When the link stops working, 1 hour to 365 days away. Defaults to 7 days')
     .option('--never-expires', 'Keep the link working until it is revoked')
+    .option('--return-url <url>', 'Send the client back to this https URL after they connect, pick pages or are refused')
     .option('--timezone <tz>', 'IANA timezone for a local --expires time')
     .action(async (options: ConnectCreateOptions) => {
       await runCreate(options);

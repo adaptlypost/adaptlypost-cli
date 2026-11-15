@@ -263,11 +263,11 @@ describe('endpoint mapping', () => {
     ],
     [
       'createConnectLink',
-      () => client.createConnectLink({ name: 'Acme', neverExpires: true }),
+      () => client.createConnectLink({ name: 'Acme', neverExpires: true, returnUrl: 'https://app.example.com/connected' }),
       {
         method: 'POST',
         path: '/connect-links',
-        body: { name: 'Acme', neverExpires: true },
+        body: { name: 'Acme', neverExpires: true, returnUrl: 'https://app.example.com/connected' },
       },
     ],
     [

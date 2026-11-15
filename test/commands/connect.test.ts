@@ -112,7 +112,58 @@ describe('connect create', () => {
     expect(stdoutJson()).toMatchObject({ data: { expiresAt: null } });
   });
 
+  it('sends a return URL and prints the start URLs', async () => {
+    const link: ConnectLink = {
+      url: 'https://adaptlypost.com/connect/tok_4',
+      token: 'tok_4',
+      expiresAt: '2026-10-01T00:00:00.000Z',
+      name: null,
+      visibility: 'PUBLIC',
+      allowedPlatforms: ['INSTAGRAM'],
+      maxAccounts: null,
+      returnUrl: 'https://app.example.com/connected?client=42',
+      startUrls: [{ platform: 'INSTAGRAM', url: 'https://post.adaptlypost.com/auth/connect/tok_4/instagram/start' }],
+    };
+    vi.mocked(client.createConnectLink).mockResolvedValue(link);
+
+    await run([
+      'connect', 'create',
+      '--platform', 'instagram',
+      '--return-url', 'https://app.example.com/connected?client=42',
+    ]);
+
+    expect(client.createConnectLink).toHaveBeenCalledWith({
+      allowedPlatforms: ['INSTAGRAM'],
+      returnUrl: 'https://app.example.com/connected?client=42',
+    });
+    expect(stdoutJson()).toMatchObject({ data: { returnUrl: link.returnUrl, startUrls: link.startUrls } });
+  });
+
+  it('prints the start URLs in the human output', async () => {
+    initOutput({ json: false });
+    vi.mocked(client.createConnectLink).mockResolvedValue({
+      url: 'https://adaptlypost.com/connect/tok_5',
+      token: 'tok_5',
+      expiresAt: null,
+      name: null,
+      visibility: 'PUBLIC',
+      allowedPlatforms: [],
+      maxAccounts: null,
+      returnUrl: 'https://app.example.com/connected',
+      startUrls: [{ platform: 'TIKTOK', url: 'https://post.adaptlypost.com/auth/connect/tok_5/tiktok/start' }],
+    });
+
+    await run(['connect', 'create', '--never-expires', '--return-url', 'https://app.example.com/connected']);
+
+    const output = written.join('');
+    expect(output).toContain('https://app.example.com/connected');
+    expect(output).toContain('TIKTOK');
+    expect(output).toContain('https://post.adaptlypost.com/auth/connect/tok_5/tiktok/start');
+  });
+
   it.each([
+    [['--return-url', 'not a url'], '--return-url'],
+    [['--return-url', `https://app.example.com/${'a'.repeat(2048)}`], '--return-url'],
     [['--expires', '+30d', '--never-expires'], 'either --expires or --never-expires'],
     [['--max-accounts', '0'], '--max-accounts'],
     [['--max-accounts', '2.5'], '--max-accounts'],
