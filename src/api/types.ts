@@ -343,14 +343,10 @@ export type PlatformThumbnail = Schemas['PlatformThumbnail'];
 export type PlatformMedia = Schemas['PlatformMedia'];
 export type PlatformAspectRatio = Schemas['PlatformAspectRatio'];
 
-export interface PlatformExtras {
-  firstComments?: PlatformFirstComment[];
-  threadReplies?: PlatformThreadReplies[];
-  platformThumbnails?: PlatformThumbnail[];
-  platformAspectRatios?: PlatformAspectRatio[];
-  platformMedia?: PlatformMedia[];
-}
-
+export type PlatformExtras = Pick<
+  CreatePostRequest,
+  'firstComments' | 'threadReplies' | 'platformThumbnails' | 'platformAspectRatios' | 'platformMedia'
+>;
 export type PinterestPostConfig = Schemas['PinterestPostConfig'];
 export type TikTokPostConfig = Schemas['TikTokPostConfig'];
 export type InstagramAudioConfig = Schemas['InstagramAudioConfig'];
@@ -368,32 +364,38 @@ export type WordPressPostConfig = Schemas['WordPressPostConfig'];
 export const LINKEDIN_RESHARE_OF_MAX_LENGTH = 500;
 export const TWITTER_QUOTE_OF_MAX_LENGTH = 200;
 
-export interface PostTargets {
-  pageIds?: string[];
-  tiktokConnectionIds?: string[];
-  threadsConnectionIds?: string[];
-  instagramConnectionIds?: string[];
-  twitterConnectionIds?: string[];
-  blueskyConnectionIds?: string[];
-  mastodonConnectionIds?: string[];
-  telegramConnectionIds?: string[];
-  tumblrConnectionIds?: string[];
-  wordpressConnectionIds?: string[];
-  googleBusinessConnectionIds?: string[];
-  linkedinConnectionIds?: string[];
-  pinterestConnectionIds?: string[];
-  youtubeConnectionIds?: string[];
-  pinterestConfigs?: PinterestPostConfig[];
-  tiktokConfigs?: TikTokPostConfig[];
-  instagramConfigs?: InstagramPostConfig[];
-  facebookConfigs?: FacebookPostConfig[];
-  youtubeConfigs?: YouTubePostConfig[];
-  linkedinConfigs?: LinkedInPostConfig[];
-  twitterConfigs?: TwitterPostConfig[];
-  tumblrConfigs?: TumblrPostConfig[];
-  wordpressConfigs?: WordPressPostConfig[];
-  googleBusinessConfigs?: GoogleBusinessPostConfig[];
-}
+export type CreatePostRequest = RequestBody<'createPost'>;
+export type UpdatePostRequest = RequestBody<'updatePost'>;
+export type BulkSchedulePostsRequest = RequestBody<'bulkSchedulePosts'>;
+export type BulkPostInput = Schemas['BulkPostItem'];
+
+export type PostTargets = Pick<
+  CreatePostRequest,
+  | 'pageIds'
+  | 'tiktokConnectionIds'
+  | 'threadsConnectionIds'
+  | 'instagramConnectionIds'
+  | 'twitterConnectionIds'
+  | 'blueskyConnectionIds'
+  | 'mastodonConnectionIds'
+  | 'telegramConnectionIds'
+  | 'tumblrConnectionIds'
+  | 'wordpressConnectionIds'
+  | 'googleBusinessConnectionIds'
+  | 'linkedinConnectionIds'
+  | 'pinterestConnectionIds'
+  | 'youtubeConnectionIds'
+  | 'pinterestConfigs'
+  | 'tiktokConfigs'
+  | 'instagramConfigs'
+  | 'facebookConfigs'
+  | 'youtubeConfigs'
+  | 'linkedinConfigs'
+  | 'twitterConfigs'
+  | 'tumblrConfigs'
+  | 'wordpressConfigs'
+  | 'googleBusinessConfigs'
+>;
 
 export type SocialPostPlatform = Schemas['PostPlatform'];
 export type SocialPost = ResponseBody<'getPost'>;
@@ -402,39 +404,9 @@ export type ListPostsQuery = QueryParams<'listPosts'>;
 
 export type Recurrence = Schemas['Recurrence'];
 
-export interface CreatePostRequest extends PostTargets, PlatformExtras {
-  platforms: PlatformType[];
-  contentType: ContentType;
-  timezone: string;
-  text?: string;
-  platformTexts?: PlatformText[];
-  mediaUrls?: string[];
-  mediaAltTexts?: string[];
-  thumbnailUrl?: string;
-  thumbnailTimestampMs?: number;
-  scheduledAt?: string;
-  saveAsDraft?: boolean;
-  recurrence?: Recurrence;
-  twitterKeepLinks?: boolean;
-}
-
 export type RecurringPost = Schemas['RecurringPost'];
 export type ListRecurringPostsResponse = ResponseBody<'listRecurringPosts'>;
 export type ListRecurringPostsQuery = QueryParams<'listRecurringPosts'>;
-
-export interface UpdatePostRequest extends PostTargets, PlatformExtras {
-  platforms?: PlatformType[];
-  contentType?: ContentType;
-  timezone?: string;
-  text?: string;
-  platformTexts?: PlatformText[];
-  mediaUrls?: string[];
-  mediaAltTexts?: string[];
-  thumbnailUrl?: string;
-  thumbnailTimestampMs?: number;
-  scheduledAt?: string;
-  twitterKeepLinks?: boolean;
-}
 
 export type CreatePostResponse = ResponseBody<'createPost'>;
 
@@ -453,31 +425,6 @@ export type DeletedResponse = ResponseBody<'deletePost'>;
 
 export type PostResultsResponse = ResponseBody<'getPostResults'>;
 export type PostResult = NonNullable<PostResultsResponse['results']>[number];
-
-export interface BulkPostInput extends PlatformExtras {
-  contentType: Schemas['BulkPostItem']['contentType'];
-  scheduledAt: string;
-  text?: string;
-  mediaUrls?: string[];
-  mediaAltTexts?: string[];
-  thumbnailUrl?: string;
-  thumbnailTimestampMs?: number;
-  platformTexts?: PlatformText[];
-  pinterestConfigs?: PinterestPostConfig[];
-  tiktokConfigs?: TikTokPostConfig[];
-  instagramConfigs?: InstagramPostConfig[];
-  facebookConfigs?: FacebookPostConfig[];
-  youtubeConfigs?: YouTubePostConfig[];
-  tumblrConfigs?: TumblrPostConfig[];
-  wordpressConfigs?: WordPressPostConfig[];
-  googleBusinessConfigs?: GoogleBusinessPostConfig[];
-}
-
-export interface BulkSchedulePostsRequest extends PostTargets {
-  platforms: PlatformType[];
-  timezone: string;
-  posts: BulkPostInput[];
-}
 
 export type BulkSchedulePostsResponse = ResponseBody<'bulkSchedulePosts'>;
 export type BulkPostResult = NonNullable<BulkSchedulePostsResponse['results']>[number];
