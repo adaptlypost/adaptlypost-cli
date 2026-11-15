@@ -1,6 +1,7 @@
 import type { Command } from 'commander';
 
 import { getMe, listSocialAccounts } from '../api/client.js';
+import { getLastRateLimit } from '../api/transport.js';
 import type { Me, SocialAccount } from '../api/types.js';
 import {
   ApiError,
@@ -14,7 +15,6 @@ import {
   describeTokenSource,
   formatTimestamp,
   getGlobalOptions,
-  getLastRateLimit,
   getProfile,
   hint,
   isDebugEnabled,
@@ -39,7 +39,8 @@ import {
 const TOKEN_PREFIX = PRODUCT.tokenPrefixes[0];
 
 function platformsOf(accounts: readonly SocialAccount[]): string[] {
-  return [...new Set(accounts.map((account) => account.platform))].sort();
+  const platforms = accounts.flatMap((account) => (account.platform ? [account.platform] : []));
+  return [...new Set(platforms)].sort();
 }
 
 export function describeAbilities(can: Me['can']): string {
@@ -144,7 +145,7 @@ export function registerAuthCommands(program: Command): void {
         quiet: globals.quiet === true,
       });
 
-      const { accounts } = await listSocialAccounts();
+      const { accounts = [] } = await listSocialAccounts();
       const platforms = platformsOf(accounts);
 
       saveProfile(name, { token, apiUrl, label: options.name }, { makeCurrent: true });
@@ -220,7 +221,7 @@ export function registerAuthCommands(program: Command): void {
     .action(async () => {
       const profile = resolveProfile();
       const me = await readMe();
-      const { accounts } = await listSocialAccounts();
+      const { accounts = [] } = await listSocialAccounts();
       const platforms = platformsOf(accounts);
       const rateLimit = getLastRateLimit();
       const expiresAt = me?.expiresAt ? new Date(me.expiresAt) : null;

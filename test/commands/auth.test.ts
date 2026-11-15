@@ -45,6 +45,10 @@ vi.mock('../../src/api/client.js', async () => {
   };
 });
 
+vi.mock('../../src/api/transport.js', () => ({
+  getLastRateLimit: () => state.rateLimit,
+}));
+
 vi.mock('../../src/core/index.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/core/index.js')>();
   return {
@@ -53,7 +57,6 @@ vi.mock('../../src/core/index.js', async (importOriginal) => {
       state.httpConfigured.push(options);
     },
     getGlobalOptions: () => state.globals,
-    getLastRateLimit: () => state.rateLimit,
     getProfile: (name: string) => state.stored[name],
     isDebugEnabled: () => false,
     listProfiles: () =>

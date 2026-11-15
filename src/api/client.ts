@@ -1,4 +1,6 @@
-import { request } from '../core/http.js';
+import { LONG_TIMEOUT_MS } from '../core/http.js';
+import { withBulkConfigDefaults, withConfigDefaults } from './post-bodies.js';
+import { callApi } from './transport.js';
 import type {
   AnalyticsBreakdownQuery,
   AnalyticsDiscoveredPostsQuery,
@@ -42,6 +44,7 @@ import type {
   InboxReviewsQuery,
   InboxReviewsResponse,
   InboxReviewsStatusResponse,
+  InboxRefreshResponse,
   InboxStatusRequest,
   InboxSummary,
   InboxTextRequest,
@@ -81,514 +84,227 @@ import type {
   WebhooksResponse,
 } from './types.js';
 
-const segment = (value: string): string => encodeURIComponent(value);
-
-export const getMe = (): Promise<Me> => request<Me>({ method: 'GET', path: '/me' });
+export const getMe = (): Promise<Me> => callApi((api, options) => api.me(options));
 
 export const listSocialAccounts = (): Promise<SocialAccountsResponse> =>
-  request<SocialAccountsResponse>({ method: 'GET', path: '/social-accounts' });
+  callApi((api, options) => api.accounts.list(options));
 
-export const checkSocialAccount = (
-  accountId: string,
-): Promise<SocialAccountCheck> =>
-  request<SocialAccountCheck>({
-    method: 'POST',
-    path: `/social-accounts/${segment(accountId)}/check`,
-    idempotent: true,
-  });
+export const checkSocialAccount = (accountId: string): Promise<SocialAccountCheck> =>
+  callApi((api, options) => api.accounts.check(accountId, options));
 
-export const removeSocialAccount = (
-  accountId: string,
-): Promise<SocialAccountRemoval> =>
-  request<SocialAccountRemoval>({
-    method: 'DELETE',
-    path: `/social-accounts/${segment(accountId)}`,
-  });
+export const removeSocialAccount = (accountId: string): Promise<SocialAccountRemoval> =>
+  callApi((api, options) => api.accounts.remove(accountId, options));
 
 export const searchInstagramAudio = (
   accountId: string,
   searchInstagramAudioQuery: SearchInstagramAudioQuery,
 ): Promise<InstagramAudioResponse> =>
-  request<InstagramAudioResponse>({
-    method: 'GET',
-    path: `/social-accounts/${segment(accountId)}/instagram-audio`,
-    query: searchInstagramAudioQuery,
-  });
+  callApi((api, options) => api.accounts.instagramAudio(accountId, searchInstagramAudioQuery, options));
 
-export const listPinterestBoards = (
-  accountId: string,
-): Promise<PinterestBoardsResponse> =>
-  request<PinterestBoardsResponse>({
-    method: 'GET',
-    path: `/social-accounts/${segment(accountId)}/pinterest-boards`,
-  });
+export const listPinterestBoards = (accountId: string): Promise<PinterestBoardsResponse> =>
+  callApi((api, options) => api.accounts.pinterestBoards(accountId, options));
 
-export const listWordPressCategories = (
-  accountId: string,
-): Promise<WordPressCategoriesResponse> =>
-  request<WordPressCategoriesResponse>({
-    method: 'GET',
-    path: `/social-accounts/${segment(accountId)}/wordpress-categories`,
-  });
+export const listWordPressCategories = (accountId: string): Promise<WordPressCategoriesResponse> =>
+  callApi((api, options) => api.accounts.wordpressCategories(accountId, options));
 
 export const lookupLinkedInOrganization = (
   lookupLinkedInOrganizationQuery: LookupLinkedInOrganizationQuery,
 ): Promise<LinkedInOrganizationLookupResponse> =>
-  request<LinkedInOrganizationLookupResponse>({
-    method: 'GET',
-    path: '/linkedin-organizations/lookup',
-    query: lookupLinkedInOrganizationQuery,
-  });
+  callApi((api, options) => api.accounts.lookupLinkedInOrganization(lookupLinkedInOrganizationQuery, options));
 
-export const createUploadUrls = (
-  createUploadUrlsRequest: CreateUploadUrlsRequest,
-): Promise<UploadUrlsResponse> =>
-  request<UploadUrlsResponse>({
-    method: 'POST',
-    path: '/upload-urls',
-    body: createUploadUrlsRequest,
-  });
+export const createUploadUrls = (createUploadUrlsRequest: CreateUploadUrlsRequest): Promise<UploadUrlsResponse> =>
+  callApi((api, options) => api.media.getUploadUrls(createUploadUrlsRequest, options));
 
-export const listPosts = (
-  listPostsQuery: ListPostsQuery = {},
-): Promise<ListPostsResponse> =>
-  request<ListPostsResponse>({
-    method: 'GET',
-    path: '/social-posts',
-    query: listPostsQuery,
-  });
+export const listPosts = (listPostsQuery: ListPostsQuery = {}): Promise<ListPostsResponse> =>
+  callApi((api, options) => api.posts.list(listPostsQuery, options));
 
 export const getPost = (postId: string): Promise<SocialPost> =>
-  request<SocialPost>({
-    method: 'GET',
-    path: `/social-posts/${segment(postId)}`,
-  });
+  callApi((api, options) => api.posts.get(postId, options));
 
-export const createPost = (
-  createPostRequest: CreatePostRequest,
-): Promise<CreatePostResponse> =>
-  request<CreatePostResponse>({
-    method: 'POST',
-    path: '/social-posts',
-    body: createPostRequest,
-  });
+export const createPost = (createPostRequest: CreatePostRequest): Promise<CreatePostResponse> =>
+  callApi((api, options) => api.posts.create(createPostRequest, options));
 
-export const validatePost = (
-  createPostRequest: CreatePostRequest,
-): Promise<PostValidationReport> =>
-  request<PostValidationReport>({
-    method: 'POST',
-    path: '/social-posts/validate',
-    body: createPostRequest,
-  });
+export const validatePost = (createPostRequest: CreatePostRequest): Promise<PostValidationReport> =>
+  callApi((api, options) => api.posts.validate(createPostRequest, options));
 
-export const updatePost = (
-  postId: string,
-  updatePostRequest: UpdatePostRequest,
-): Promise<SocialPost> =>
-  request<SocialPost>({
-    method: 'PATCH',
-    path: `/social-posts/${segment(postId)}`,
-    body: updatePostRequest,
-  });
+export const updatePost = (postId: string, updatePostRequest: UpdatePostRequest): Promise<SocialPost> =>
+  callApi((api, options) => api.posts.update(postId, withConfigDefaults(updatePostRequest), options));
 
 export const deletePost = (postId: string): Promise<DeletedResponse> =>
-  request<DeletedResponse>({
-    method: 'DELETE',
-    path: `/social-posts/${segment(postId)}`,
-  });
+  callApi((api, options) => api.posts.delete(postId, options));
 
 export const unschedulePost = (postId: string): Promise<SocialPost> =>
-  request<SocialPost>({
-    method: 'POST',
-    path: `/social-posts/${segment(postId)}/unschedule`,
-  });
+  callApi((api, options) => api.posts.unschedule(postId, options));
 
-export const publishDraft = (
-  postId: string,
-  publishDraftRequest: PublishDraftRequest,
-): Promise<PublishResponse> =>
-  request<PublishResponse>({
-    method: 'POST',
-    path: `/social-posts/${segment(postId)}/publish`,
-    body: publishDraftRequest,
-  });
+export const publishDraft = (postId: string, publishDraftRequest: PublishDraftRequest): Promise<PublishResponse> =>
+  callApi((api, options) => api.posts.publish(postId, publishDraftRequest, options));
 
 export const listPostResults = (postId: string): Promise<PostResultsResponse> =>
-  request<PostResultsResponse>({
-    method: 'GET',
-    path: `/social-posts/${segment(postId)}/results`,
-  });
+  callApi((api, options) => api.posts.results(postId, options));
 
 export const retryFailedPlatforms = (
   postId: string,
   retryFailedPlatformsRequest: RetryFailedPlatformsRequest,
 ): Promise<PublishResponse> =>
-  request<PublishResponse>({
-    method: 'POST',
-    path: `/social-posts/${segment(postId)}/retry`,
-    body: retryFailedPlatformsRequest,
-  });
+  callApi((api, options) => api.posts.retry(postId, retryFailedPlatformsRequest, options));
 
 export const bulkSchedulePosts = (
   bulkSchedulePostsRequest: BulkSchedulePostsRequest,
 ): Promise<BulkSchedulePostsResponse> =>
-  request<BulkSchedulePostsResponse>({
-    method: 'POST',
-    path: '/social-posts/bulk',
-    body: bulkSchedulePostsRequest,
-  });
+  callApi((api, options) => api.posts.bulkSchedule(withBulkConfigDefaults(bulkSchedulePostsRequest), options));
 
 export const validateBulkPosts = (
   bulkSchedulePostsRequest: BulkSchedulePostsRequest,
 ): Promise<BulkPostValidationReport> =>
-  request<BulkPostValidationReport>({
-    method: 'POST',
-    path: '/social-posts/bulk/validate',
-    body: bulkSchedulePostsRequest,
-  });
+  callApi((api, options) => api.posts.validateBulk(withBulkConfigDefaults(bulkSchedulePostsRequest), options));
 
 export const listRecurringPosts = (
   listRecurringPostsQuery: ListRecurringPostsQuery = {},
 ): Promise<ListRecurringPostsResponse> =>
-  request<ListRecurringPostsResponse>({
-    method: 'GET',
-    path: '/recurring-posts',
-    query: listRecurringPostsQuery,
-  });
+  callApi((api, options) => api.recurringPosts.list(listRecurringPostsQuery, options));
 
 export const getRecurringPost = (recurringPostId: string): Promise<RecurringPost> =>
-  request<RecurringPost>({
-    method: 'GET',
-    path: `/recurring-posts/${segment(recurringPostId)}`,
-  });
+  callApi((api, options) => api.recurringPosts.get(recurringPostId, options));
 
 export const pauseRecurringPost = (recurringPostId: string): Promise<RecurringPost> =>
-  request<RecurringPost>({
-    method: 'POST',
-    path: `/recurring-posts/${segment(recurringPostId)}/pause`,
-  });
+  callApi((api, options) => api.recurringPosts.pause(recurringPostId, options));
 
 export const resumeRecurringPost = (recurringPostId: string): Promise<RecurringPost> =>
-  request<RecurringPost>({
-    method: 'POST',
-    path: `/recurring-posts/${segment(recurringPostId)}/resume`,
-  });
+  callApi((api, options) => api.recurringPosts.resume(recurringPostId, options));
 
 export const deleteRecurringPost = (recurringPostId: string): Promise<DeletedResponse> =>
-  request<DeletedResponse>({
-    method: 'DELETE',
-    path: `/recurring-posts/${segment(recurringPostId)}`,
-  });
+  callApi((api, options) => api.recurringPosts.delete(recurringPostId, options));
 
-export const createConnectLink = (
-  createConnectLinkRequest: CreateConnectLinkRequest = {},
-): Promise<ConnectLink> =>
-  request<ConnectLink>({
-    method: 'POST',
-    path: '/connect-links',
-    body: createConnectLinkRequest,
-  });
+export const createConnectLink = (createConnectLinkRequest: CreateConnectLinkRequest = {}): Promise<ConnectLink> =>
+  callApi((api, options) => api.connectLinks.create(createConnectLinkRequest, options));
 
-export const revokeConnectLink = (
-  token: string,
-): Promise<RevokeConnectLinkResponse> =>
-  request<RevokeConnectLinkResponse>({
-    method: 'DELETE',
-    path: `/connect-links/${segment(token)}`,
-  });
+export const revokeConnectLink = (token: string): Promise<RevokeConnectLinkResponse> =>
+  callApi((api, options) => api.connectLinks.revoke(token, options));
 
-export const createWebhook = (
-  createWebhookRequest: CreateWebhookRequest,
-): Promise<CreatedWebhook> =>
-  request<CreatedWebhook>({
-    method: 'POST',
-    path: '/webhooks',
-    body: createWebhookRequest,
-  });
+export const createWebhook = (createWebhookRequest: CreateWebhookRequest): Promise<CreatedWebhook> =>
+  callApi((api, options) => api.webhooks.create(createWebhookRequest, options));
 
-export const listWebhooks = (): Promise<WebhooksResponse> =>
-  request<WebhooksResponse>({ method: 'GET', path: '/webhooks' });
+export const listWebhooks = (): Promise<WebhooksResponse> => callApi((api, options) => api.webhooks.list(options));
 
 export const getWebhook = (webhookId: string): Promise<Webhook> =>
-  request<Webhook>({ method: 'GET', path: `/webhooks/${segment(webhookId)}` });
+  callApi((api, options) => api.webhooks.get(webhookId, options));
 
-export const updateWebhook = (
-  webhookId: string,
-  updateWebhookRequest: UpdateWebhookRequest,
-): Promise<Webhook> =>
-  request<Webhook>({
-    method: 'PATCH',
-    path: `/webhooks/${segment(webhookId)}`,
-    body: updateWebhookRequest,
-  });
+export const updateWebhook = (webhookId: string, updateWebhookRequest: UpdateWebhookRequest): Promise<Webhook> =>
+  callApi((api, options) => api.webhooks.update(webhookId, updateWebhookRequest, options));
 
 export const deleteWebhook = (webhookId: string): Promise<DeletedResponse> =>
-  request<DeletedResponse>({
-    method: 'DELETE',
-    path: `/webhooks/${segment(webhookId)}`,
-  });
+  callApi((api, options) => api.webhooks.delete(webhookId, options));
 
 export const testWebhook = (webhookId: string): Promise<WebhookTestResult> =>
-  request<WebhookTestResult>({
-    method: 'POST',
-    path: `/webhooks/${segment(webhookId)}/test`,
-  });
+  callApi((api, options) => api.webhooks.test(webhookId, options));
 
-export const getAnalyticsOverview = (
-  analyticsRangeQuery: AnalyticsRangeQuery,
-): Promise<AnalyticsOverview> =>
-  request<AnalyticsOverview>({
-    method: 'GET',
-    path: '/analytics/overview',
-    query: analyticsRangeQuery,
-  });
+export const getAnalyticsOverview = (analyticsRangeQuery: AnalyticsRangeQuery): Promise<AnalyticsOverview> =>
+  callApi((api, options) => api.analytics.overview(analyticsRangeQuery, options));
 
 export const getAnalyticsTimeseries = (
   analyticsTimeseriesQuery: AnalyticsTimeseriesQuery,
 ): Promise<AnalyticsTimeseriesResponse> =>
-  request<AnalyticsTimeseriesResponse>({
-    method: 'GET',
-    path: '/analytics/timeseries',
-    query: analyticsTimeseriesQuery,
-  });
+  callApi((api, options) => api.analytics.timeseries(analyticsTimeseriesQuery, options));
 
 export const getPlatformBreakdown = (
   analyticsBreakdownQuery: AnalyticsBreakdownQuery,
 ): Promise<PlatformBreakdownResponse> =>
-  request<PlatformBreakdownResponse>({
-    method: 'GET',
-    path: '/analytics/platform-breakdown',
-    query: analyticsBreakdownQuery,
-  });
+  callApi((api, options) => api.analytics.platformBreakdown(analyticsBreakdownQuery, options));
 
-export const listPostAnalytics = (
-  analyticsPostsQuery: AnalyticsPostsQuery,
-): Promise<ListPostAnalyticsResponse> =>
-  request<ListPostAnalyticsResponse>({
-    method: 'GET',
-    path: '/analytics/posts',
-    query: analyticsPostsQuery,
-  });
+export const listPostAnalytics = (analyticsPostsQuery: AnalyticsPostsQuery): Promise<ListPostAnalyticsResponse> =>
+  callApi((api, options) => api.analytics.posts(analyticsPostsQuery, options));
 
-export const listTopPosts = (
-  analyticsTopPostsQuery: AnalyticsTopPostsQuery,
-): Promise<TopPostsResponse> =>
-  request<TopPostsResponse>({
-    method: 'GET',
-    path: '/analytics/top-posts',
-    query: analyticsTopPostsQuery,
-  });
+export const listTopPosts = (analyticsTopPostsQuery: AnalyticsTopPostsQuery): Promise<TopPostsResponse> =>
+  callApi((api, options) => api.analytics.topPosts(analyticsTopPostsQuery, options));
 
 export const listDiscoveredPosts = (
   analyticsDiscoveredPostsQuery: AnalyticsDiscoveredPostsQuery,
 ): Promise<DiscoveredPostsResponse> =>
-  request<DiscoveredPostsResponse>({
-    method: 'GET',
-    path: '/analytics/discovered-posts',
-    query: analyticsDiscoveredPostsQuery,
-  });
+  callApi((api, options) => api.analytics.discoveredPosts(analyticsDiscoveredPostsQuery, options));
 
 export const getAnalyticsSyncStatus = (): Promise<AnalyticsSyncStatus> =>
-  request<AnalyticsSyncStatus>({
-    method: 'GET',
-    path: '/analytics/sync-status',
-  });
+  callApi((api, options) => api.analytics.syncStatus(options));
 
 export const triggerAnalyticsSync = (): Promise<TriggerAnalyticsSyncResponse> =>
-  request<TriggerAnalyticsSyncResponse>({
-    method: 'POST',
-    path: '/analytics/sync',
-    idempotent: true,
-  });
+  callApi((api, options) => api.analytics.sync(options));
 
-export const generateCaption = (
-  generateCaptionRequest: GenerateCaptionRequest,
-): Promise<CaptionResponse> =>
-  request<CaptionResponse>({
-    method: 'POST',
-    path: '/ai/captions',
-    body: generateCaptionRequest,
-  });
+export const generateCaption = (generateCaptionRequest: GenerateCaptionRequest): Promise<CaptionResponse> =>
+  callApi((api, options) => api.ai.generateCaption(generateCaptionRequest, options), LONG_TIMEOUT_MS);
 
-export const refineCaption = (
-  refineCaptionRequest: RefineCaptionRequest,
-): Promise<CaptionResponse> =>
-  request<CaptionResponse>({
-    method: 'POST',
-    path: '/ai/captions/refine',
-    body: refineCaptionRequest,
-  });
+export const refineCaption = (refineCaptionRequest: RefineCaptionRequest): Promise<CaptionResponse> =>
+  callApi((api, options) => api.ai.refineCaption(refineCaptionRequest, options), LONG_TIMEOUT_MS);
 
-export const generateImage = (
-  generateImageRequest: GenerateImageRequest,
-): Promise<GenerateImageResponse> =>
-  request<GenerateImageResponse>({
-    method: 'POST',
-    path: '/ai/images',
-    body: generateImageRequest,
-  });
+export const generateImage = (generateImageRequest: GenerateImageRequest): Promise<GenerateImageResponse> =>
+  callApi((api, options) => api.ai.generateImage(generateImageRequest, options), LONG_TIMEOUT_MS);
 
 export const getImageJob = (jobId: string): Promise<ImageJob> =>
-  request<ImageJob>({
-    method: 'GET',
-    path: `/ai/images/${segment(jobId)}`,
-  });
+  callApi((api, options) => api.ai.getImageJob(jobId, options));
 
-export const getInboxSummary = (): Promise<InboxSummary> =>
-  request<InboxSummary>({ method: 'GET', path: '/inbox/summary' });
+export const getInboxSummary = (): Promise<InboxSummary> => callApi((api, options) => api.inbox.summary(options));
 
-export const refreshInbox = (): Promise<{ queued: boolean }> =>
-  request<{ queued: boolean }>({ method: 'POST', path: '/inbox/refresh', idempotent: true });
+export const refreshInbox = (): Promise<InboxRefreshResponse> => callApi((api, options) => api.inbox.refresh(options));
 
-export const listInboxComments = (
-  inboxCommentsQuery: InboxCommentsQuery = {},
-): Promise<InboxCommentsResponse> =>
-  request<InboxCommentsResponse>({ method: 'GET', path: '/inbox/comments', query: inboxCommentsQuery });
+export const listInboxComments = (inboxCommentsQuery: InboxCommentsQuery = {}): Promise<InboxCommentsResponse> =>
+  callApi((api, options) => api.inbox.comments.list(inboxCommentsQuery, options));
 
 export const getInboxComment = (commentId: string): Promise<InboxCommentThread> =>
-  request<InboxCommentThread>({ method: 'GET', path: `/inbox/comments/${segment(commentId)}` });
+  callApi((api, options) => api.inbox.comments.get(commentId, options));
 
-export const replyToInboxComment = (
-  commentId: string,
-  inboxTextRequest: InboxTextRequest,
-): Promise<InboxComment> =>
-  request<InboxComment>({
-    method: 'POST',
-    path: `/inbox/comments/${segment(commentId)}/reply`,
-    body: inboxTextRequest,
-  });
+export const replyToInboxComment = (commentId: string, inboxTextRequest: InboxTextRequest): Promise<InboxComment> =>
+  callApi((api, options) => api.inbox.comments.reply(commentId, inboxTextRequest, options));
 
 export const hideInboxComment = (commentId: string): Promise<InboxComment> =>
-  request<InboxComment>({
-    method: 'POST',
-    path: `/inbox/comments/${segment(commentId)}/hide`,
-    idempotent: true,
-  });
+  callApi((api, options) => api.inbox.comments.hide(commentId, options));
 
 export const unhideInboxComment = (commentId: string): Promise<InboxComment> =>
-  request<InboxComment>({
-    method: 'POST',
-    path: `/inbox/comments/${segment(commentId)}/unhide`,
-    idempotent: true,
-  });
+  callApi((api, options) => api.inbox.comments.unhide(commentId, options));
 
 export const likeInboxComment = (commentId: string): Promise<InboxComment> =>
-  request<InboxComment>({
-    method: 'POST',
-    path: `/inbox/comments/${segment(commentId)}/like`,
-    idempotent: true,
-  });
+  callApi((api, options) => api.inbox.comments.like(commentId, options));
 
 export const unlikeInboxComment = (commentId: string): Promise<InboxComment> =>
-  request<InboxComment>({
-    method: 'DELETE',
-    path: `/inbox/comments/${segment(commentId)}/like`,
-    idempotent: true,
-  });
+  callApi((api, options) => api.inbox.comments.unlike(commentId, options));
 
 export const deleteInboxComment = (commentId: string): Promise<DeletedResponse> =>
-  request<DeletedResponse>({ method: 'DELETE', path: `/inbox/comments/${segment(commentId)}` });
+  callApi((api, options) => api.inbox.comments.delete(commentId, options));
 
-export const setInboxCommentsStatus = (
-  inboxStatusRequest: InboxStatusRequest,
-): Promise<InboxCommentsStatusResponse> =>
-  request<InboxCommentsStatusResponse>({
-    method: 'POST',
-    path: '/inbox/comments/status',
-    body: inboxStatusRequest,
-    idempotent: true,
-  });
+export const setInboxCommentsStatus = (inboxStatusRequest: InboxStatusRequest): Promise<InboxCommentsStatusResponse> =>
+  callApi((api, options) => api.inbox.comments.updateStatus(inboxStatusRequest, options));
 
-export const listInboxMentions = (
-  inboxListQuery: InboxListQuery = {},
-): Promise<InboxMentionsResponse> =>
-  request<InboxMentionsResponse>({ method: 'GET', path: '/inbox/mentions', query: inboxListQuery });
+export const listInboxMentions = (inboxListQuery: InboxListQuery = {}): Promise<InboxMentionsResponse> =>
+  callApi((api, options) => api.inbox.mentions.list(inboxListQuery, options));
 
-export const replyToInboxMention = (
-  mentionId: string,
-  inboxTextRequest: InboxTextRequest,
-): Promise<InboxMention> =>
-  request<InboxMention>({
-    method: 'POST',
-    path: `/inbox/mentions/${segment(mentionId)}/reply`,
-    body: inboxTextRequest,
-  });
+export const replyToInboxMention = (mentionId: string, inboxTextRequest: InboxTextRequest): Promise<InboxMention> =>
+  callApi((api, options) => api.inbox.mentions.reply(mentionId, inboxTextRequest, options));
 
-export const setInboxMentionsStatus = (
-  inboxStatusRequest: InboxStatusRequest,
-): Promise<InboxMentionsStatusResponse> =>
-  request<InboxMentionsStatusResponse>({
-    method: 'POST',
-    path: '/inbox/mentions/status',
-    body: inboxStatusRequest,
-    idempotent: true,
-  });
+export const setInboxMentionsStatus = (inboxStatusRequest: InboxStatusRequest): Promise<InboxMentionsStatusResponse> =>
+  callApi((api, options) => api.inbox.mentions.updateStatus(inboxStatusRequest, options));
 
-export const listInboxConversations = (
-  inboxListQuery: InboxListQuery = {},
-): Promise<InboxConversationsResponse> =>
-  request<InboxConversationsResponse>({ method: 'GET', path: '/inbox/conversations', query: inboxListQuery });
+export const listInboxConversations = (inboxListQuery: InboxListQuery = {}): Promise<InboxConversationsResponse> =>
+  callApi((api, options) => api.inbox.conversations.list(inboxListQuery, options));
 
 export const getInboxConversation = (conversationId: string): Promise<InboxConversationThread> =>
-  request<InboxConversationThread>({
-    method: 'GET',
-    path: `/inbox/conversations/${segment(conversationId)}`,
-  });
+  callApi((api, options) => api.inbox.conversations.get(conversationId, options));
 
 export const sendInboxMessage = (
   conversationId: string,
   inboxTextRequest: InboxTextRequest,
 ): Promise<SentInboxMessage> =>
-  request<SentInboxMessage>({
-    method: 'POST',
-    path: `/inbox/conversations/${segment(conversationId)}/messages`,
-    body: inboxTextRequest,
-  });
+  callApi((api, options) => api.inbox.conversations.sendMessage(conversationId, inboxTextRequest, options));
 
 export const setInboxConversationsStatus = (
   inboxStatusRequest: InboxStatusRequest,
 ): Promise<InboxConversationsStatusResponse> =>
-  request<InboxConversationsStatusResponse>({
-    method: 'POST',
-    path: '/inbox/conversations/status',
-    body: inboxStatusRequest,
-    idempotent: true,
-  });
+  callApi((api, options) => api.inbox.conversations.updateStatus(inboxStatusRequest, options));
 
-export const listInboxReviews = (
-  inboxReviewsQuery: InboxReviewsQuery = {},
-): Promise<InboxReviewsResponse> =>
-  request<InboxReviewsResponse>({
-    method: 'GET',
-    path: '/inbox/reviews',
-    query: { ...inboxReviewsQuery, ratings: inboxReviewsQuery.ratings?.map(String) },
-  });
+export const listInboxReviews = (inboxReviewsQuery: InboxReviewsQuery = {}): Promise<InboxReviewsResponse> =>
+  callApi((api, options) => api.inbox.reviews.list(inboxReviewsQuery, options));
 
-export const replyToInboxReview = (
-  reviewId: string,
-  inboxTextRequest: InboxTextRequest,
-): Promise<InboxReview> =>
-  request<InboxReview>({
-    method: 'PUT',
-    path: `/inbox/reviews/${segment(reviewId)}/reply`,
-    body: inboxTextRequest,
-    idempotent: true,
-  });
+export const replyToInboxReview = (reviewId: string, inboxTextRequest: InboxTextRequest): Promise<InboxReview> =>
+  callApi((api, options) => api.inbox.reviews.reply(reviewId, inboxTextRequest, options));
 
 export const deleteInboxReviewReply = (reviewId: string): Promise<InboxReview> =>
-  request<InboxReview>({
-    method: 'DELETE',
-    path: `/inbox/reviews/${segment(reviewId)}/reply`,
-    idempotent: true,
-  });
+  callApi((api, options) => api.inbox.reviews.deleteReply(reviewId, options));
 
-export const setInboxReviewsStatus = (
-  inboxStatusRequest: InboxStatusRequest,
-): Promise<InboxReviewsStatusResponse> =>
-  request<InboxReviewsStatusResponse>({
-    method: 'POST',
-    path: '/inbox/reviews/status',
-    body: inboxStatusRequest,
-    idempotent: true,
-  });
+export const setInboxReviewsStatus = (inboxStatusRequest: InboxStatusRequest): Promise<InboxReviewsStatusResponse> =>
+  callApi((api, options) => api.inbox.reviews.updateStatus(inboxStatusRequest, options));

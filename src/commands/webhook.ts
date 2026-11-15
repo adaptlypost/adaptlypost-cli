@@ -8,6 +8,7 @@ import {
   testWebhook,
   updateWebhook,
 } from '../api/client.js';
+import { requireField } from '../api/fields.js';
 import {
   DEFAULT_WEBHOOK_EVENTS,
   WEBHOOK_EVENTS,
@@ -89,15 +90,15 @@ export const webhookState = (webhook: Webhook): string => {
   return webhook.active ? 'active' : 'inactive';
 };
 
-const when = (value: string | null): string => {
+const when = (value: string | null | undefined): string => {
   if (!value) return '—';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : formatRelative(date);
 };
 
 const detailsOf = (webhook: Webhook): [string, string][] => [
-  ['id', webhook.id],
-  ['url', webhook.url],
+  ['id', webhook.id ?? '—'],
+  ['url', webhook.url ?? '—'],
   ['status', webhookState(webhook)],
   ['events', webhook.events && webhook.events.length > 0 ? webhook.events.join(', ') : 'default set'],
   ['last success', when(webhook.lastSuccessAt)],
@@ -106,11 +107,11 @@ const detailsOf = (webhook: Webhook): [string, string][] => [
 ];
 
 const LIST_COLUMNS: Column<Webhook>[] = [
-  { header: 'ID', value: (webhook) => formatId(webhook.id) },
+  { header: 'ID', value: (webhook) => (webhook.id ? formatId(webhook.id) : '—') },
   { header: 'STATUS', value: webhookState },
   { header: 'LAST SUCCESS', value: (webhook) => when(webhook.lastSuccessAt) },
   { header: 'LAST FAILURE', value: (webhook) => when(webhook.lastFailureAt) },
-  { header: 'URL', value: (webhook) => webhook.url },
+  { header: 'URL', value: (webhook) => webhook.url ?? '—' },
 ];
 
 async function runCreate(options: CreateOptions): Promise<void> {
@@ -127,14 +128,15 @@ async function runCreate(options: CreateOptions): Promise<void> {
     return;
   }
 
-  success(`Webhook created  ${formatId(created.id)}`);
-  printKeyValues([...detailsOf(created), ['secret', created.secret]]);
+  const createdId = requireField(created.id, 'webhook id');
+  success(`Webhook created  ${formatId(createdId)}`);
+  printKeyValues([...detailsOf(created), ['secret', requireField(created.secret, 'webhook secret')]]);
   warn('The signing secret is shown only now. Store it where your receiver can read it.');
-  hint(`Events: ${eventsOf(created).join(', ')}. Send a test with: ${PRODUCT.binName} webhook test ${created.id}`);
+  hint(`Events: ${eventsOf(created).join(', ')}. Send a test with: ${PRODUCT.binName} webhook test ${createdId}`);
 }
 
 async function runList(): Promise<void> {
-  const { webhooks } = await listWebhooks();
+  const { webhooks = [] } = await listWebhooks();
 
   if (isMachine()) {
     printResult('webhook.list', webhooks, { total: webhooks.length, hasMore: false });
@@ -194,7 +196,7 @@ async function runUpdate(id: string, options: UpdateOptions): Promise<void> {
     return;
   }
 
-  success(`Webhook updated  ${formatId(updated.id)}`);
+  success(`Webhook updated  ${formatId(updated.id ?? id)}`);
   printKeyValues(detailsOf(updated));
 }
 
@@ -202,7 +204,7 @@ async function runDelete(id: string, options: GlobalOptions): Promise<void> {
   if (!options.yes) {
     const webhook = await getWebhook(id);
     const proceed = await promptConfirm(
-      `Delete webhook ${formatId(webhook.id)} (${webhook.url})? Deliveries to it stop at once.`,
+      `Delete webhook ${formatId(webhook.id ?? id)} (${webhook.url ?? 'no url'})? Deliveries to it stop at once.`,
       { assumeYes: false },
     );
     if (!proceed) {

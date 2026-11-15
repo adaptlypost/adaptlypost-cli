@@ -6,6 +6,7 @@ import { Readable } from 'node:stream';
 import type { Command } from 'commander';
 
 import { createUploadUrls } from '../api/client.js';
+import { requireField } from '../api/fields.js';
 import type { UploadMimeType, UploadUrl } from '../api/types.js';
 import {
   CliError,
@@ -155,30 +156,46 @@ export const prepareFiles = async (paths: readonly string[]): Promise<PreparedFi
   return prepared;
 };
 
-const requestUploadUrls = async (files: readonly PreparedFile[]): Promise<UploadUrl[]> => {
-  const urls: UploadUrl[] = [];
+interface UploadTarget {
+  fileName: string;
+  uploadUrl: string;
+  publicUrl: string;
+  key: string;
+  expiresAt: string;
+}
+
+const toUploadTarget = (url: UploadUrl): UploadTarget => ({
+  fileName: requireField(url.fileName, 'urls[].fileName'),
+  uploadUrl: requireField(url.uploadUrl, 'urls[].uploadUrl'),
+  publicUrl: requireField(url.publicUrl, 'urls[].publicUrl'),
+  key: requireField(url.key, 'urls[].key'),
+  expiresAt: requireField(url.expiresAt, 'urls[].expiresAt'),
+});
+
+const requestUploadUrls = async (files: readonly PreparedFile[]): Promise<UploadTarget[]> => {
+  const targets: UploadTarget[] = [];
 
   for (const batch of chunk(files, MAX_FILES_PER_REQUEST)) {
-    const response = await createUploadUrls({
+    const { urls = [] } = await createUploadUrls({
       files: batch.map((file) => ({ fileName: file.fileName, mimeType: file.mimeType })),
     });
 
-    if (response.urls.length !== batch.length) {
+    if (urls.length !== batch.length) {
       throw new CliError(
-        `The API returned ${response.urls.length} upload urls for ${batch.length} files`,
+        `The API returned ${urls.length} upload urls for ${batch.length} files`,
         { exitCode: ExitCode.GENERIC },
       );
     }
 
-    urls.push(...response.urls);
+    targets.push(...urls.map(toUploadTarget));
   }
 
-  return urls;
+  return targets;
 };
 
 const putFile = async (
   file: PreparedFile,
-  target: UploadUrl,
+  target: UploadTarget,
   onProgress: (bytes: number) => void,
 ): Promise<void> => {
   if (!target.uploadUrl.startsWith('https://')) {
@@ -250,7 +267,7 @@ const runUpload = async (paths: string[], options: UploadOptions): Promise<void>
   const progress: Spinner | null =
     isQuiet() || isMachine() ? null : spinner('Requesting upload urls…');
 
-  let targets: UploadUrl[] = [];
+  let targets: UploadTarget[] = [];
   let uploaded = 0;
 
   try {
@@ -316,7 +333,7 @@ const runUrls = async (paths: string[]): Promise<void> => {
   const files = await prepareFiles(paths);
   const progress = isQuiet() || isMachine() ? null : spinner('Requesting upload urls…');
 
-  let targets: UploadUrl[] = [];
+  let targets: UploadTarget[] = [];
 
   try {
     targets = await requestUploadUrls(files);

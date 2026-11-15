@@ -24,6 +24,7 @@ import {
   unhideInboxComment,
   unlikeInboxComment,
 } from '../api/client.js';
+import { requireField } from '../api/fields.js';
 import {
   INBOX_LIST_DEFAULT_LIMIT,
   INBOX_LIST_MAX_ACCOUNTS,
@@ -206,9 +207,19 @@ export function buildInboxReviewsQuery(options: ReviewListOptions): InboxReviews
   return query;
 }
 
-interface FetchedPage<T> extends InboxPage {
+interface FetchedPage<T> {
   items: T[];
+  total: number;
+  hasMore: boolean;
+  nextCursor: string | null;
 }
+
+const fetchedPage = <T>(page: InboxPage, items: T[] | undefined): FetchedPage<T> => ({
+  items: items ?? [],
+  total: page.total ?? 0,
+  hasMore: page.hasMore ?? false,
+  nextCursor: page.nextCursor ?? null,
+});
 
 interface CollectedPage<T> {
   items: T[];
@@ -260,8 +271,12 @@ const when = (value: string | null | undefined): string => {
   return Number.isNaN(date.getTime()) ? value : formatRelative(date);
 };
 
-const personOf = (person: { name: string; username?: string | null }): string =>
-  person.username ? `${person.name} (@${person.username.replace(/^@/, '')})` : person.name;
+const shortId = (id: string | undefined): string => (id === undefined ? '—' : formatId(id));
+
+const personOf = (person: { name?: string; username?: string | null } | undefined): string => {
+  const name = person?.name ?? '—';
+  return person?.username ? `${name} (@${person.username.replace(/^@/, '')})` : name;
+};
 
 const commentState = (comment: InboxComment): string =>
   [
@@ -275,9 +290,9 @@ const commentState = (comment: InboxComment): string =>
     .join(' · ');
 
 const COMMENT_COLUMNS: Column<InboxComment>[] = [
-  { header: 'ID', value: (comment) => formatId(comment.id) },
-  { header: 'PLATFORM', value: (comment) => comment.platform },
-  { header: 'ACCOUNT', value: (comment) => comment.accountName },
+  { header: 'ID', value: (comment) => shortId(comment.id) },
+  { header: 'PLATFORM', value: (comment) => comment.platform ?? '—' },
+  { header: 'ACCOUNT', value: (comment) => comment.accountName ?? '—' },
   { header: 'FROM', value: (comment) => personOf(comment.author) },
   { header: 'STATE', value: commentState },
   { header: 'WHEN', value: (comment) => when(comment.createdAt) },
@@ -285,21 +300,24 @@ const COMMENT_COLUMNS: Column<InboxComment>[] = [
 ];
 
 const MENTION_COLUMNS: Column<InboxMention>[] = [
-  { header: 'ID', value: (mention) => formatId(mention.id) },
-  { header: 'PLATFORM', value: (mention) => mention.platform },
-  { header: 'ACCOUNT', value: (mention) => mention.accountName },
+  { header: 'ID', value: (mention) => shortId(mention.id) },
+  { header: 'PLATFORM', value: (mention) => mention.platform ?? '—' },
+  { header: 'ACCOUNT', value: (mention) => mention.accountName ?? '—' },
   { header: 'FROM', value: (mention) => personOf(mention.author) },
-  { header: 'STATE', value: (mention) => (mention.replied ? `${mention.status} · replied` : mention.status) },
+  {
+    header: 'STATE',
+    value: (mention) => (mention.replied ? `${mention.status ?? '—'} · replied` : (mention.status ?? '—')),
+  },
   { header: 'WHEN', value: (mention) => when(mention.createdAt) },
   { header: 'TEXT', value: (mention) => oneLine(mention.text) },
 ];
 
 const CONVERSATION_COLUMNS: Column<InboxConversation>[] = [
-  { header: 'ID', value: (conversation) => formatId(conversation.id) },
-  { header: 'PLATFORM', value: (conversation) => conversation.platform },
-  { header: 'ACCOUNT', value: (conversation) => conversation.accountName },
+  { header: 'ID', value: (conversation) => shortId(conversation.id) },
+  { header: 'PLATFORM', value: (conversation) => conversation.platform ?? '—' },
+  { header: 'ACCOUNT', value: (conversation) => conversation.accountName ?? '—' },
   { header: 'WITH', value: (conversation) => personOf(conversation.participant) },
-  { header: 'STATUS', value: (conversation) => conversation.status },
+  { header: 'STATUS', value: (conversation) => conversation.status ?? '—' },
   { header: 'LAST', value: (conversation) => when(conversation.lastMessageAt) },
   {
     header: 'LAST MESSAGE',
@@ -307,14 +325,21 @@ const CONVERSATION_COLUMNS: Column<InboxConversation>[] = [
   },
 ];
 
-const stars = (rating: number): string => '★'.repeat(rating) + '☆'.repeat(Math.max(0, 5 - rating));
+const stars = (rating: number | undefined): string =>
+  rating === undefined ? '—' : '★'.repeat(rating) + '☆'.repeat(Math.max(0, 5 - rating));
 
 const REVIEW_COLUMNS: Column<InboxReview>[] = [
-  { header: 'ID', value: (review) => formatId(review.id) },
-  { header: 'LOCATION', value: (review) => review.accountName },
+  { header: 'ID', value: (review) => shortId(review.id) },
+  { header: 'LOCATION', value: (review) => review.accountName ?? '—' },
   { header: 'RATING', value: (review) => stars(review.rating) },
-  { header: 'FROM', value: (review) => (review.reviewer.isAnonymous ? 'anonymous' : review.reviewer.name) },
-  { header: 'STATE', value: (review) => (review.reply ? `${review.status} · replied` : review.status) },
+  {
+    header: 'FROM',
+    value: (review) => (review.reviewer?.isAnonymous ? 'anonymous' : (review.reviewer?.name ?? '—')),
+  },
+  {
+    header: 'STATE',
+    value: (review) => (review.reply ? `${review.status ?? '—'} · replied` : (review.status ?? '—')),
+  },
   { header: 'WHEN', value: (review) => when(review.createdAt) },
   { header: 'TEXT', value: (review) => oneLine(review.text) },
 ];
@@ -378,14 +403,17 @@ const ACCESS_LABEL: Record<InboxChannelAccess, string> = {
   UNSUPPORTED: '—',
 };
 
+const accessLabel = (access: InboxChannelAccess | undefined): string =>
+  access === undefined ? '—' : ACCESS_LABEL[access];
+
 const SUMMARY_COLUMNS: Column<InboxSummaryAccount>[] = [
-  { header: 'ACCOUNT ID', value: (account) => formatId(account.accountId) },
-  { header: 'PLATFORM', value: (account) => account.platform },
-  { header: 'NAME', value: (account) => account.accountName },
-  { header: 'COMMENTS', value: (account) => ACCESS_LABEL[account.comments] },
-  { header: 'MENTIONS', value: (account) => ACCESS_LABEL[account.mentions] },
-  { header: 'MESSAGES', value: (account) => ACCESS_LABEL[account.messages] },
-  { header: 'REVIEWS', value: (account) => ACCESS_LABEL[account.reviews] },
+  { header: 'ACCOUNT ID', value: (account) => shortId(account.accountId) },
+  { header: 'PLATFORM', value: (account) => account.platform ?? '—' },
+  { header: 'NAME', value: (account) => account.accountName ?? '—' },
+  { header: 'COMMENTS', value: (account) => accessLabel(account.comments) },
+  { header: 'MENTIONS', value: (account) => accessLabel(account.mentions) },
+  { header: 'MESSAGES', value: (account) => accessLabel(account.messages) },
+  { header: 'REVIEWS', value: (account) => accessLabel(account.reviews) },
   { header: 'LAST SYNC', value: (account) => when(account.lastSyncedAt) },
 ];
 
@@ -397,18 +425,18 @@ async function runSummary(): Promise<void> {
     return;
   }
 
-  const { unread } = summary;
+  const { unread = {}, accounts = [] } = summary;
   print(
-    `Unread: ${unread.comments} comments · ${unread.mentions} mentions · ${unread.conversations} conversations · ${unread.reviews} reviews`,
+    `Unread: ${unread.comments ?? 0} comments · ${unread.mentions ?? 0} mentions · ${unread.conversations ?? 0} conversations · ${unread.reviews ?? 0} reviews`,
   );
-  if (summary.accounts.length === 0) {
+  if (accounts.length === 0) {
     print();
     print('No connected account has an inbox.');
     return;
   }
   print();
-  printTable(summary.accounts, SUMMARY_COLUMNS);
-  if (summary.accounts.some((account) => account.needsReconnect || hasReconnect(account))) {
+  printTable(accounts, SUMMARY_COLUMNS);
+  if (accounts.some((account) => account.needsReconnect || hasReconnect(account))) {
     print();
     hint(`"reconnect" means the account lacks the permission for that channel. Reconnect it on the Connectors page in ${PRODUCT.displayName}.`);
   }
@@ -430,23 +458,23 @@ async function runRefresh(): Promise<void> {
 async function runCommentList(options: CommentListOptions): Promise<void> {
   const page = await collectInboxPages(options, buildInboxCommentsQuery(options), async (query) => {
     const response = await listInboxComments(query);
-    return { ...response, items: response.comments };
+    return fetchedPage(response, response.comments);
   });
   printList('inbox.comments.list', 'comments', page, COMMENT_COLUMNS);
 }
 
 const commentDetails = (comment: InboxComment): [string, string][] => [
-  ['id', comment.id],
-  ['platform', `${comment.platform} · ${comment.accountName}`],
+  ['id', comment.id ?? '—'],
+  ['platform', `${comment.platform ?? '—'} · ${comment.accountName ?? '—'}`],
   ['from', personOf(comment.author)],
   ['state', commentState(comment)],
   ['when', when(comment.createdAt)],
-  ['text', comment.text],
+  ['text', comment.text ?? ''],
   ['link', comment.permalink ?? '—'],
-  ['post', comment.postPermalink ?? comment.postId ?? comment.platformPostId],
+  ['post', comment.postPermalink ?? comment.postId ?? comment.platformPostId ?? '—'],
   [
     'can',
-    Object.entries(comment.capabilities)
+    Object.entries(comment.capabilities ?? {})
       .filter(([, allowed]) => allowed)
       .map(([name]) => name.replace(/^can/, '').toLowerCase())
       .join(', ') || '—',
@@ -465,10 +493,11 @@ async function runCommentGet(id: string): Promise<void> {
     print(`In reply to ${personOf(thread.parent.author)}: ${oneLine(thread.parent.text)}`);
     print();
   }
-  printKeyValues(commentDetails(thread.comment), '');
-  if (thread.replies.length > 0) {
+  printKeyValues(commentDetails(requireField(thread.comment, 'comment')), '');
+  const replies = thread.replies ?? [];
+  if (replies.length > 0) {
     print();
-    printTable(thread.replies, COMMENT_COLUMNS);
+    printTable(replies, COMMENT_COLUMNS);
   }
 }
 
@@ -479,7 +508,7 @@ async function runCommentReply(id: string, options: TextOptions): Promise<void> 
     printResult('inbox.comments.reply', reply);
     return;
   }
-  success(`Reply posted  ${formatId(reply.id)}`);
+  success(`Reply posted  ${shortId(reply.id)}`);
   if (reply.permalink) print(reply.permalink);
 }
 
@@ -491,7 +520,7 @@ const commentToggle =
       printResult(command, comment);
       return;
     }
-    success(`${done}  ${formatId(comment.id)}`);
+    success(`${done}  ${shortId(comment.id)}`);
   };
 
 async function runCommentDelete(id: string, options: ConfirmOptions): Promise<void> {
@@ -511,13 +540,13 @@ async function runCommentStatus(ids: string[], options: StatusOptions): Promise<
     printResult('inbox.comments.status', result);
     return;
   }
-  success(`${result.comments.length} marked ${status} · ${result.unreadCount} unread`);
+  success(`${(result.comments ?? []).length} marked ${status} · ${result.unreadCount ?? 0} unread`);
 }
 
 async function runMentionList(options: ListOptions): Promise<void> {
   const page = await collectInboxPages(options, buildInboxListQuery(options), async (query) => {
     const response = await listInboxMentions(query);
-    return { ...response, items: response.mentions };
+    return fetchedPage(response, response.mentions);
   });
   printList('inbox.mentions.list', 'mentions', page, MENTION_COLUMNS);
 }
@@ -529,8 +558,8 @@ async function runMentionReply(id: string, options: TextOptions): Promise<void> 
     printResult('inbox.mentions.reply', mention);
     return;
   }
-  success(`Reply posted to mention ${formatId(mention.id)}`);
-  const latest = mention.replies.at(-1);
+  success(`Reply posted to mention ${shortId(mention.id)}`);
+  const latest = mention.replies?.at(-1);
   if (latest?.permalink) print(latest.permalink);
 }
 
@@ -541,13 +570,13 @@ async function runMentionStatus(ids: string[], options: StatusOptions): Promise<
     printResult('inbox.mentions.status', result);
     return;
   }
-  success(`${result.mentions.length} marked ${status} · ${result.unreadCount} unread`);
+  success(`${(result.mentions ?? []).length} marked ${status} · ${result.unreadCount ?? 0} unread`);
 }
 
 async function runConversationList(options: ListOptions): Promise<void> {
   const page = await collectInboxPages(options, buildInboxListQuery(options), async (query) => {
     const response = await listInboxConversations(query);
-    return { ...response, items: response.conversations };
+    return fetchedPage(response, response.conversations);
   });
   printList('inbox.conversations.list', 'conversations', page, CONVERSATION_COLUMNS);
 }
@@ -560,24 +589,28 @@ async function runConversationGet(id: string): Promise<void> {
     return;
   }
 
-  const { conversation } = thread;
+  const conversation = requireField(thread.conversation, 'conversation');
+  const messages = thread.messages ?? [];
   printKeyValues(
     [
-      ['id', conversation.id],
-      ['platform', `${conversation.platform} · ${conversation.accountName}`],
+      ['id', conversation.id ?? '—'],
+      ['platform', `${conversation.platform ?? '—'} · ${conversation.accountName ?? '—'}`],
       ['with', personOf(conversation.participant)],
-      ['status', conversation.status],
+      ['status', conversation.status ?? '—'],
       ['reply until', conversation.replyWindowEndsAt ? when(conversation.replyWindowEndsAt) : '—'],
-      ['max length', String(conversation.maxMessageLength)],
+      [
+        'max length',
+        conversation.maxMessageLength === undefined ? '—' : String(conversation.maxMessageLength),
+      ],
     ],
     '',
   );
   print();
-  if (thread.messages.length === 0) {
+  if (messages.length === 0) {
     print('No messages.');
     return;
   }
-  for (const message of thread.messages) {
+  for (const message of messages) {
     const attachment = message.hasAttachments ? ' [attachment]' : '';
     print(`${message.isOwn ? 'you ' : 'them'}  ${when(message.createdAt)}  ${oneLine(message.text)}${attachment}`);
   }
@@ -590,7 +623,7 @@ async function runConversationSend(id: string, options: TextOptions): Promise<vo
     printResult('inbox.conversations.send', sent);
     return;
   }
-  success(`Message sent  ${formatId(sent.message.id)}`);
+  success(`Message sent  ${shortId(sent.message?.id)}`);
 }
 
 async function runConversationStatus(ids: string[], options: StatusOptions): Promise<void> {
@@ -600,13 +633,13 @@ async function runConversationStatus(ids: string[], options: StatusOptions): Pro
     printResult('inbox.conversations.status', result);
     return;
   }
-  success(`${result.conversations.length} marked ${status} · ${result.unreadCount} unread`);
+  success(`${(result.conversations ?? []).length} marked ${status} · ${result.unreadCount ?? 0} unread`);
 }
 
 async function runReviewList(options: ReviewListOptions): Promise<void> {
   const page = await collectInboxPages(options, buildInboxReviewsQuery(options), async (query) => {
     const response = await listInboxReviews(query);
-    return { ...response, items: response.reviews };
+    return fetchedPage(response, response.reviews);
   });
   printList('inbox.reviews.list', 'reviews', page, REVIEW_COLUMNS);
 }
@@ -618,7 +651,7 @@ async function runReviewReply(id: string, options: TextOptions): Promise<void> {
     printResult('inbox.reviews.reply', review);
     return;
   }
-  success(`Reply saved on review ${formatId(review.id)}`);
+  success(`Reply saved on review ${shortId(review.id)}`);
 }
 
 async function runReviewDeleteReply(id: string, options: ConfirmOptions): Promise<void> {
@@ -638,7 +671,7 @@ async function runReviewStatus(ids: string[], options: StatusOptions): Promise<v
     printResult('inbox.reviews.status', result);
     return;
   }
-  success(`${result.reviews.length} marked ${status} · ${result.unreadCount} unread`);
+  success(`${(result.reviews ?? []).length} marked ${status} · ${result.unreadCount ?? 0} unread`);
 }
 
 const withListFlags = (command: Command): Command =>

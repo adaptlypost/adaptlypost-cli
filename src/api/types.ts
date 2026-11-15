@@ -1,3 +1,5 @@
+import type { QueryParams, RequestBody, ResponseBody, Schemas } from '@adaptlypost/sdk';
+
 export const PLATFORM_TYPES = [
   'FACEBOOK',
   'INSTAGRAM',
@@ -13,8 +15,8 @@ export const PLATFORM_TYPES = [
   'TUMBLR',
   'WORDPRESS',
   'GOOGLE_BUSINESS',
-] as const;
-export type PlatformType = (typeof PLATFORM_TYPES)[number];
+] as const satisfies readonly PlatformType[];
+export type PlatformType = Schemas['PlatformType'];
 
 export const CONTENT_TYPES = [
   'TEXT',
@@ -22,8 +24,8 @@ export const CONTENT_TYPES = [
   'VIDEO',
   'CAROUSEL',
   'DOCUMENT',
-] as const;
-export type ContentType = (typeof CONTENT_TYPES)[number];
+] as const satisfies readonly ContentType[];
+export type ContentType = Schemas['ContentType'];
 
 export const POST_STATUSES = [
   'DRAFT',
@@ -33,19 +35,19 @@ export const POST_STATUSES = [
   'COMPLETED',
   'PARTIAL_FAILURE',
   'FAILED',
-] as const;
-export type PostStatus = (typeof POST_STATUSES)[number];
+] as const satisfies readonly PostStatus[];
+export type PostStatus = Schemas['PostStatus'];
 
 export const PLATFORM_POST_STATUSES = [
   'PENDING',
   'PUBLISHING',
   'PUBLISHED',
   'FAILED',
-] as const;
-export type PlatformPostStatus = (typeof PLATFORM_POST_STATUSES)[number];
+] as const satisfies readonly PlatformPostStatus[];
+export type PlatformPostStatus = Schemas['PlatformPostStatus'];
 
-export const RECURRENCE_FREQUENCIES = ['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'] as const;
-export type RecurrenceFrequency = (typeof RECURRENCE_FREQUENCIES)[number];
+export const RECURRENCE_FREQUENCIES = ['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'] as const satisfies readonly RecurrenceFrequency[];
+export type RecurrenceFrequency = Schemas['Recurrence']['frequency'];
 
 export const WEEKDAYS = [
   'MONDAY',
@@ -55,11 +57,11 @@ export const WEEKDAYS = [
   'FRIDAY',
   'SATURDAY',
   'SUNDAY',
-] as const;
-export type Weekday = (typeof WEEKDAYS)[number];
+] as const satisfies readonly Weekday[];
+export type Weekday = NonNullable<Schemas['Recurrence']['weekdays']>[number];
 
-export const RECURRING_POST_STATUSES = ['ACTIVE', 'PAUSED', 'ENDED'] as const;
-export type RecurringPostStatus = (typeof RECURRING_POST_STATUSES)[number];
+export const RECURRING_POST_STATUSES = ['ACTIVE', 'PAUSED', 'ENDED'] as const satisfies readonly RecurringPostStatus[];
+export type RecurringPostStatus = NonNullable<Schemas['RecurringPost']['status']>;
 
 export const RECURRING_POST_PAUSE_REASONS = [
   'USER',
@@ -68,15 +70,14 @@ export const RECURRING_POST_PAUSE_REASONS = [
   'ACCESS_LOST',
   'CONNECTION_REMOVED',
   'INVALID_CONTENT',
-] as const;
-export type RecurringPostPauseReason =
-  (typeof RECURRING_POST_PAUSE_REASONS)[number];
+] as const satisfies readonly RecurringPostPauseReason[];
+export type RecurringPostPauseReason = NonNullable<Schemas['RecurringPost']['pauseReason']>;
 
 export const POST_SORT_ORDERS = ['NEWEST', 'OLDEST'] as const;
 export type PostSortOrder = (typeof POST_SORT_ORDERS)[number];
 
-export const ANALYTICS_GRANULARITIES = ['DAILY', 'WEEKLY', 'MONTHLY'] as const;
-export type AnalyticsGranularity = (typeof ANALYTICS_GRANULARITIES)[number];
+export const ANALYTICS_GRANULARITIES = ['DAILY', 'WEEKLY', 'MONTHLY'] as const satisfies readonly AnalyticsGranularity[];
+export type AnalyticsGranularity = Schemas['AnalyticsGranularity'];
 
 export const ANALYTICS_SORT_METRICS = [
   'VIEWS',
@@ -88,20 +89,19 @@ export const ANALYTICS_SORT_METRICS = [
   'IMPRESSIONS',
   'ENGAGEMENT_RATE',
   'PUBLISHED_AT',
-] as const;
-export type AnalyticsSortMetric = (typeof ANALYTICS_SORT_METRICS)[number];
+] as const satisfies readonly AnalyticsSortMetric[];
+export type AnalyticsSortMetric = Schemas['AnalyticsSortMetric'];
 
 export const ANALYTICS_SYNC_JOB_STATUSES = [
   'IDLE',
   'QUEUED',
   'SYNCING',
   'FAILED',
-] as const;
-export type AnalyticsSyncJobStatus =
-  (typeof ANALYTICS_SYNC_JOB_STATUSES)[number];
+] as const satisfies readonly AnalyticsSyncJobStatus[];
+export type AnalyticsSyncJobStatus = Schemas['AnalyticsSyncJobStatus'];
 
-export const SOCIAL_ACCOUNT_STATUSES = ['active', 'unauthorized'] as const;
-export type SocialAccountStatus = (typeof SOCIAL_ACCOUNT_STATUSES)[number];
+export const SOCIAL_ACCOUNT_STATUSES = ['active', 'unauthorized'] as const satisfies readonly SocialAccountStatus[];
+export type SocialAccountStatus = Schemas['SocialAccountStatus'];
 
 export const UPLOAD_MIME_TYPES = [
   'image/jpeg',
@@ -114,33 +114,29 @@ export const UPLOAD_MIME_TYPES = [
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-] as const;
-export type UploadMimeType = (typeof UPLOAD_MIME_TYPES)[number];
+] as const satisfies readonly UploadMimeType[];
+export type UploadMimeType = RequestBody<'getUploadUrls'>['files'][number]['mimeType'];
 
 export const TIKTOK_PRIVACY_LEVELS = [
   'PUBLIC_TO_EVERYONE',
   'MUTUAL_FOLLOW_FRIENDS',
   'FOLLOWER_OF_CREATOR',
   'SELF_ONLY',
-] as const;
-export type TikTokPrivacyLevel = (typeof TIKTOK_PRIVACY_LEVELS)[number];
+] as const satisfies readonly TikTokPrivacyLevel[];
+export type TikTokPrivacyLevel = Schemas['TikTokPostConfig']['privacyLevel'];
 
-export const META_POST_TYPES = ['FEED', 'REEL', 'STORY'] as const;
-export type MetaPostType = (typeof META_POST_TYPES)[number];
+export const META_POST_TYPES = ['FEED', 'REEL', 'STORY'] as const satisfies readonly MetaPostType[];
+export type MetaPostType = NonNullable<Schemas['InstagramPostConfig']['postType']>;
 
-export const FACEBOOK_IMAGE_LAYOUTS = ['GRID', 'CAROUSEL'] as const;
-export type FacebookImageLayout = (typeof FACEBOOK_IMAGE_LAYOUTS)[number];
+export const FACEBOOK_IMAGE_LAYOUTS = ['GRID', 'CAROUSEL'] as const satisfies readonly FacebookImageLayout[];
+export type FacebookImageLayout = Schemas['FacebookPostConfig']['imageLayout'];
 
 export const FACEBOOK_CAROUSEL_CARDS_MAX = 5;
 
-export interface FacebookCarouselCard {
-  link: string;
-  title?: string;
-  description?: string;
-}
+export type FacebookCarouselCard = Schemas['FacebookCarouselCard'];
 
-export const INSTAGRAM_TRIAL_GRADUATIONS = ['MANUAL', 'SS_PERFORMANCE'] as const;
-export type InstagramTrialGraduation = (typeof INSTAGRAM_TRIAL_GRADUATIONS)[number];
+export const INSTAGRAM_TRIAL_GRADUATIONS = ['MANUAL', 'SS_PERFORMANCE'] as const satisfies readonly InstagramTrialGraduation[];
+export type InstagramTrialGraduation = NonNullable<Schemas['InstagramPostConfig']['trialGraduation']>;
 
 export const INSTAGRAM_COLLABORATORS_MAX = 3;
 export const INSTAGRAM_USER_TAGS_MAX = 20;
@@ -157,17 +153,17 @@ export const WORDPRESS_EXCERPT_MAX_LENGTH = 1000;
 export const WORDPRESS_CATEGORIES_MAX = 50;
 export const WORDPRESS_TAGS_MAX = 50;
 export const WORDPRESS_TAG_MAX_LENGTH = 100;
-export const WORDPRESS_POST_STATUSES = ['PUBLISH', 'DRAFT', 'PENDING'] as const;
-export type WordPressPostStatus = (typeof WORDPRESS_POST_STATUSES)[number];
+export const WORDPRESS_POST_STATUSES = ['PUBLISH', 'DRAFT', 'PENDING'] as const satisfies readonly WordPressPostStatus[];
+export type WordPressPostStatus = Schemas['WordPressPostConfig']['status'];
 export const YOUTUBE_AUDIO_LANGUAGE_MAX_LENGTH = 35;
 export const MEDIA_ALT_TEXT_MAX_LENGTH = 1000;
 export const YOUTUBE_AUDIO_LANGUAGE_PATTERN = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 
-export const INSTAGRAM_AUDIO_TYPES = ['music', 'original_sound'] as const;
-export type InstagramAudioType = (typeof INSTAGRAM_AUDIO_TYPES)[number];
+export const INSTAGRAM_AUDIO_TYPES = ['music', 'original_sound'] as const satisfies readonly InstagramAudioType[];
+export type InstagramAudioType = NonNullable<Schemas['InstagramAudio']['audioType']>;
 
-export const GOOGLE_BUSINESS_TOPIC_TYPES = ['STANDARD', 'EVENT', 'OFFER'] as const;
-export type GoogleBusinessTopicType = (typeof GOOGLE_BUSINESS_TOPIC_TYPES)[number];
+export const GOOGLE_BUSINESS_TOPIC_TYPES = ['STANDARD', 'EVENT', 'OFFER'] as const satisfies readonly GoogleBusinessTopicType[];
+export type GoogleBusinessTopicType = Schemas['GoogleBusinessPostConfig']['topicType'];
 
 export const GOOGLE_BUSINESS_CALL_TO_ACTION_TYPES = [
   'BOOK',
@@ -176,15 +172,14 @@ export const GOOGLE_BUSINESS_CALL_TO_ACTION_TYPES = [
   'LEARN_MORE',
   'SIGN_UP',
   'CALL',
-] as const;
-export type GoogleBusinessCallToActionType =
-  (typeof GOOGLE_BUSINESS_CALL_TO_ACTION_TYPES)[number];
+] as const satisfies readonly GoogleBusinessCallToActionType[];
+export type GoogleBusinessCallToActionType = NonNullable<Schemas['GoogleBusinessPostConfig']['callToActionType']>;
 
-export const MEDIA_ASPECT_RATIOS = ['SQUARE', 'PORTRAIT', 'VERTICAL', 'LANDSCAPE'] as const;
-export type MediaAspectRatio = (typeof MEDIA_ASPECT_RATIOS)[number];
+export const MEDIA_ASPECT_RATIOS = ['SQUARE', 'PORTRAIT', 'VERTICAL', 'LANDSCAPE'] as const satisfies readonly MediaAspectRatio[];
+export type MediaAspectRatio = Schemas['PlatformAspectRatio']['aspectRatio'];
 
-export const MEDIA_ASPECT_RATIO_FITS = ['CROP', 'PAD'] as const;
-export type MediaAspectRatioFit = (typeof MEDIA_ASPECT_RATIO_FITS)[number];
+export const MEDIA_ASPECT_RATIO_FITS = ['CROP', 'PAD'] as const satisfies readonly MediaAspectRatioFit[];
+export type MediaAspectRatioFit = NonNullable<Schemas['PlatformAspectRatio']['fit']>;
 
 export const ASPECT_RATIOS_BY_PLATFORM: Partial<Record<PlatformType, readonly MediaAspectRatio[]>> = {
   INSTAGRAM: ['SQUARE', 'PORTRAIT', 'LANDSCAPE'],
@@ -202,8 +197,8 @@ export const FIRST_COMMENT_MAX_LENGTH: Partial<Record<PlatformType, number>> = {
   INSTAGRAM: 2200,
 };
 
-export const FIRST_COMMENT_STATUSES = ['PENDING', 'PUBLISHED', 'FAILED'] as const;
-export type FirstCommentStatus = (typeof FIRST_COMMENT_STATUSES)[number];
+export const FIRST_COMMENT_STATUSES = ['PENDING', 'PUBLISHED', 'FAILED'] as const satisfies readonly FirstCommentStatus[];
+export type FirstCommentStatus = Schemas['FirstCommentStatus'];
 
 export const THREAD_PLATFORMS = ['TWITTER', 'THREADS', 'BLUESKY', 'MASTODON'] as const satisfies readonly PlatformType[];
 export const THREAD_MAX_REPLIES = 25;
@@ -222,8 +217,8 @@ export const THREAD_REPLY_USUAL_LENGTH: Record<(typeof THREAD_PLATFORMS)[number]
   MASTODON: "500, or the instance's limit",
 };
 
-export const THREAD_STATUSES = ['PENDING', 'PUBLISHED', 'FAILED'] as const;
-export type ThreadStatus = (typeof THREAD_STATUSES)[number];
+export const THREAD_STATUSES = ['PENDING', 'PUBLISHED', 'FAILED'] as const satisfies readonly ThreadStatus[];
+export type ThreadStatus = Schemas['PostThreadStatus'];
 
 export type ThumbnailKind = 'image' | 'frame' | 'image-or-frame';
 
@@ -237,18 +232,18 @@ export const THUMBNAIL_KIND_BY_PLATFORM: Partial<Record<PlatformType, ThumbnailK
   TELEGRAM: 'image-or-frame',
 };
 
-export const YOUTUBE_POST_TYPES = ['VIDEO', 'SHORTS'] as const;
-export type YouTubePostType = (typeof YOUTUBE_POST_TYPES)[number];
+export const YOUTUBE_POST_TYPES = ['VIDEO', 'SHORTS'] as const satisfies readonly YouTubePostType[];
+export type YouTubePostType = NonNullable<Schemas['YouTubePostConfig']['postType']>;
 
 export const YOUTUBE_PRIVACY_STATUSES = [
   'public',
   'private',
   'unlisted',
-] as const;
-export type YouTubePrivacyStatus = (typeof YOUTUBE_PRIVACY_STATUSES)[number];
+] as const satisfies readonly YouTubePrivacyStatus[];
+export type YouTubePrivacyStatus = NonNullable<Schemas['YouTubePostConfig']['privacyStatus']>;
 
-export const YOUTUBE_LICENSES = ['youtube', 'creativeCommon'] as const;
-export type YouTubeLicense = (typeof YOUTUBE_LICENSES)[number];
+export const YOUTUBE_LICENSES = ['youtube', 'creativeCommon'] as const satisfies readonly YouTubeLicense[];
+export type YouTubeLicense = NonNullable<Schemas['YouTubePostConfig']['license']>;
 
 export const IMAGE_ASPECT_RATIOS = [
   '1:1',
@@ -260,14 +255,14 @@ export const IMAGE_ASPECT_RATIOS = [
   '5:4',
   '21:9',
   '9:21',
-] as const;
-export type ImageAspectRatio = (typeof IMAGE_ASPECT_RATIOS)[number];
+] as const satisfies readonly ImageAspectRatio[];
+export type ImageAspectRatio = Schemas['ImageAspectRatio'];
 
-export const IMAGE_MODELS = ['standard', 'premium'] as const;
-export type ImageModel = (typeof IMAGE_MODELS)[number];
+export const IMAGE_MODELS = ['standard', 'premium'] as const satisfies readonly ImageModel[];
+export type ImageModel = Schemas['ImageModel'];
 
-export const IMAGE_QUALITIES = ['LOW', 'MEDIUM', 'HIGH'] as const;
-export type ImageQuality = (typeof IMAGE_QUALITIES)[number];
+export const IMAGE_QUALITIES = ['LOW', 'MEDIUM', 'HIGH'] as const satisfies readonly ImageQuality[];
+export type ImageQuality = Schemas['ImageQuality'];
 
 export const IMAGE_JOB_STATUSES = [
   'queued',
@@ -275,8 +270,8 @@ export const IMAGE_JOB_STATUSES = [
   'generating',
   'completed',
   'failed',
-] as const;
-export type ImageJobStatus = (typeof IMAGE_JOB_STATUSES)[number];
+] as const satisfies readonly ImageJobStatus[];
+export type ImageJobStatus = Schemas['ImageJobStatus'];
 
 export const CAPTION_PLATFORMS = [
   'TWITTER',
@@ -290,7 +285,7 @@ export const CAPTION_PLATFORMS = [
   'YOUTUBE',
   'FACEBOOK',
   'GOOGLE_BUSINESS',
-] as const;
+] as const satisfies readonly Schemas['CaptionPlatform'][];
 export type CaptionPlatform = (typeof CAPTION_PLATFORMS)[number];
 
 export const DEFAULT_WEBHOOK_EVENTS = [
@@ -311,188 +306,42 @@ export const INBOX_WEBHOOK_EVENTS = [
   'review.created',
 ] as const;
 
-export const WEBHOOK_EVENTS = [...DEFAULT_WEBHOOK_EVENTS, ...INBOX_WEBHOOK_EVENTS] as const;
-export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
+export type WebhookEvent = Schemas['WebhookEventName'];
+export const WEBHOOK_EVENTS = [...DEFAULT_WEBHOOK_EVENTS, ...INBOX_WEBHOOK_EVENTS] as const satisfies readonly WebhookEvent[];
 
-export interface Pagination {
-  total: number;
-  hasMore: boolean;
-}
+export type InstagramAudio = Schemas['InstagramAudio'];
+export type InstagramAudioResponse = ResponseBody<'searchInstagramAudio'>;
+export type SearchInstagramAudioQuery = QueryParams<'searchInstagramAudio'>;
 
-export interface PagePagination extends Pagination {
-  page: number;
-  limit: number;
-}
+export type SocialAccount = Schemas['SocialAccount'];
+export type SocialAccountsResponse = ResponseBody<'listSocialAccounts'>;
+export type SocialAccountCheck = ResponseBody<'checkSocialAccount'>;
+export type SocialAccountRemoval = ResponseBody<'removeSocialAccount'>;
 
-export interface SocialAccount {
-  id: string;
-  platform: PlatformType;
-  displayName: string;
-  username: string;
-  avatarUrl: string;
-  status: SocialAccountStatus;
-  unauthorizedReason?: string;
-  pageId?: string;
-  supportsInstagramAudio?: boolean;
-}
+export type PinterestBoard = Schemas['PinterestBoard'];
+export type PinterestBoardsResponse = ResponseBody<'getPinterestBoards'>;
 
-export interface SocialAccountsResponse {
-  accounts: SocialAccount[];
-}
-
-export type SearchInstagramAudioQuery = {
-  audioType: InstagramAudioType;
-  searchQuery?: string;
-};
-
-export interface InstagramAudio {
-  audioId: string;
-  audioType: InstagramAudioType;
-  title?: string;
-  displayArtist?: string;
-  igUsername?: string;
-  durationMs?: number;
-  coverArtworkUrl?: string;
-  profilePictureUrl?: string;
-  previewUrl?: string;
-  instagramUrl?: string;
-  isAdsEligible?: boolean;
-}
-
-export interface InstagramAudioResponse {
-  audio: InstagramAudio[];
-}
-
-export type PinterestBoardPrivacy = 'PUBLIC' | 'PROTECTED' | 'SECRET';
-
-export interface PinterestBoard {
-  id: string;
-  name: string;
-  description?: string;
-  privacy?: PinterestBoardPrivacy;
-  pinCount?: number;
-}
-
-export interface PinterestBoardsResponse {
-  boards: PinterestBoard[];
-}
-
-export interface WordPressCategory {
-  id: number;
-  name: string;
-  parentId: number | null;
-}
-
-export interface WordPressCategoriesResponse {
-  categories: WordPressCategory[];
-}
+export type WordPressCategory = Schemas['WordPressCategory'];
+export type WordPressCategoriesResponse = ResponseBody<'getWordPressCategories'>;
 
 export const LINKEDIN_ORGANIZATION_QUERY_MAX_LENGTH = 300;
 
-export type LookupLinkedInOrganizationQuery = {
-  query: string;
-};
+export type LookupLinkedInOrganizationQuery = QueryParams<'lookupLinkedInOrganization'>;
+export type LinkedInOrganization = Schemas['LinkedInOrganization'];
+export type LinkedInOrganizationLookupResponse = ResponseBody<'lookupLinkedInOrganization'>;
 
-export interface LinkedInOrganization {
-  id: string;
-  name: string;
-  vanityName: string | null;
-  urn: string;
-  mention: string;
-}
+export type Me = ResponseBody<'getMe'>;
 
-export interface LinkedInOrganizationLookupResponse {
-  organization: LinkedInOrganization;
-}
+export type CreateUploadUrlsRequest = RequestBody<'getUploadUrls'>;
+export type UploadUrlsResponse = ResponseBody<'getUploadUrls'>;
+export type UploadUrl = NonNullable<UploadUrlsResponse['urls']>[number];
 
-export type TokenType = 'api_token' | 'oauth';
-
-export interface Me {
-  tokenType: TokenType;
-  tokenId: string | null;
-  tokenName: string | null;
-  workspace: { id: string };
-  organizationId: string;
-  role: { key: string; name: string };
-  issuerRole: string | null;
-  permissions: string[];
-  can: { draft: boolean; schedule: boolean; publish: boolean };
-  summary: string;
-  expiresAt: string | null;
-}
-
-export interface SocialAccountCheck {
-  id: string;
-  platform: PlatformType;
-  displayName: string;
-  pageId?: string;
-  status: SocialAccountStatus;
-  unauthorizedReason?: string;
-  checkedAt: string;
-}
-
-export interface SocialAccountRemoval {
-  id: string;
-  platform: PlatformType;
-  displayName: string;
-  pageId?: string;
-  removed: true;
-}
-
-export interface UploadFileRequest {
-  fileName: string;
-  mimeType: UploadMimeType;
-}
-
-export interface CreateUploadUrlsRequest {
-  files: UploadFileRequest[];
-}
-
-export interface UploadUrl {
-  fileName: string;
-  uploadUrl: string;
-  publicUrl: string;
-  key: string;
-  expiresAt: string;
-}
-
-export interface UploadUrlsResponse {
-  urls: UploadUrl[];
-}
-
-export interface PlatformText {
-  platform: PlatformType;
-  text: string;
-}
-
-export interface PlatformFirstComment {
-  platform: PlatformType;
-  text: string;
-}
-
-export interface PlatformThreadReplies {
-  platform: PlatformType;
-  texts: string[];
-  mediaUrls?: string[][];
-}
-
-export interface PlatformThumbnail {
-  platform: PlatformType;
-  thumbnailUrl?: string;
-  thumbnailTimestampMs?: number;
-}
-
-export interface PlatformMedia {
-  platform: PlatformType;
-  mediaUrls: string[];
-  mediaAltTexts?: string[];
-}
-
-export interface PlatformAspectRatio {
-  platform: PlatformType;
-  aspectRatio: MediaAspectRatio;
-  fit?: MediaAspectRatioFit;
-}
+export type PlatformText = Schemas['PlatformText'];
+export type PlatformFirstComment = Schemas['PlatformFirstComment'];
+export type PlatformThreadReplies = Schemas['PlatformThreadReplies'];
+export type PlatformThumbnail = Schemas['PlatformThumbnail'];
+export type PlatformMedia = Schemas['PlatformMedia'];
+export type PlatformAspectRatio = Schemas['PlatformAspectRatio'];
 
 export interface PlatformExtras {
   firstComments?: PlatformFirstComment[];
@@ -502,124 +351,30 @@ export interface PlatformExtras {
   platformMedia?: PlatformMedia[];
 }
 
-export interface PinterestPostConfig {
-  connectionId: string;
-  boardId?: string;
-  boardName?: string;
-  title?: string;
-  link?: string;
-}
+export type PinterestPostConfig = Schemas['PinterestPostConfig'];
+export type TikTokPostConfig = Schemas['TikTokPostConfig'];
+export type InstagramAudioConfig = Schemas['InstagramAudioConfig'];
+export type InstagramUserTag = Schemas['InstagramUserTag'];
+export type InstagramPostConfig = Schemas['InstagramPostConfig'];
+export type GoogleBusinessPostConfig = Schemas['GoogleBusinessPostConfig'];
+export type YouTubePostConfig = Schemas['YouTubePostConfig'];
+export type LinkedInPostConfig = Schemas['LinkedInPostConfig'];
+export type TwitterPostConfig = Schemas['TwitterPostConfig'];
+export type TumblrPostConfig = Schemas['TumblrPostConfig'];
 
-export interface TikTokPostConfig {
-  connectionId: string;
-  privacyLevel: TikTokPrivacyLevel;
-  title?: string;
-  caption?: string;
-  allowComments?: boolean;
-  allowDuet?: boolean;
-  allowStitch?: boolean;
-  sendAsDraft?: boolean;
-  aiGenerated?: boolean;
-  brandedContent?: boolean;
-  brandedContentOwnBrand?: boolean;
-  autoAddMusic?: boolean;
-}
+export const DEFAULT_FACEBOOK_IMAGE_LAYOUT: FacebookImageLayout = 'GRID';
+export const DEFAULT_WORDPRESS_POST_STATUS: WordPressPostStatus = 'PUBLISH';
 
-export interface InstagramAudioConfig {
-  audioId: string;
-  title?: string;
-  artist?: string;
-  audioVolume?: number;
-  videoVolume?: number;
-}
-
-export interface InstagramUserTag {
-  username: string;
-  x?: number;
-  y?: number;
-}
-
-export interface InstagramPostConfig {
-  connectionId: string;
-  postType?: MetaPostType;
-  shareToStory?: boolean;
-  trialGraduation?: InstagramTrialGraduation;
-  collaborators?: string[];
-  userTags?: InstagramUserTag[];
-  aiGenerated?: boolean;
-  audio?: InstagramAudioConfig;
-}
-
-export interface FacebookPostConfig {
-  pageId: string;
-  postType?: MetaPostType;
-  shareToStory?: boolean;
-  videoTitle?: string;
-  textFormatPresetId?: string;
+export type FacebookPostConfig = Omit<Schemas['FacebookPostConfig'], 'imageLayout'> & {
   imageLayout?: FacebookImageLayout;
-  carouselCards?: FacebookCarouselCard[];
-  aiGenerated?: boolean;
-}
+};
 
-export interface GoogleBusinessPostConfig {
-  connectionId: string;
-  topicType: GoogleBusinessTopicType;
-  callToActionType?: GoogleBusinessCallToActionType;
-  callToActionUrl?: string;
-  eventTitle?: string;
-  eventStart?: string;
-  eventEnd?: string;
-  offerCouponCode?: string;
-  offerRedeemUrl?: string;
-  offerTerms?: string;
-}
-
-export interface YouTubePostConfig {
-  connectionId: string;
-  postType?: YouTubePostType;
-  videoTitle?: string;
-  tags?: string[];
-  privacyStatus?: YouTubePrivacyStatus;
-  license?: YouTubeLicense;
-  notifySubscribers?: boolean;
-  allowEmbedding?: boolean;
-  madeForKids?: boolean;
-  aiGenerated?: boolean;
-  categoryId?: string;
-  playlistId?: string;
-  defaultAudioLanguage?: string | null;
-  scheduleOnYouTube?: boolean;
-}
+export type WordPressPostConfig = Omit<Schemas['WordPressPostConfig'], 'status'> & {
+  status?: WordPressPostStatus;
+};
 
 export const LINKEDIN_RESHARE_OF_MAX_LENGTH = 500;
 export const TWITTER_QUOTE_OF_MAX_LENGTH = 200;
-
-export interface LinkedInPostConfig {
-  connectionId: string;
-  documentTitle?: string;
-  reshareOf?: string;
-}
-
-export interface TwitterPostConfig {
-  connectionId: string;
-  quoteOf?: string;
-}
-
-export interface TumblrPostConfig {
-  connectionId: string;
-  tags?: string[];
-  title?: string;
-  sourceUrl?: string;
-}
-
-export interface WordPressPostConfig {
-  connectionId: string;
-  title?: string;
-  excerpt?: string;
-  categoryIds?: number[];
-  tags?: string[];
-  status?: WordPressPostStatus;
-}
 
 export interface PostTargets {
   pageIds?: string[];
@@ -648,143 +403,12 @@ export interface PostTargets {
   googleBusinessConfigs?: GoogleBusinessPostConfig[];
 }
 
-export interface SocialPostPlatform {
-  id: string;
-  platform: PlatformType;
-  status: PlatformPostStatus;
-  connectionId?: string;
-  pageId?: string;
-  accountName?: string;
-  text?: string;
-  platformPostId?: string;
-  postUrl?: string;
-  errorMessage?: string;
-  publishedAt?: string;
-  mediaUrls: string[];
-  mediaAltTexts: string[];
-  mediaOverrideUrls?: string[];
-  mediaOverrideAltTexts?: string[];
-  mediaAspectRatio?: MediaAspectRatio;
-  mediaAspectRatioFit?: MediaAspectRatioFit;
-  thumbnailUrl?: string;
-  thumbnailTimestampMs?: number;
-  previewUrls: string[];
-  createdAt: string;
-  updatedAt: string;
-  firstComment?: string;
-  firstCommentStatus?: FirstCommentStatus;
-  firstCommentId?: string;
-  firstCommentError?: string;
-  firstCommentPublishedAt?: string;
-  threadReplies?: string[];
-  threadReplyMediaUrls?: string[][];
-  threadStatus?: ThreadStatus;
-  threadReplyIds?: string[];
-  threadError?: string;
-  threadPublishedAt?: string;
-  linkedinDocumentTitle?: string;
-  pinterestBoardId?: string;
-  pinterestTitle?: string;
-  pinterestLink?: string;
-  tiktokTitle?: string;
-  tiktokCaption?: string;
-  tiktokPrivacyLevel?: TikTokPrivacyLevel;
-  tiktokAllowComments?: boolean;
-  tiktokAllowDuet?: boolean;
-  tiktokAllowStitch?: boolean;
-  tiktokSendAsDraft?: boolean;
-  tiktokAiGenerated?: boolean;
-  tiktokBrandedContent?: boolean;
-  tiktokBrandedOwnBrand?: boolean;
-  tiktokAutoAddMusic?: boolean;
-  tiktokDraftFallback?: boolean;
-  instagramPostType?: MetaPostType;
-  instagramTrialGraduation?: InstagramTrialGraduation;
-  instagramCollaborators?: string[];
-  instagramUserTags?: InstagramUserTag[] | null;
-  instagramUntaggedUsernames?: string[] | null;
-  instagramAiGenerated?: boolean;
-  instagramUsername?: string;
-  instagramAudioId?: string;
-  instagramAudioTitle?: string;
-  instagramAudioArtist?: string;
-  instagramAudioVolume?: number;
-  instagramVideoVolume?: number;
-  facebookPostType?: MetaPostType;
-  facebookVideoTitle?: string;
-  facebookTextFormatPresetId?: string;
-  facebookImageLayout?: FacebookImageLayout;
-  facebookCarouselCards?: FacebookCarouselCard[];
-  facebookAiGenerated?: boolean;
-  facebookPageExternalId?: string;
-  youtubePostType?: YouTubePostType;
-  youtubeVideoTitle?: string;
-  youtubeTags?: string[];
-  youtubePrivacyStatus?: YouTubePrivacyStatus;
-  youtubeLicense?: YouTubeLicense;
-  youtubeNotifySubscribers?: boolean;
-  youtubeAllowEmbedding?: boolean;
-  youtubeMadeForKids?: boolean;
-  youtubeAiGenerated?: boolean;
-  youtubeCategoryId?: string;
-  youtubePlaylistId?: string;
-  youtubeDefaultAudioLanguage?: string | null;
-  youtubeScheduleOnYouTube?: boolean;
-  youtubeScheduledVideoId?: string;
-  twitterKeepLinks?: boolean;
-  twitterQuoteOf?: string;
-  linkedinReshareOf?: string;
-  tumblrTags?: string[];
-  tumblrTitle?: string;
-  tumblrSourceUrl?: string;
-  wordpressTitle?: string;
-  wordpressExcerpt?: string;
-  wordpressCategoryIds?: number[];
-  wordpressTags?: string[];
-  wordpressStatus?: WordPressPostStatus;
-  googleBusinessTopicType?: GoogleBusinessTopicType;
-  googleBusinessCallToActionType?: GoogleBusinessCallToActionType;
-  googleBusinessCallToActionUrl?: string;
-  googleBusinessEventTitle?: string;
-  googleBusinessEventStart?: string;
-  googleBusinessEventEnd?: string;
-  googleBusinessOfferCouponCode?: string;
-  googleBusinessOfferRedeemUrl?: string;
-  googleBusinessOfferTerms?: string;
-}
+export type SocialPostPlatform = Schemas['PostPlatform'];
+export type SocialPost = ResponseBody<'getPost'>;
+export type ListPostsResponse = ResponseBody<'listPosts'>;
+export type ListPostsQuery = QueryParams<'listPosts'>;
 
-export interface SocialPost {
-  id: string;
-  userId: string;
-  contentType: ContentType;
-  text?: string;
-  scheduledAt?: string;
-  timezone: string;
-  status: PostStatus;
-  thumbnailUrl?: string;
-  thumbnailTimestampMs?: number;
-  mediaUrls: string[];
-  mediaAltTexts?: string[];
-  platforms: SocialPostPlatform[];
-  createdAt: string;
-  updatedAt: string;
-  recurringPostId?: string | null;
-  occurrenceAt?: string | null;
-}
-
-export interface ListPostsResponse extends Pagination {
-  posts: SocialPost[];
-}
-
-export type ListPostsQuery = {
-  limit?: number;
-  offset?: number;
-  sortOrder?: PostSortOrder;
-  statuses?: PostStatus[];
-  platforms?: PlatformType[];
-  startDate?: string;
-  endDate?: string;
-};
+export type Recurrence = Omit<Schemas['Recurrence'], 'interval'> & { interval?: number };
 
 export interface CreatePostRequest extends PostTargets, PlatformExtras {
   platforms: PlatformType[];
@@ -802,49 +426,9 @@ export interface CreatePostRequest extends PostTargets, PlatformExtras {
   twitterKeepLinks?: boolean;
 }
 
-export interface Recurrence {
-  frequency: RecurrenceFrequency;
-  interval?: number;
-  weekdays?: Weekday[];
-  endsOn?: string;
-  maxOccurrences?: number;
-}
-
-export interface RecurringPost {
-  id: string;
-  userId: string;
-  status: RecurringPostStatus;
-  pauseReason?: RecurringPostPauseReason | null;
-  lastError?: string | null;
-  frequency: RecurrenceFrequency;
-  interval: number;
-  weekdays: Weekday[];
-  startsAt: string;
-  timezone: string;
-  endsOn?: string | null;
-  maxOccurrences?: number | null;
-  nextOccurrenceAt?: string | null;
-  occurrenceCount: number;
-  contentType: ContentType;
-  text?: string | null;
-  mediaUrls: string[];
-  mediaAltTexts?: string[];
-  thumbnailUrl?: string | null;
-  platformTypes: PlatformType[];
-  platforms: SocialPostPlatform[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ListRecurringPostsResponse extends Pagination {
-  recurringPosts: RecurringPost[];
-}
-
-export type ListRecurringPostsQuery = {
-  limit?: number;
-  offset?: number;
-  statuses?: RecurringPostStatus[];
-};
+export type RecurringPost = Schemas['RecurringPost'];
+export type ListRecurringPostsResponse = ResponseBody<'listRecurringPosts'>;
+export type ListRecurringPostsQuery = QueryParams<'listRecurringPosts'>;
 
 export interface UpdatePostRequest extends PostTargets, PlatformExtras {
   platforms?: PlatformType[];
@@ -860,104 +444,26 @@ export interface UpdatePostRequest extends PostTargets, PlatformExtras {
   twitterKeepLinks?: boolean;
 }
 
-export interface SkippedPlatform {
-  platform: PlatformType;
-  reason: string;
-}
+export type CreatePostResponse = ResponseBody<'createPost'>;
 
-export interface CreatePostResponse {
-  postId: string;
-  queuedPlatforms: PlatformType[];
-  skippedPlatforms: SkippedPlatform[];
-  isScheduled: boolean;
-  scheduledAt?: string;
-  recurringPostId?: string;
-}
+export type PostIssue = Schemas['PostIssue'];
+export type PostIssueSeverity = PostIssue['severity'];
+export type PostAccountCheck = Schemas['PostAccountCheck'];
+export type PostAccountStatus = PostAccountCheck['status'];
+export type PostValidationReport = Schemas['PostValidationReport'];
+export type PostValidationOutcome = PostValidationReport['outcome'];
+export type BulkPostValidationReport = ResponseBody<'validateBulkPosts'>;
 
-export type PostIssueSeverity = 'ERROR' | 'WARNING';
+export type PublishResponse = ResponseBody<'publishDraft'>;
+export type PublishDraftRequest = RequestBody<'publishDraft'>;
+export type RetryFailedPlatformsRequest = RequestBody<'retryFailedPlatforms'>;
+export type DeletedResponse = ResponseBody<'deletePost'>;
 
-export interface PostIssue {
-  code: string;
-  severity: PostIssueSeverity;
-  message: string;
-  platform?: PlatformType;
-  connectionId?: string;
-}
-
-export type PostAccountStatus = 'READY' | 'WARNING' | 'BLOCKED';
-
-export interface PostAccountCheck {
-  platform: PlatformType;
-  connectionId: string;
-  accountName?: string;
-  status: PostAccountStatus;
-  issues: PostIssue[];
-}
-
-export interface PostCheckGapNote {
-  code: string;
-  message: string;
-}
-
-export type PostValidationOutcome = 'DRAFT' | 'SCHEDULED' | 'PUBLISH_NOW';
-
-export interface PostValidationReport {
-  valid: boolean;
-  outcome: PostValidationOutcome;
-  scheduledAt?: string;
-  requiredPermissions: string[];
-  issues: PostIssue[];
-  accounts: PostAccountCheck[];
-  notChecked: PostCheckGapNote[];
-}
-
-export interface BulkPostValidationReport {
-  valid: boolean;
-  totalValid: number;
-  totalInvalid: number;
-  results: { index: number; report: PostValidationReport }[];
-}
-
-export interface PublishResponse {
-  postId: string;
-  queuedPlatforms: PlatformType[];
-  isScheduled: boolean;
-  scheduledAt?: string;
-}
-
-export interface PublishDraftRequest {
-  timezone: string;
-  scheduledAt?: string;
-  publishNow?: boolean;
-}
-
-export interface RetryFailedPlatformsRequest {
-  platformIds?: string[];
-}
-
-export interface DeletedResponse {
-  deleted: boolean;
-}
-
-export interface PostResult {
-  platformId: string;
-  platform: PlatformType;
-  accountName?: string | null;
-  status: PlatformPostStatus;
-  platformPostId?: string | null;
-  errorMessage?: string | null;
-  tiktokDraftFallback?: boolean | null;
-  publishedAt?: string | null;
-}
-
-export interface PostResultsResponse {
-  postId: string;
-  status: PostStatus;
-  results: PostResult[];
-}
+export type PostResultsResponse = ResponseBody<'getPostResults'>;
+export type PostResult = NonNullable<PostResultsResponse['results']>[number];
 
 export interface BulkPostInput extends PlatformExtras {
-  contentType: ContentType;
+  contentType: Schemas['BulkPostItem']['contentType'];
   scheduledAt: string;
   text?: string;
   mediaUrls?: string[];
@@ -981,483 +487,92 @@ export interface BulkSchedulePostsRequest extends PostTargets {
   posts: BulkPostInput[];
 }
 
-export interface BulkPostResult {
-  postId?: string;
-  success: boolean;
-  isScheduled: boolean;
-  scheduledAt?: string;
-  errorMessage?: string;
-}
+export type BulkSchedulePostsResponse = ResponseBody<'bulkSchedulePosts'>;
+export type BulkPostResult = NonNullable<BulkSchedulePostsResponse['results']>[number];
 
-export interface BulkSchedulePostsResponse {
-  totalScheduled: number;
-  totalFailed: number;
-  results: BulkPostResult[];
-}
+export type CreateConnectLinkRequest = RequestBody<'createConnectLink'>;
+export type ConnectLinkVisibility = NonNullable<CreateConnectLinkRequest['visibility']>;
+export const CONNECT_LINK_VISIBILITIES = ['PUBLIC', 'PRIVATE'] as const satisfies readonly ConnectLinkVisibility[];
+export type ConnectLink = ResponseBody<'createConnectLink'>;
+export type RevokeConnectLinkResponse = ResponseBody<'revokeConnectLink'>;
 
-export const CONNECT_LINK_VISIBILITIES = ['PUBLIC', 'PRIVATE'] as const;
-export type ConnectLinkVisibility = (typeof CONNECT_LINK_VISIBILITIES)[number];
+export type Webhook = Schemas['Webhook'];
+export type CreatedWebhook = ResponseBody<'createWebhook'>;
+export type WebhooksResponse = ResponseBody<'listWebhooks'>;
+export type CreateWebhookRequest = RequestBody<'createWebhook'>;
+export type UpdateWebhookRequest = RequestBody<'updateWebhook'>;
+export type WebhookTestResult = ResponseBody<'testWebhook'>;
 
-export interface CreateConnectLinkRequest {
-  name?: string;
-  visibility?: ConnectLinkVisibility;
-  allowedPlatforms?: PlatformType[];
-  maxAccounts?: number;
-  expiresAt?: string;
-  neverExpires?: boolean;
-}
+export type AnalyticsRangeQuery = QueryParams<'getAnalyticsOverview'>;
+export type AnalyticsBreakdownQuery = QueryParams<'getAnalyticsPlatformBreakdown'>;
+export type AnalyticsTimeseriesQuery = QueryParams<'getAnalyticsTimeseries'>;
+export type AnalyticsPostsQuery = QueryParams<'listPostAnalytics'>;
+export type AnalyticsTopPostsQuery = QueryParams<'listTopPosts'>;
+export type AnalyticsDiscoveredPostsQuery = QueryParams<'listDiscoveredPosts'>;
 
-export interface ConnectLink {
-  url: string;
-  token: string;
-  expiresAt: string | null;
-  name?: string | null;
-  visibility?: ConnectLinkVisibility;
-  allowedPlatforms?: PlatformType[];
-  maxAccounts?: number | null;
-}
+export type AnalyticsMetricValue = Schemas['AnalyticsMetricValue'];
+export type AnalyticsOverview = ResponseBody<'getAnalyticsOverview'>;
+export type AnalyticsTimeseriesPoint = Schemas['AnalyticsTimeseriesPoint'];
+export type AnalyticsTimeseriesResponse = ResponseBody<'getAnalyticsTimeseries'>;
+export type PlatformBreakdown = Schemas['AnalyticsPlatformBreakdownItem'];
+export type PlatformBreakdownResponse = ResponseBody<'getAnalyticsPlatformBreakdown'>;
+export type PostAnalyticsMetrics = Schemas['AnalyticsPostMetrics'];
+export type PostAnalytics = Schemas['AnalyticsPost'];
+export type ListPostAnalyticsResponse = ResponseBody<'listPostAnalytics'>;
+export type TopPostsResponse = ResponseBody<'listTopPosts'>;
+export type DiscoveredPost = Schemas['DiscoveredPost'];
+export type DiscoveredPostsResponse = ResponseBody<'listDiscoveredPosts'>;
+export type PlatformSyncStatus = Schemas['AnalyticsPlatformSyncStatus'];
+export type AnalyticsSyncStatus = ResponseBody<'getAnalyticsSyncStatus'>;
+export type TriggerAnalyticsSyncResponse = ResponseBody<'triggerAnalyticsSync'>;
 
-export interface RevokeConnectLinkResponse {
-  success: boolean;
-}
+export type GenerateCaptionRequest = RequestBody<'generateCaption'>;
+export type RefineCaptionRequest = RequestBody<'refineCaption'>;
+export type CaptionResponse = ResponseBody<'generateCaption'>;
+export type GenerateImageRequest = RequestBody<'generateImage'>;
+export type GenerateImageResponse = ResponseBody<'generateImage'>;
+export type ImageJob = ResponseBody<'getImageJob'>;
 
-export interface Webhook {
-  id: string;
-  url: string;
-  active: boolean;
-  createdAt: string;
-  updatedAt: string;
-  lastSuccessAt: string | null;
-  lastFailureAt: string | null;
-  disabledAt: string | null;
-  events?: WebhookEvent[];
-}
+export type InboxStatus = Schemas['InboxStatus'];
+export const INBOX_STATUSES = ['UNREAD', 'READ', 'DONE'] as const satisfies readonly InboxStatus[];
 
-export interface CreatedWebhook extends Webhook {
-  secret: string;
-}
-
-export interface WebhooksResponse {
-  webhooks: Webhook[];
-}
-
-export interface CreateWebhookRequest {
-  url: string;
-  events?: WebhookEvent[];
-}
-
-export interface UpdateWebhookRequest {
-  url?: string;
-  active?: boolean;
-  events?: WebhookEvent[];
-}
-
-export interface WebhookTestResult {
-  success: boolean;
-  statusCode?: number;
-  error?: string;
-}
-
-export type AnalyticsRangeQuery = {
-  from: string;
-  to: string;
-  platforms?: PlatformType[];
-  connectionIds?: string[];
-};
-
-export type AnalyticsBreakdownQuery = {
-  from: string;
-  to: string;
-  connectionIds?: string[];
-};
-
-export type AnalyticsTimeseriesQuery = AnalyticsRangeQuery & {
-  granularity?: AnalyticsGranularity;
-};
-
-export type AnalyticsPostsQuery = AnalyticsRangeQuery & {
-  sortBy?: AnalyticsSortMetric;
-  page?: number;
-  limit?: number;
-};
-
-export type AnalyticsTopPostsQuery = AnalyticsRangeQuery & {
-  sortBy?: AnalyticsSortMetric;
-  limit?: number;
-};
-
-export type AnalyticsDiscoveredPostsQuery = AnalyticsRangeQuery & {
-  limit?: number;
-};
-
-export interface AnalyticsMetricValue {
-  value: number | null;
-  previousValue: number | null;
-  deltaPercent: number | null;
-}
-
-export interface AnalyticsOverview {
-  views: AnalyticsMetricValue;
-  likes: AnalyticsMetricValue;
-  comments: AnalyticsMetricValue;
-  shares: AnalyticsMetricValue;
-  followers: AnalyticsMetricValue;
-  postsCount: AnalyticsMetricValue;
-  avgViewsPerPost: AnalyticsMetricValue;
-  engagementRate: AnalyticsMetricValue;
-  partialMetrics: string[];
-  lastSyncedAt: string | null;
-}
-
-export interface AnalyticsTimeseriesPoint {
-  date: string;
-  views: number | null;
-  likes: number | null;
-  comments: number | null;
-  shares: number | null;
-  followers: number | null;
-  postsCount: number | null;
-  engagementRate: number | null;
-}
-
-export interface AnalyticsTimeseriesResponse {
-  points: AnalyticsTimeseriesPoint[];
-}
-
-export interface PlatformBreakdown {
-  platform: PlatformType;
-  followers: AnalyticsMetricValue;
-  views: AnalyticsMetricValue;
-  likes: AnalyticsMetricValue;
-  comments: AnalyticsMetricValue;
-  shares: AnalyticsMetricValue;
-  postsCount: AnalyticsMetricValue;
-  avgViewsPerPost: AnalyticsMetricValue;
-  engagementRate: AnalyticsMetricValue;
-  supportedMetrics: string[];
-}
-
-export interface PlatformBreakdownResponse {
-  platforms: PlatformBreakdown[];
-}
-
-export interface PostAnalyticsMetrics {
-  views: number | null;
-  likes: number | null;
-  comments: number | null;
-  shares: number | null;
-  saves: number | null;
-  clicks: number | null;
-  impressions: number | null;
-  reach: number | null;
-  engagementRate: number | null;
-}
-
-export interface PostAnalytics {
-  id: string;
-  postId: string | null;
-  postPlatformId: string | null;
-  platform: PlatformType;
-  publishedAt: string;
-  title: string | null;
-  thumbnailUrl: string | null;
-  permalink: string | null;
-  accountName: string | null;
-  metrics: PostAnalyticsMetrics;
-}
-
-export interface ListPostAnalyticsResponse extends PagePagination {
-  posts: PostAnalytics[];
-}
-
-export interface TopPostsResponse {
-  posts: PostAnalytics[];
-}
-
-export interface DiscoveredPost {
-  id: string;
-  platform: PlatformType;
-  publishedAt: string;
-  text: string | null;
-  thumbnailUrl: string | null;
-  permalink: string | null;
-  accountName: string | null;
-}
-
-export interface DiscoveredPostsResponse {
-  posts: DiscoveredPost[];
-}
-
-export interface PlatformSyncStatus {
-  platform: PlatformType;
-  connectionId: string;
-  accountName: string | null;
-  status: AnalyticsSyncJobStatus;
-  lastSyncedAt: string | null;
-  lastErrorMessage: string | null;
-  historyHorizonAt: string | null;
-  lastDiscoveryAt: string | null;
-  needsAnalyticsReconnect: boolean;
-}
-
-export interface AnalyticsSyncStatus {
-  accountGroupId: string;
-  syncInProgress: boolean;
-  lastSyncedAt: string | null;
-  historyHorizonAt: string | null;
-  platforms: PlatformSyncStatus[];
-}
-
-export interface TriggerAnalyticsSyncResponse {
-  queued: boolean;
-  message: string;
-  cooldownSecondsRemaining: number | null;
-}
-
-export interface GenerateCaptionRequest {
-  prompt: string;
-  platform?: CaptionPlatform;
-}
-
-export interface RefineCaptionRequest extends GenerateCaptionRequest {
-  originalText: string;
-  partialText?: string;
-}
-
-export interface CaptionResponse {
-  caption: string;
-}
-
-export interface GenerateImageRequest {
-  prompt: string;
-  aspectRatio?: ImageAspectRatio;
-  model?: ImageModel;
-  quality?: ImageQuality;
-  sessionId?: string;
-  referenceImages?: string[];
-}
-
-export interface GenerateImageResponse {
-  jobId: string;
-  sessionId: string;
-  status: ImageJobStatus;
-}
-
-export interface ImageJob {
-  jobId: string;
-  sessionId: string;
-  status: ImageJobStatus;
-  imageUrl: string | null;
-  imageId: string | null;
-  error: string | null;
-}
-
-export const INBOX_STATUSES = ['UNREAD', 'READ', 'DONE'] as const;
-export type InboxStatus = (typeof INBOX_STATUSES)[number];
-
-export const INBOX_CHANNEL_ACCESS = ['AVAILABLE', 'RECONNECT_REQUIRED', 'UNSUPPORTED'] as const;
-export type InboxChannelAccess = (typeof INBOX_CHANNEL_ACCESS)[number];
+export type InboxChannelAccess = Schemas['InboxChannelAccess'];
+export const INBOX_CHANNEL_ACCESS = [
+  'AVAILABLE',
+  'RECONNECT_REQUIRED',
+  'UNSUPPORTED',
+] as const satisfies readonly InboxChannelAccess[];
 
 export const INBOX_LIST_MAX_LIMIT = 100;
 export const INBOX_LIST_DEFAULT_LIMIT = 25;
 export const INBOX_STATUS_MAX_IDS = 100;
 export const INBOX_LIST_MAX_ACCOUNTS = 50;
 
-export type InboxListQuery = {
-  accountIds?: string[];
-  platforms?: PlatformType[];
-  statuses?: InboxStatus[];
-  since?: string;
-  search?: string;
-  limit?: number;
-  cursor?: string;
-};
+export type InboxListQuery = QueryParams<'listInboxMentions'>;
+export type InboxCommentsQuery = QueryParams<'listInboxComments'>;
+export type InboxReviewsQuery = QueryParams<'listInboxReviews'>;
 
-export type InboxCommentsQuery = InboxListQuery & {
-  postId?: string;
-  platformPostId?: string;
-};
+export type InboxPerson = Schemas['InboxPerson'];
+export type InboxComment = Schemas['InboxComment'];
+export type InboxCommentsResponse = ResponseBody<'listInboxComments'>;
+export type InboxPage = Pick<InboxCommentsResponse, 'total' | 'hasMore' | 'nextCursor'>;
+export type InboxCommentThread = ResponseBody<'getInboxComment'>;
+export type InboxMention = Schemas['InboxMention'];
+export type InboxMentionsResponse = ResponseBody<'listInboxMentions'>;
+export type InboxConversation = Schemas['InboxConversation'];
+export type InboxConversationsResponse = ResponseBody<'listInboxConversations'>;
+export type InboxMessage = Schemas['InboxMessage'];
+export type InboxConversationThread = ResponseBody<'getInboxConversation'>;
+export type SentInboxMessage = ResponseBody<'sendInboxMessage'>;
+export type InboxReview = Schemas['InboxReview'];
+export type InboxReviewsResponse = ResponseBody<'listInboxReviews'>;
+export type InboxSummary = ResponseBody<'getInboxSummary'>;
+export type InboxSummaryAccount = NonNullable<InboxSummary['accounts']>[number];
+export type InboxRefreshResponse = ResponseBody<'refreshInbox'>;
 
-export type InboxReviewsQuery = InboxListQuery & {
-  ratings?: number[];
-  replied?: boolean;
-};
-
-export interface InboxPage {
-  total: number;
-  hasMore: boolean;
-  nextCursor: string | null;
-}
-
-export interface InboxPerson {
-  id: string | null;
-  name: string;
-  username: string | null;
-  avatarUrl: string | null;
-}
-
-export interface InboxComment {
-  id: string;
-  accountId: string;
-  platform: PlatformType;
-  accountName: string;
-  postId: string | null;
-  platformPostId: string;
-  postText: string | null;
-  postPermalink: string | null;
-  platformCommentId: string;
-  parentPlatformCommentId: string | null;
-  isReply: boolean;
-  author: InboxPerson;
-  text: string;
-  permalink: string | null;
-  likeCount: number | null;
-  createdAt: string;
-  status: InboxStatus;
-  isHidden: boolean;
-  isOwn: boolean;
-  replied: boolean;
-  repliedAt: string | null;
-  likedByAccount: boolean;
-  capabilities: { canReply: boolean; canHide: boolean; canDelete: boolean; canLike: boolean };
-}
-
-export interface InboxCommentsResponse extends InboxPage {
-  comments: InboxComment[];
-}
-
-export interface InboxCommentThread {
-  comment: InboxComment;
-  parent: InboxComment | null;
-  replies: InboxComment[];
-}
-
-export interface InboxMention {
-  id: string;
-  accountId: string;
-  platform: PlatformType;
-  accountName: string;
-  platformMentionId: string;
-  author: InboxPerson;
-  text: string;
-  permalink: string | null;
-  thumbnailUrl: string | null;
-  createdAt: string;
-  status: InboxStatus;
-  replied: boolean;
-  repliedAt: string | null;
-  capabilities: { canReply: boolean };
-  replies: { id: string; text: string; permalink: string | null; createdAt: string }[];
-}
-
-export interface InboxMentionsResponse extends InboxPage {
-  mentions: InboxMention[];
-}
-
-export interface InboxConversation {
-  id: string;
-  accountId: string;
-  platform: PlatformType;
-  accountName: string;
-  participant: InboxPerson;
-  lastMessageText: string | null;
-  lastMessageAt: string;
-  lastMessageIsOwn: boolean;
-  status: InboxStatus;
-  repliedAt: string | null;
-  replyWindowEndsAt: string | null;
-  maxMessageLength: number;
-  capabilities: { canReply: boolean };
-}
-
-export interface InboxConversationsResponse extends InboxPage {
-  conversations: InboxConversation[];
-}
-
-export interface InboxMessage {
-  id: string;
-  isOwn: boolean;
-  text: string;
-  hasAttachments: boolean;
-  createdAt: string;
-}
-
-export interface InboxConversationThread {
-  conversation: InboxConversation;
-  messages: InboxMessage[];
-}
-
-export interface SentInboxMessage {
-  conversation: InboxConversation;
-  message: InboxMessage;
-}
-
-export interface InboxReview {
-  id: string;
-  accountId: string;
-  platform: PlatformType;
-  accountName: string;
-  platformReviewId: string;
-  reviewer: { name: string; avatarUrl: string | null; isAnonymous: boolean };
-  rating: number;
-  text: string | null;
-  reply: { text: string; updatedAt: string } | null;
-  createdAt: string;
-  updatedAt: string;
-  status: InboxStatus;
-  repliedAt: string | null;
-  maxReplyLength: number;
-  capabilities: { canReply: boolean };
-}
-
-export interface InboxReviewsResponse extends InboxPage {
-  reviews: InboxReview[];
-}
-
-export interface InboxSummaryAccount {
-  accountId: string;
-  platform: PlatformType;
-  accountName: string;
-  avatarUrl: string | null;
-  needsReconnect: boolean;
-  lastSyncedAt: string | null;
-  lastErrorCode: string | null;
-  comments: InboxChannelAccess;
-  mentions: InboxChannelAccess;
-  messages: InboxChannelAccess;
-  reviews: InboxChannelAccess;
-}
-
-export interface InboxSummary {
-  unread: { comments: number; mentions: number; conversations: number; reviews: number };
-  accounts: InboxSummaryAccount[];
-}
-
-export interface InboxTextRequest {
-  text: string;
-}
-
-export interface InboxStatusRequest {
-  ids: string[];
-  status: InboxStatus;
-}
-
-export interface InboxCommentsStatusResponse {
-  comments: InboxComment[];
-  unreadCount: number;
-}
-
-export interface InboxMentionsStatusResponse {
-  mentions: InboxMention[];
-  unreadCount: number;
-}
-
-export interface InboxConversationsStatusResponse {
-  conversations: InboxConversation[];
-  unreadCount: number;
-}
-
-export interface InboxReviewsStatusResponse {
-  reviews: InboxReview[];
-  unreadCount: number;
-}
+export type InboxTextRequest = Schemas['InboxReplyRequest'];
+export type InboxStatusRequest = Schemas['InboxStatusUpdateRequest'];
+export type InboxCommentsStatusResponse = ResponseBody<'updateInboxCommentsStatus'>;
+export type InboxMentionsStatusResponse = ResponseBody<'updateInboxMentionsStatus'>;
+export type InboxConversationsStatusResponse = ResponseBody<'updateInboxConversationsStatus'>;
+export type InboxReviewsStatusResponse = ResponseBody<'updateInboxReviewsStatus'>;

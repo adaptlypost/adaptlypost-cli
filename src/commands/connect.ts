@@ -1,6 +1,7 @@
 import type { Command } from 'commander';
 
 import { createConnectLink, revokeConnectLink } from '../api/client.js';
+import { requireField } from '../api/fields.js';
 import type { ConnectLink, CreateConnectLinkRequest, PlatformType } from '../api/types.js';
 import {
   CliError,
@@ -80,6 +81,7 @@ export const toCreateConnectLinkRequest = (options: ConnectCreateOptions): Creat
 
 const expiryOf = (link: ConnectLink): string => {
   if (link.expiresAt === null) return 'never';
+  if (link.expiresAt === undefined) return '—';
   const date = new Date(link.expiresAt);
   return Number.isNaN(date.getTime())
     ? link.expiresAt
@@ -94,17 +96,18 @@ async function runCreate(options: ConnectCreateOptions): Promise<void> {
     return;
   }
 
+  const token = requireField(link.token, 'connect link token');
   success('Connect link created');
   printKeyValues([
-    ['url', link.url],
-    ['token', link.token],
+    ['url', requireField(link.url, 'connect link url')],
+    ['token', token],
     ['name', link.name || '—'],
     ['visibility', (link.visibility ?? 'PUBLIC').toLowerCase()],
     ['platforms', link.allowedPlatforms?.length ? link.allowedPlatforms.join(', ') : 'all'],
     ['max accounts', link.maxAccounts ? String(link.maxAccounts) : 'no limit'],
     ['expires', expiryOf(link)],
   ]);
-  hint(`Send the url to the person who owns the accounts. Revoke it with: ${PRODUCT.binName} connect revoke ${link.token}`);
+  hint(`Send the url to the person who owns the accounts. Revoke it with: ${PRODUCT.binName} connect revoke ${token}`);
 }
 
 async function runRevoke(token: string, options: GlobalOptions): Promise<void> {

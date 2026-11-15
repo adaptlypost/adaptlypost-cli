@@ -12,7 +12,7 @@ Command line interface for the AdaptlyPost social media scheduling platform. Bin
 
 - `src/cli.ts` — shebang, program assembly, global flags, dispatch
 - `src/core/` — config, credentials, http, output, table, poll and friends; byte-identical in all three CLI repos, synced with `npm run sync-core`
-- `src/api/` — one typed method per REST endpoint
+- `src/api/` — one function per REST endpoint, each a call into `@adaptlypost/sdk`. `transport.ts` builds one SDK client per process from the resolved profile and wraps its `fetch` for `--debug` logs, the user agent and rate-limit capture. `errors.ts` turns SDK errors into `ApiError` and `CliError`
 - `src/commands/` — one file per top-level noun, lazy-imported from the action handler
 - No LLM call, no prompt, no provider key here; `ai` commands post to the API and the model runs behind it
 
