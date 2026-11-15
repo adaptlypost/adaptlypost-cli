@@ -19,7 +19,6 @@ import {
   validateBulkPosts,
   validatePost,
 } from "../api/client.js";
-import { requireField } from "../api/fields.js";
 import {
   CONTENT_TYPES,
   FACEBOOK_CAROUSEL_CARDS_MAX,
@@ -182,10 +181,8 @@ const oneLine = (text: string | undefined): string =>
   (text ?? "").replace(/\s+/g, " ").trim() || "—";
 
 const platformsOf = (post: SocialPost): PlatformType[] => [
-  ...new Set((post.platforms ?? []).flatMap((target) => (target.platform ? [target.platform] : []))),
+  ...new Set((post.platforms ?? []).map((target) => target.platform)),
 ];
-
-const postIdOf = (post: { id?: string }): string => requireField(post.id, "post.id");
 
 interface GlobalOptions {
   yes?: boolean;
@@ -210,7 +207,7 @@ const clock = (date: Date, timezone: string): string =>
 async function loadAccounts(quiet: boolean): Promise<SocialAccount[]> {
   const progress = quiet || isMachine() ? null : spinner("Loading accounts…");
   try {
-    return (await listSocialAccounts()).accounts ?? [];
+    return (await listSocialAccounts()).accounts;
   } finally {
     progress?.stop();
   }
@@ -724,16 +721,11 @@ async function resolvePinterestBoardNames(
 
       let boards = boardsByAccount.get(connectionId);
       if (!boards) {
-        boards = listPinterestBoards(connectionId).then((response) => response.boards ?? []);
+        boards = listPinterestBoards(connectionId).then((response) => response.boards);
         boardsByAccount.set(connectionId, boards);
       }
       const board = pickPinterestBoard(await boards, boardName, connectionId);
-      choices.push({
-        connectionId,
-        boardName,
-        boardId: requireField(board.id, "Pinterest board id"),
-        resolvedName: board.name ?? boardName,
-      });
+      choices.push({ connectionId, boardName, boardId: board.id, resolvedName: board.name });
     }
   } finally {
     progress?.stop();
@@ -940,16 +932,16 @@ async function runList(options: ListOptions): Promise<void> {
       quiet: Boolean(options.quiet) || isQuiet(),
       fetchPage: async (page) => {
         const response = await listPosts({ ...query, limit: page.limit, offset: page.offset });
-        return { items: response.posts ?? [], total: response.total, hasMore: response.hasMore ?? false };
+        return { items: response.posts, total: response.total, hasMore: response.hasMore };
       },
     });
     posts = paged.items;
     total = paged.total;
   } else {
     const response = await listPosts({ ...query, limit, offset });
-    posts = response.posts ?? [];
+    posts = response.posts;
     total = response.total;
-    hasMore = response.hasMore ?? false;
+    hasMore = response.hasMore;
   }
 
   if (isMachine()) {
@@ -969,9 +961,9 @@ async function runList(options: ListOptions): Promise<void> {
   }
 
   printTable(posts, [
-    { header: "ID", value: (post) => formatId(postIdOf(post)) },
+    { header: "ID", value: (post) => formatId(post.id) },
     { header: "WHEN", value: (post) => whenCell(post, post.timezone || timezone) },
-    { header: "STATUS", value: (post) => post.status ?? "—" },
+    { header: "STATUS", value: (post) => post.status },
     { header: "PLATFORMS", value: (post) => platformsOf(post).join(", ") || "—" },
     { header: "TEXT", value: (post) => oneLine(post.text) },
   ]);
@@ -992,10 +984,10 @@ async function runView(id: string, options: GlobalOptions): Promise<void> {
 
   const timezone = post.timezone || resolveTimezone(options.timezone);
 
-  print(postIdOf(post));
+  print(post.id);
   printKeyValues([
-    ["status", post.status ?? "—"],
-    ["type", post.contentType ?? "—"],
+    ["status", post.status],
+    ["type", post.contentType],
     [
       "when",
       post.scheduledAt
@@ -1013,7 +1005,7 @@ async function runView(id: string, options: GlobalOptions): Promise<void> {
   printTable(targets, [
     { header: "PLATFORM", value: platformLabel },
     { header: "ACCOUNT", value: (target) => target.accountName ?? target.connectionId ?? target.pageId ?? "—" },
-    { header: "STATUS", value: (target) => target.status ?? "—" },
+    { header: "STATUS", value: (target) => target.status },
     { header: "CHARS", value: (target) => (target.text ?? post.text ?? "").length, align: "right" },
     { header: "POST ID", value: (target) => target.platformPostId ?? "—" },
     ...(targets.some((target) => target.firstCommentStatus)
@@ -1029,7 +1021,7 @@ const platformLabel = (target: SocialPostPlatform): string => {
   const postType = target.platform === "INSTAGRAM" ? target.instagramPostType : target.facebookPostType;
   return (target.platform === "INSTAGRAM" || target.platform === "FACEBOOK") && postType === "STORY"
     ? `${target.platform} story`
-    : (target.platform ?? "—");
+    : target.platform;
 };
 
 const firstCommentCell = (target: SocialPostPlatform): string => {
@@ -1103,12 +1095,11 @@ async function runCreate(options: CreateOptions): Promise<void> {
   }
 
   const created = await createPost(body);
-  const createdId = requireField(created.postId, "postId");
 
   if (isMachine()) {
     printResult("post.create", created);
   } else {
-    success(`Post created  ${formatId(createdId)}`);
+    success(`Post created  ${formatId(created.postId)}`);
     const entries: [string, string][] = [];
 
     if (body.saveAsDraft) {
@@ -1135,21 +1126,20 @@ async function runCreate(options: CreateOptions): Promise<void> {
       entries.push(["recurring", formatId(created.recurringPostId)]);
     }
 
-    const queued = created.queuedPlatforms ?? [];
-    if (queued.length > 0) {
-      entries.push(["queued", queued.join(", ")]);
+    if (created.queuedPlatforms.length > 0) {
+      entries.push(["queued", created.queuedPlatforms.join(", ")]);
     }
 
     for (const skipped of created.skippedPlatforms ?? []) {
       entries.push(["skipped", `${skipped.platform}  ${skipped.reason}`]);
     }
 
-    entries.push(["watch", `adaptlypost post watch ${createdId}`]);
+    entries.push(["watch", `adaptlypost post watch ${created.postId}`]);
     printKeyValues(entries);
   }
 
   if (options.watch) {
-    await runWatch(createdId, { timeout: options.timeout, timezone: options.timezone });
+    await runWatch(created.postId, { timeout: options.timeout, timezone: options.timezone });
   }
 }
 
@@ -1281,38 +1271,35 @@ export function targetsFromPost(post: SocialPost): {
     targets[field] = [...(targets[field] ?? []), value];
   };
 
-  const groups = new Map<string, { platform: PlatformType; id: string; entries: SocialPostPlatform[] }>();
+  const groups = new Map<string, SocialPostPlatform[]>();
   for (const target of post.platforms ?? []) {
-    const { platform } = target;
-    if (platform === undefined) continue;
-    const id = platform === "FACEBOOK" ? target.pageId : target.connectionId;
+    const id = target.platform === "FACEBOOK" ? target.pageId : target.connectionId;
     if (id === undefined) continue;
-    const key = `${platform}:${id}`;
-    const group = groups.get(key) ?? { platform, id, entries: [] };
-    group.entries.push(target);
-    groups.set(key, group);
+    const key = `${target.platform}:${id}`;
+    groups.set(key, [...(groups.get(key) ?? []), target]);
   }
 
-  for (const { platform, id, entries } of groups.values()) {
+  for (const entries of groups.values()) {
     const isStory = (target: SocialPostPlatform): boolean =>
       (target.platform === "INSTAGRAM" ? target.instagramPostType : target.facebookPostType) === "STORY";
     const primary = entries.find((target) => !isStory(target)) ?? entries[0];
     if (!primary) continue;
-    const connectionField = CONNECTION_FIELD[platform];
+    const id = (primary.platform === "FACEBOOK" ? primary.pageId : primary.connectionId) as string;
+    const connectionField = CONNECTION_FIELD[primary.platform];
 
     push(connectionField, id);
 
-    const field = CONFIG_FIELD[platform];
+    const field = CONFIG_FIELD[primary.platform];
     const config = storedConfig(primary);
     if (config && !isStory(primary) && entries.some(isStory)) config.shareToStory = true;
     if (field && config && Object.keys(config).length > 0) {
-      push(field, platform === "FACEBOOK" ? { pageId: id, ...config } : { connectionId: id, ...config });
+      push(field, primary.platform === "FACEBOOK" ? { pageId: id, ...config } : { connectionId: id, ...config });
     }
 
-    if (primary.text && !platformTexts.has(platform)) platformTexts.set(platform, primary.text);
+    if (primary.text && !platformTexts.has(primary.platform)) platformTexts.set(primary.platform, primary.text);
   }
 
-  const platforms = platformsOf(post).filter(
+  const platforms = [...new Set((post.platforms ?? []).map((target) => target.platform))].filter(
     (platform) => (targets[CONNECTION_FIELD[platform]] ?? []).length > 0,
   );
 
@@ -1466,9 +1453,9 @@ async function runUpdate(id: string, options: UpdateOptions): Promise<void> {
     return;
   }
 
-  success(`Post updated  ${formatId(postIdOf(post))}`);
+  success(`Post updated  ${formatId(post.id)}`);
   printKeyValues([
-    ["status", post.status ?? "—"],
+    ["status", post.status],
     [
       "when",
       post.scheduledAt
@@ -1483,7 +1470,7 @@ async function runDelete(id: string, options: GlobalOptions): Promise<void> {
   if (!options.yes) {
     const post = await getPost(id);
     const platforms = platformsOf(post).join(" + ") || "no platforms";
-    const proceed = await promptConfirm(`Delete ${formatId(postIdOf(post))} (${post.status ?? "—"}, ${platforms})?`, {
+    const proceed = await promptConfirm(`Delete ${formatId(post.id)} (${post.status}, ${platforms})?`, {
       assumeYes: Boolean(options.yes),
     });
     if (!proceed) {
@@ -1509,11 +1496,10 @@ async function runUnschedule(id: string): Promise<void> {
     return;
   }
 
-  const postId = postIdOf(post);
-  success(`Unscheduled  ${formatId(postId)}`);
+  success(`Unscheduled  ${formatId(post.id)}`);
   printKeyValues([
-    ["status", post.status ?? "—"],
-    ["publish", `adaptlypost post publish ${postId} --at <when>`],
+    ["status", post.status],
+    ["publish", `adaptlypost post publish ${post.id} --at <when>`],
   ]);
 }
 
@@ -1542,22 +1528,20 @@ async function runPublish(id: string, options: PublishOptions): Promise<void> {
     return;
   }
 
-  const publishedId = requireField(published.postId, "postId");
-
   if (published.isScheduled && published.scheduledAt) {
     const date = new Date(published.scheduledAt);
-    success(`Scheduled  ${formatId(publishedId)}`);
+    success(`Scheduled  ${formatId(published.postId)}`);
     printKeyValues([
       ["when", `${formatAbsolute(date, { timezone })} (${formatRelative(date)})`],
-      ["watch", `adaptlypost post watch ${publishedId}`],
+      ["watch", `adaptlypost post watch ${published.postId}`],
     ]);
     return;
   }
 
-  success(`Publishing  ${formatId(publishedId)}`);
+  success(`Publishing  ${formatId(published.postId)}`);
   printKeyValues([
-    ["queued", (published.queuedPlatforms ?? []).join(", ") || "—"],
-    ["watch", `adaptlypost post watch ${publishedId}`],
+    ["queued", published.queuedPlatforms.join(", ") || "—"],
+    ["watch", `adaptlypost post watch ${published.postId}`],
   ]);
 }
 
@@ -1567,33 +1551,29 @@ const resultLink = (result: PostResult): string => {
   return result.platformPostId ?? "—";
 };
 
-const platformIdOf = (result: PostResult): string => requireField(result.platformId, "result.platformId");
-
 async function runResults(id: string, options: GlobalOptions): Promise<void> {
   const response = await listPostResults(id);
-  const results = response.results ?? [];
 
   if (isMachine()) {
-    printResult("post.results", results, {
+    printResult("post.results", response.results, {
       postId: response.postId,
       status: response.status,
-      total: results.length,
+      total: response.results.length,
     });
-    printFieldHints(results);
+    printFieldHints(response.results);
     return;
   }
 
   const timezone = resolveTimezone(options.timezone);
-  const postId = response.postId ?? id;
 
-  print(`${formatId(postId)} · ${response.status ?? "—"}`);
+  print(`${formatId(response.postId)} · ${response.status}`);
   print("");
 
-  printTable(results, [
-    { header: "PLATFORM ID", value: (result) => formatId(platformIdOf(result)) },
-    { header: "PLATFORM", value: (result) => result.platform ?? "—" },
+  printTable(response.results, [
+    { header: "PLATFORM ID", value: (result) => formatId(result.platformId) },
+    { header: "PLATFORM", value: (result) => result.platform },
     { header: "ACCOUNT", value: (result) => result.accountName ?? "—" },
-    { header: "STATUS", value: (result) => result.status ?? "—" },
+    { header: "STATUS", value: (result) => result.status },
     {
       header: "PUBLISHED",
       value: (result) =>
@@ -1604,11 +1584,11 @@ async function runResults(id: string, options: GlobalOptions): Promise<void> {
     { header: "LINK / ERROR", value: resultLink },
   ]);
 
-  const failed = results.filter((result) => result.status === "FAILED");
+  const failed = response.results.filter((result) => result.status === "FAILED");
 
   if (failed.length > 0) {
     print("");
-    print(`retry: adaptlypost post retry ${postId} ${failed.map((result) => `--platform-id ${platformIdOf(result)}`).join(" ")}`);
+    print(`retry: adaptlypost post retry ${response.postId} ${failed.map((result) => `--platform-id ${result.platformId}`).join(" ")}`);
   }
 }
 
@@ -1626,7 +1606,7 @@ async function runRetry(id: string, options: RetryOptions): Promise<void> {
     platformIds = [
       ...new Set([
         ...platformIds,
-        ...(response.results ?? []).filter((result) => result.status === "FAILED").map(platformIdOf),
+        ...response.results.filter((result) => result.status === "FAILED").map((result) => result.platformId),
       ]),
     ];
   }
@@ -1639,17 +1619,16 @@ async function runRetry(id: string, options: RetryOptions): Promise<void> {
   }
 
   const scope = platformIds.length > 0 ? `${platformIds.length} platform(s)` : "every failed platform";
-  const retriedId = retried.postId ?? id;
-  success(`Retrying ${scope} on ${formatId(retriedId)}`);
+  success(`Retrying ${scope} on ${formatId(retried.postId)}`);
   printKeyValues([
-    ["queued", (retried.queuedPlatforms ?? []).join(", ") || "—"],
-    ["watch", `adaptlypost post watch ${retriedId}`],
+    ["queued", retried.queuedPlatforms.join(", ") || "—"],
+    ["watch", `adaptlypost post watch ${retried.postId}`],
   ]);
 }
 
 type WatchEvent =
   | { kind: "result"; result: PostResult; at: Date }
-  | { kind: "done"; status?: PostStatus };
+  | { kind: "done"; status: PostStatus };
 
 interface WatchOptions extends GlobalOptions {
   timeout: string;
@@ -1691,7 +1670,7 @@ async function runWatch(id: string, options: WatchOptions): Promise<void> {
 
   if (!isMachine()) {
     print(
-      `Watching ${formatId(post.id ?? id)} (${post.platforms?.length ?? 0} platforms). Ctrl-C to stop.`,
+      `Watching ${formatId(post.id)} (${post.platforms?.length ?? 0} platforms). Ctrl-C to stop.`,
     );
   }
 
@@ -1706,21 +1685,20 @@ async function runWatch(id: string, options: WatchOptions): Promise<void> {
     maxIntervalMs: 60_000,
     timeoutMs,
     label: "platform results",
-    key: (event) => (event.kind === "done" ? "__done__" : platformIdOf(event.result)),
+    key: (event) => (event.kind === "done" ? "__done__" : event.result.platformId),
     until: (event) => event.kind === "done",
     fetchPage: async (cursor: Cursor) => {
       const response = await listPostResults(id);
       latest = response;
 
-      const results = response.results ?? [];
-      const items: WatchEvent[] = results
-        .filter((entry) => entry.status !== undefined && TERMINAL_PLATFORM_STATUSES.has(entry.status))
+      const items: WatchEvent[] = response.results
+        .filter((entry) => TERMINAL_PLATFORM_STATUSES.has(entry.status))
         .map((entry) => ({ kind: "result" as const, result: entry, at: new Date() }));
 
-      const allTerminal = results.length > 0 && items.length === results.length;
-      const postFinished = response.status !== undefined && TERMINAL_POST_STATUSES.has(response.status);
+      const allTerminal =
+        response.results.length > 0 && items.length === response.results.length;
 
-      if (allTerminal || postFinished) {
+      if (allTerminal || TERMINAL_POST_STATUSES.has(response.status)) {
         finished = true;
         items.push({ kind: "done", status: response.status });
       }
@@ -1732,8 +1710,8 @@ async function runWatch(id: string, options: WatchOptions): Promise<void> {
       if (isMachine()) return;
       const line = [
         clock(event.at, timezone),
-        (event.result.platform ?? "—").padEnd(10),
-        (event.result.status ?? "—").padEnd(10),
+        event.result.platform.padEnd(10),
+        event.result.status.padEnd(10),
         resultLink(event.result),
       ].join("  ");
       print(line);
@@ -2246,9 +2224,8 @@ async function runBulk(options: BulkOptions): Promise<void> {
       const response = await withProgress(`Checking ${batch.request.posts.length} posts…`, quiet, () =>
         validateBulkPosts(batch.request),
       );
-      for (const result of response.results ?? []) {
-        const index = requireField(result.index, "bulk validation index");
-        checked.push({ line: batch.rows[index]?.line ?? index + 1, report: requireField(result.report, "bulk validation report") });
+      for (const { index, report } of response.results) {
+        checked.push({ line: batch.rows[index]?.line ?? index + 1, report });
       }
     }
     reportBulkValidation(checked);
@@ -2261,13 +2238,10 @@ async function runBulk(options: BulkOptions): Promise<void> {
 
   for (const [index, batch] of batches.entries()) {
     const response = await bulkSchedulePosts(batch.request);
-    const results = response.results ?? [];
-    const totalScheduled = response.totalScheduled ?? 0;
-    const totalFailed = response.totalFailed ?? 0;
-    scheduled += totalScheduled;
-    outcomes.push(...results);
+    scheduled += response.totalScheduled;
+    outcomes.push(...response.results);
 
-    results.forEach((outcome, position) => {
+    response.results.forEach((outcome, position) => {
       if (outcome.success) return;
       const row = batch.rows[position];
       failures.push({
@@ -2279,9 +2253,9 @@ async function runBulk(options: BulkOptions): Promise<void> {
     if (!isMachine()) {
       const label = `Batch ${index + 1}/${batches.length} (${batch.request.posts.length} posts)`;
       print(
-        totalFailed === 0
-          ? `${label}  ✓ ${totalScheduled} scheduled`
-          : `${label}  ✓ ${totalScheduled} scheduled, ${totalFailed} failed`,
+        response.totalFailed === 0
+          ? `${label}  ✓ ${response.totalScheduled} scheduled`
+          : `${label}  ✓ ${response.totalScheduled} scheduled, ${response.totalFailed} failed`,
       );
     }
   }
@@ -2379,12 +2353,8 @@ async function runBulkFromJson(path: string, options: BulkOptions): Promise<void
       const response = await withProgress(`Checking ${chunk.posts.length} posts…`, quiet, () =>
         validateBulkPosts(chunk),
       );
-      for (const result of response.results ?? []) {
-        const index = requireField(result.index, "bulk validation index");
-        checked.push({
-          line: chunkIndex * BULK_CHUNK + index + 1,
-          report: requireField(result.report, "bulk validation report"),
-        });
+      for (const { index, report } of response.results) {
+        checked.push({ line: chunkIndex * BULK_CHUNK + index + 1, report });
       }
     }
     reportBulkValidation(checked);
@@ -2397,12 +2367,11 @@ async function runBulkFromJson(path: string, options: BulkOptions): Promise<void
 
   for (const [index, chunk] of chunks.entries()) {
     const response = await bulkSchedulePosts(chunk);
-    const results = response.results ?? [];
-    scheduled += response.totalScheduled ?? 0;
-    failed += response.totalFailed ?? 0;
-    outcomes.push(...results);
+    scheduled += response.totalScheduled;
+    failed += response.totalFailed;
+    outcomes.push(...response.results);
 
-    results.forEach((outcome, position) => {
+    response.results.forEach((outcome, position) => {
       if (outcome.success || isMachine()) return;
       failure(`row ${index * BULK_CHUNK + position + 1}  ${outcome.errorMessage ?? "failed"}`);
     });

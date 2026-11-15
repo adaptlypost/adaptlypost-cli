@@ -23,6 +23,7 @@ const webhook: Webhook = {
   id: 'wh_1',
   url: 'https://example.com/hooks',
   active: true,
+  events: [],
   createdAt: '2026-09-01T00:00:00.000Z',
   updatedAt: '2026-09-01T00:00:00.000Z',
   lastSuccessAt: null,

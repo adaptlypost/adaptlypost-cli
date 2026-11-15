@@ -362,16 +362,8 @@ export type LinkedInPostConfig = Schemas['LinkedInPostConfig'];
 export type TwitterPostConfig = Schemas['TwitterPostConfig'];
 export type TumblrPostConfig = Schemas['TumblrPostConfig'];
 
-export const DEFAULT_FACEBOOK_IMAGE_LAYOUT: FacebookImageLayout = 'GRID';
-export const DEFAULT_WORDPRESS_POST_STATUS: WordPressPostStatus = 'PUBLISH';
-
-export type FacebookPostConfig = Omit<Schemas['FacebookPostConfig'], 'imageLayout'> & {
-  imageLayout?: FacebookImageLayout;
-};
-
-export type WordPressPostConfig = Omit<Schemas['WordPressPostConfig'], 'status'> & {
-  status?: WordPressPostStatus;
-};
+export type FacebookPostConfig = Schemas['FacebookPostConfig'];
+export type WordPressPostConfig = Schemas['WordPressPostConfig'];
 
 export const LINKEDIN_RESHARE_OF_MAX_LENGTH = 500;
 export const TWITTER_QUOTE_OF_MAX_LENGTH = 200;
@@ -408,7 +400,7 @@ export type SocialPost = ResponseBody<'getPost'>;
 export type ListPostsResponse = ResponseBody<'listPosts'>;
 export type ListPostsQuery = QueryParams<'listPosts'>;
 
-export type Recurrence = Omit<Schemas['Recurrence'], 'interval'> & { interval?: number };
+export type Recurrence = Schemas['Recurrence'];
 
 export interface CreatePostRequest extends PostTargets, PlatformExtras {
   platforms: PlatformType[];

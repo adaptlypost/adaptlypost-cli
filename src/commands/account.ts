@@ -9,7 +9,6 @@ import {
   removeSocialAccount,
   searchInstagramAudio,
 } from '../api/client.js';
-import { requireField } from '../api/fields.js';
 import {
   INSTAGRAM_AUDIO_SEARCH_MAX_LENGTH,
   INSTAGRAM_AUDIO_TYPES,
@@ -104,7 +103,7 @@ export const filterAccounts = (
   filters: AccountListOptions,
 ): SocialAccount[] =>
   accounts.filter((account) => {
-    if (filters.platform && filters.platform.length > 0 && (account.platform === undefined || !filters.platform.includes(account.platform))) {
+    if (filters.platform && filters.platform.length > 0 && !filters.platform.includes(account.platform)) {
       return false;
     }
     if (filters.status && account.status !== filters.status) return false;
@@ -117,12 +116,10 @@ export const findAccount = (
 ): SocialAccount | undefined =>
   accounts.find((account) => account.id === id || account.pageId === id);
 
-const accountIdOf = (account: SocialAccount): string => requireField(account.id, 'account id');
-
 const fetchAccounts = async (label: string): Promise<SocialAccount[]> => {
   const progress = isQuiet() || isMachine() ? null : spinner(label);
   try {
-    const { accounts = [] } = await listSocialAccounts();
+    const { accounts } = await listSocialAccounts();
     return accounts;
   } finally {
     progress?.stop();
@@ -153,14 +150,14 @@ export const audioArtist = (audio: InstagramAudio): string => {
 };
 
 const LIST_COLUMNS: Column<SocialAccount>[] = [
-  { header: 'ID', value: (account) => (account.id ? formatId(account.id) : '—') },
-  { header: 'PLATFORM', value: (account) => account.platform ?? '—' },
+  { header: 'ID', value: (account) => formatId(account.id) },
+  { header: 'PLATFORM', value: (account) => account.platform },
   { header: 'NAME', value: (account) => account.displayName || '—' },
   { header: 'HANDLE', value: (account) => accountHandle(account) },
   {
     header: 'STATUS',
     value: (account) =>
-      needsReauthorisation(account) ? yellow(`! ${account.status}`) : (account.status ?? '—'),
+      needsReauthorisation(account) ? yellow(`! ${account.status}`) : account.status,
   },
   { header: 'NOTE', value: (account) => accountNote(account) },
 ];
@@ -211,14 +208,14 @@ const runView = async (id: string): Promise<void> => {
     return;
   }
 
-  print(account.id ?? id);
+  print(account.id);
   print();
 
   const entries: Array<[string, string]> = [
-    ['platform', account.platform ?? '—'],
+    ['platform', account.platform],
     ['name', account.displayName || '—'],
     ['handle', accountHandle(account)],
-    ['status', account.status ?? '—'],
+    ['status', account.status],
   ];
 
   if (account.pageId) entries.push(['page', account.pageId]);
@@ -260,7 +257,7 @@ const runCheck = async (id: string): Promise<void> => {
   const progress = isQuiet() || isMachine() ? null : spinner('Asking Facebook…');
   let checked: SocialAccountCheck;
   try {
-    checked = await checkSocialAccount(accountIdOf(account));
+    checked = await checkSocialAccount(account.id);
   } finally {
     progress?.stop();
   }
@@ -272,12 +269,12 @@ const runCheck = async (id: string): Promise<void> => {
 
   const entries: Array<[string, string]> = [
     ['name', checked.displayName || '—'],
-    ['status', checked.status ?? '—'],
-    ['checked', checked.checkedAt ?? '—'],
+    ['status', checked.status],
+    ['checked', checked.checkedAt],
   ];
   if (checked.unauthorizedReason) entries.push(['reason', checked.unauthorizedReason]);
 
-  print(checked.id ?? account.id ?? id);
+  print(checked.id);
   print();
   printKeyValues(entries);
   print();
@@ -302,7 +299,7 @@ const runRemove = async (id: string, options: GlobalOptions): Promise<void> => {
 
   if (!options.yes) {
     const proceed = await promptConfirm(
-      `Remove ${account.platform} account ${account.displayName || formatId(accountIdOf(account))} from the workspace? ` +
+      `Remove ${account.platform} account ${account.displayName || formatId(account.id)} from the workspace? ` +
         'Pending posts stop publishing to it.',
       { assumeYes: false },
     );
@@ -314,7 +311,7 @@ const runRemove = async (id: string, options: GlobalOptions): Promise<void> => {
   const progress = isQuiet() || isMachine() ? null : spinner('Removing account…');
   let removed: SocialAccountRemoval;
   try {
-    removed = await removeSocialAccount(accountIdOf(account));
+    removed = await removeSocialAccount(account.id);
   } finally {
     progress?.stop();
   }
@@ -324,7 +321,7 @@ const runRemove = async (id: string, options: GlobalOptions): Promise<void> => {
     return;
   }
 
-  success(`Removed  ${removed.displayName || formatId(removed.id ?? accountIdOf(account))}`);
+  success(`Removed  ${removed.displayName || formatId(removed.id)}`);
   hint('connect it again: adaptlypost connect create');
 };
 
@@ -370,7 +367,7 @@ const runInstagramAudio = async (id: string, options: InstagramAudioOptions): Pr
   const progress = isQuiet() || isMachine() ? null : spinner('Asking Instagram…');
   let audio: InstagramAudio[];
   try {
-    ({ audio = [] } = await searchInstagramAudio(accountIdOf(account), { audioType: options.type, searchQuery }));
+    ({ audio } = await searchInstagramAudio(account.id, { audioType: options.type, searchQuery }));
   } finally {
     progress?.stop();
   }
@@ -415,7 +412,7 @@ const runPinterestBoards = async (id: string): Promise<void> => {
   const progress = isQuiet() || isMachine() ? null : spinner('Asking Pinterest…');
   let boards: PinterestBoard[];
   try {
-    ({ boards = [] } = await listPinterestBoards(accountIdOf(account)));
+    ({ boards } = await listPinterestBoards(account.id));
   } finally {
     progress?.stop();
   }
@@ -460,7 +457,7 @@ const runWordPressCategories = async (id: string): Promise<void> => {
   const progress = isQuiet() || isMachine() ? null : spinner('Asking the WordPress site…');
   let categories: WordPressCategory[];
   try {
-    ({ categories = [] } = await listWordPressCategories(accountIdOf(account)));
+    ({ categories } = await listWordPressCategories(account.id));
   } finally {
     progress?.stop();
   }
@@ -525,7 +522,7 @@ const runLinkedInOrganization = async (value: string): Promise<void> => {
   const progress = isQuiet() || isMachine() ? null : spinner('Asking LinkedIn…');
   let organization: LinkedInOrganization;
   try {
-    organization = requireField((await lookupLinkedInOrganization({ query })).organization, 'organization');
+    ({ organization } = await lookupLinkedInOrganization({ query }));
   } catch (error) {
     throw withLinkedInOrganizationHint(error);
   } finally {

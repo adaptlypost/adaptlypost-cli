@@ -7,7 +7,6 @@ import {
   pauseRecurringPost,
   resumeRecurringPost,
 } from "../api/client.js";
-import { requireField } from "../api/fields.js";
 import {
   RECURRING_POST_STATUSES,
   type PlatformType,
@@ -42,8 +41,7 @@ const UNITS: Record<Recurrence["frequency"], [string, string]> = {
   YEARLY: ["yearly", "years"],
 };
 
-type RecurrenceSummary = {
-  frequency?: Recurrence["frequency"];
+type RecurrenceSummary = Pick<Recurrence, "frequency"> & {
   interval?: number | null;
   weekdays?: readonly string[] | null;
   endsOn?: string | null;
@@ -51,7 +49,6 @@ type RecurrenceSummary = {
 };
 
 export function describeRecurrence(recurrence: RecurrenceSummary): string {
-  if (!recurrence.frequency) return "—";
   const [adverb, unit] = UNITS[recurrence.frequency];
   const interval = recurrence.interval ?? 1;
   const parts = [interval > 1 ? `every ${interval} ${unit}` : adverb];
@@ -71,11 +68,9 @@ const oneLine = (text: string | null | undefined): string =>
 const platformsOf = (recurring: RecurringPost): PlatformType[] => [
   ...new Set([
     ...(recurring.platformTypes ?? []),
-    ...(recurring.platforms ?? []).flatMap((target) => (target.platform ? [target.platform] : [])),
+    ...(recurring.platforms ?? []).map((target) => target.platform),
   ]),
 ];
-
-const idOf = (recurring: RecurringPost): string => requireField(recurring.id, "recurringPost.id");
 
 const whenOf = (value: string | null | undefined, timezone: string): string => {
   if (!value) return "—";
@@ -122,20 +117,16 @@ async function runList(options: ListOptions): Promise<void> {
       quiet: Boolean(options.quiet) || isQuiet(),
       fetchPage: async (page) => {
         const response = await listRecurringPosts({ ...query, limit: page.limit, offset: page.offset });
-        return {
-          items: response.recurringPosts ?? [],
-          total: response.total,
-          hasMore: response.hasMore ?? false,
-        };
+        return { items: response.recurringPosts, total: response.total, hasMore: response.hasMore };
       },
     });
     recurringPosts = paged.items;
     total = paged.total;
   } else {
     const response = await listRecurringPosts({ ...query, limit, offset });
-    recurringPosts = response.recurringPosts ?? [];
+    recurringPosts = response.recurringPosts;
     total = response.total;
-    hasMore = response.hasMore ?? false;
+    hasMore = response.hasMore;
   }
 
   if (isMachine()) {
@@ -155,8 +146,8 @@ async function runList(options: ListOptions): Promise<void> {
   }
 
   printTable(recurringPosts, [
-    { header: "ID", value: (recurring) => formatId(idOf(recurring)) },
-    { header: "STATUS", value: (recurring) => recurring.status ?? "—" },
+    { header: "ID", value: (recurring) => formatId(recurring.id) },
+    { header: "STATUS", value: (recurring) => recurring.status },
     { header: "REPEATS", value: (recurring) => describeRecurrence(recurring) },
     {
       header: "NEXT",
@@ -168,7 +159,7 @@ async function runList(options: ListOptions): Promise<void> {
             })
           : "—",
     },
-    { header: "POSTS", value: (recurring) => recurring.occurrenceCount ?? 0, align: "right" },
+    { header: "POSTS", value: (recurring) => recurring.occurrenceCount, align: "right" },
     { header: "PLATFORMS", value: (recurring) => platformsOf(recurring).join(", ") || "—" },
     { header: "TEXT", value: (recurring) => oneLine(recurring.text) },
   ]);
@@ -181,7 +172,7 @@ async function runList(options: ListOptions): Promise<void> {
 
 function summaryOf(recurring: RecurringPost): [string, string][] {
   const timezone = recurring.timezone || "UTC";
-  const entries: [string, string][] = [["status", recurring.status ?? "—"]];
+  const entries: [string, string][] = [["status", recurring.status]];
 
   if (recurring.pauseReason) entries.push(["paused by", recurring.pauseReason]);
   if (recurring.lastError) entries.push(["last error", recurring.lastError]);
@@ -189,7 +180,7 @@ function summaryOf(recurring: RecurringPost): [string, string][] {
   entries.push(["repeats", describeRecurrence(recurring)]);
   entries.push(["starts", whenOf(recurring.startsAt, timezone)]);
   entries.push(["next", whenOf(recurring.nextOccurrenceAt, timezone)]);
-  entries.push(["posts", String(recurring.occurrenceCount ?? 0)]);
+  entries.push(["posts", String(recurring.occurrenceCount)]);
   return entries;
 }
 
@@ -201,10 +192,10 @@ async function runView(id: string): Promise<void> {
     return;
   }
 
-  print(idOf(recurring));
+  print(recurring.id);
   printKeyValues([
     ...summaryOf(recurring),
-    ["type", recurring.contentType ?? "—"],
+    ["type", recurring.contentType],
     ["text", oneLine(recurring.text)],
   ]);
 
@@ -213,7 +204,7 @@ async function runView(id: string): Promise<void> {
 
   print("");
   printTable(targets, [
-    { header: "PLATFORM", value: (target) => target.platform ?? "—" },
+    { header: "PLATFORM", value: (target) => target.platform },
     { header: "ACCOUNT", value: (target) => target.accountName ?? target.connectionId ?? target.pageId ?? "—" },
   ]);
 }
@@ -226,8 +217,8 @@ async function runPause(id: string): Promise<void> {
     return;
   }
 
-  success(`Paused  ${formatId(idOf(recurring))}`);
-  printKeyValues([...summaryOf(recurring), ["resume", `adaptlypost recurring resume ${idOf(recurring)}`]]);
+  success(`Paused  ${formatId(recurring.id)}`);
+  printKeyValues([...summaryOf(recurring), ["resume", `adaptlypost recurring resume ${recurring.id}`]]);
 }
 
 async function runResume(id: string): Promise<void> {
@@ -238,7 +229,7 @@ async function runResume(id: string): Promise<void> {
     return;
   }
 
-  success(`Resumed  ${formatId(idOf(recurring))}`);
+  success(`Resumed  ${formatId(recurring.id)}`);
   printKeyValues(summaryOf(recurring));
 }
 
@@ -247,7 +238,7 @@ async function runDelete(id: string, options: GlobalOptions): Promise<void> {
     const recurring = await getRecurringPost(id);
     const platforms = platformsOf(recurring).join(" + ") || "no platforms";
     const proceed = await promptConfirm(
-      `Delete ${formatId(idOf(recurring))} (${recurring.status ?? "—"}, ${describeRecurrence(recurring)}, ${platforms}) and its upcoming scheduled post?`,
+      `Delete ${formatId(recurring.id)} (${recurring.status}, ${describeRecurrence(recurring)}, ${platforms}) and its upcoming scheduled post?`,
       { assumeYes: Boolean(options.yes) },
     );
     if (!proceed) {

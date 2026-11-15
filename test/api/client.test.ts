@@ -489,20 +489,20 @@ describe('request headers', () => {
   });
 });
 
-describe('platform config defaults', () => {
-  it('sends the documented imageLayout and WordPress status when the CLI left them out', async () => {
+describe('post bodies', () => {
+  it('leaves out the imageLayout and WordPress status the CLI did not set', async () => {
     await client.updatePost('post_9c3e1f', {
       facebookConfigs: [{ pageId: 'fb_1', postType: 'REEL' }],
       wordpressConfigs: [{ connectionId: 'wp_1', title: 'Hi' }],
     });
 
     expect(sent().body).toEqual({
-      facebookConfigs: [{ pageId: 'fb_1', postType: 'REEL', imageLayout: 'GRID' }],
-      wordpressConfigs: [{ connectionId: 'wp_1', title: 'Hi', status: 'PUBLISH' }],
+      facebookConfigs: [{ pageId: 'fb_1', postType: 'REEL' }],
+      wordpressConfigs: [{ connectionId: 'wp_1', title: 'Hi' }],
     });
   });
 
-  it('keeps values the CLI set, in bulk posts too', async () => {
+  it('keeps the values the CLI set, in bulk posts too', async () => {
     await client.bulkSchedulePosts({
       platforms: ['FACEBOOK'],
       timezone: 'UTC',

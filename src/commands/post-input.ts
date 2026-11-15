@@ -3,7 +3,6 @@ import { readFile, stat } from "node:fs/promises";
 import { basename, resolve as resolvePath } from "node:path";
 
 import { createUploadUrls } from "../api/client.js";
-import { requireField } from "../api/fields.js";
 import {
   ASPECT_RATIOS_BY_PLATFORM,
   CONTENT_TYPES,
@@ -1308,10 +1307,9 @@ export async function uploadLocalMedia(
       files: chunk.map((media) => ({ fileName: media.fileName, mimeType: media.mimeType })),
     });
 
-    const slots = minted.urls ?? [];
-    if (slots.length !== chunk.length) {
+    if (minted.urls.length !== chunk.length) {
       throw new CliError(
-        `Asked for ${chunk.length} upload URLs and got ${slots.length}.`,
+        `Asked for ${chunk.length} upload URLs and got ${minted.urls.length}.`,
         { exitCode: ExitCode.GENERIC },
       );
     }
@@ -1324,12 +1322,11 @@ export async function uploadLocalMedia(
         const index = cursor;
         cursor += 1;
         const media = chunk[index];
-        const slot = slots[index];
+        const slot = minted.urls[index];
         if (!media || !slot) continue;
-        const publicUrl = requireField(slot.publicUrl, "upload URL publicUrl");
-        await putMedia(requireField(slot.uploadUrl, "upload URL uploadUrl"), media);
-        publicByHash.set(media.hash, publicUrl);
-        options.onUploaded?.(media, publicUrl);
+        await putMedia(slot.uploadUrl, media);
+        publicByHash.set(media.hash, slot.publicUrl);
+        options.onUploaded?.(media, slot.publicUrl);
       }
     };
 
@@ -1378,18 +1375,16 @@ function routeAccounts(
       });
     }
 
-    const platform = requireField(account.platform, "account.platform");
-    const accountId = requireField(account.id, "account.id");
-    if (!resolved.includes(platform)) resolved.push(platform);
+    if (!resolved.includes(account.platform)) resolved.push(account.platform);
 
-    const field = CONNECTION_FIELD[platform];
+    const field = CONNECTION_FIELD[account.platform];
     const existing = (targets[field] as string[] | undefined) ?? [];
-    if (!existing.includes(accountId)) existing.push(accountId);
+    if (!existing.includes(account.id)) existing.push(account.id);
     Object.assign(targets, { [field]: existing });
 
-    const known = connectionsByPlatform.get(platform) ?? [];
-    if (!known.includes(accountId)) known.push(accountId);
-    connectionsByPlatform.set(platform, known);
+    const known = connectionsByPlatform.get(account.platform) ?? [];
+    if (!known.includes(account.id)) known.push(account.id);
+    connectionsByPlatform.set(account.platform, known);
   }
 
   return { targets, platforms: resolved, connectionsByPlatform };
@@ -1831,11 +1826,11 @@ function normalizePinterestBoardName(value: FrontmatterValue | undefined): strin
 /** Picks the board a name means: one exact match, else one match ignoring case. */
 export function pickPinterestBoard(boards: readonly PinterestBoard[], name: string, accountId: string): PinterestBoard {
   const wanted = name.trim();
-  const exact = boards.filter((board) => (board.name ?? "").trim() === wanted);
+  const exact = boards.filter((board) => board.name.trim() === wanted);
   const matches =
     exact.length > 0
       ? exact
-      : boards.filter((board) => (board.name ?? "").trim().toLowerCase() === wanted.toLowerCase());
+      : boards.filter((board) => board.name.trim().toLowerCase() === wanted.toLowerCase());
 
   const [only] = matches;
   if (matches.length === 1 && only) return only;

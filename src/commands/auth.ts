@@ -39,8 +39,7 @@ import {
 const TOKEN_PREFIX = PRODUCT.tokenPrefixes[0];
 
 function platformsOf(accounts: readonly SocialAccount[]): string[] {
-  const platforms = accounts.flatMap((account) => (account.platform ? [account.platform] : []));
-  return [...new Set(platforms)].sort();
+  return [...new Set(accounts.map((account) => account.platform))].sort();
 }
 
 export function describeAbilities(can: Me['can']): string {
@@ -145,7 +144,7 @@ export function registerAuthCommands(program: Command): void {
         quiet: globals.quiet === true,
       });
 
-      const { accounts = [] } = await listSocialAccounts();
+      const { accounts } = await listSocialAccounts();
       const platforms = platformsOf(accounts);
 
       saveProfile(name, { token, apiUrl, label: options.name }, { makeCurrent: true });
@@ -221,7 +220,7 @@ export function registerAuthCommands(program: Command): void {
     .action(async () => {
       const profile = resolveProfile();
       const me = await readMe();
-      const { accounts = [] } = await listSocialAccounts();
+      const { accounts } = await listSocialAccounts();
       const platforms = platformsOf(accounts);
       const rateLimit = getLastRateLimit();
       const expiresAt = me?.expiresAt ? new Date(me.expiresAt) : null;

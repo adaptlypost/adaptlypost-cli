@@ -1,5 +1,4 @@
 import { LONG_TIMEOUT_MS } from '../core/http.js';
-import { withBulkConfigDefaults, withConfigDefaults } from './post-bodies.js';
 import { callApi } from './transport.js';
 import type {
   AnalyticsBreakdownQuery,
@@ -128,7 +127,7 @@ export const validatePost = (createPostRequest: CreatePostRequest): Promise<Post
   callApi((api, options) => api.posts.validate(createPostRequest, options));
 
 export const updatePost = (postId: string, updatePostRequest: UpdatePostRequest): Promise<SocialPost> =>
-  callApi((api, options) => api.posts.update(postId, withConfigDefaults(updatePostRequest), options));
+  callApi((api, options) => api.posts.update(postId, updatePostRequest, options));
 
 export const deletePost = (postId: string): Promise<DeletedResponse> =>
   callApi((api, options) => api.posts.delete(postId, options));
@@ -151,12 +150,12 @@ export const retryFailedPlatforms = (
 export const bulkSchedulePosts = (
   bulkSchedulePostsRequest: BulkSchedulePostsRequest,
 ): Promise<BulkSchedulePostsResponse> =>
-  callApi((api, options) => api.posts.bulkSchedule(withBulkConfigDefaults(bulkSchedulePostsRequest), options));
+  callApi((api, options) => api.posts.bulkSchedule(bulkSchedulePostsRequest, options));
 
 export const validateBulkPosts = (
   bulkSchedulePostsRequest: BulkSchedulePostsRequest,
 ): Promise<BulkPostValidationReport> =>
-  callApi((api, options) => api.posts.validateBulk(withBulkConfigDefaults(bulkSchedulePostsRequest), options));
+  callApi((api, options) => api.posts.validateBulk(bulkSchedulePostsRequest, options));
 
 export const listRecurringPosts = (
   listRecurringPostsQuery: ListRecurringPostsQuery = {},

@@ -4,7 +4,6 @@ import { extname, join, resolve as resolvePath } from 'node:path';
 import type { Command } from 'commander';
 
 import { generateCaption, generateImage, getImageJob, refineCaption } from '../api/client.js';
-import { requireField } from '../api/fields.js';
 import {
   CAPTION_PLATFORMS,
   IMAGE_ASPECT_RATIOS,
@@ -160,8 +159,7 @@ async function runCaption(options: CaptionOptions): Promise<void> {
     return;
   }
 
-  const caption = requireField(response.caption, 'caption');
-  process.stdout.write(caption.endsWith('\n') ? caption : `${caption}\n`);
+  process.stdout.write(response.caption.endsWith('\n') ? response.caption : `${response.caption}\n`);
 }
 
 async function resolveReferences(references: string[], quiet: boolean | undefined): Promise<string[]> {
@@ -205,18 +203,17 @@ export async function waitForImage(jobId: string, timeoutMs: number, quiet?: boo
   try {
     for (;;) {
       const job = await getImageJob(jobId);
-      const status = requireField(job.status, 'image job status');
-      if (TERMINAL_IMAGE_STATUSES.has(status)) return job;
+      if (TERMINAL_IMAGE_STATUSES.has(job.status)) return job;
 
       if (Date.now() - startedAt >= timeoutMs) {
         throw networkError(
-          `Timed out after ${formatDuration(timeoutMs)} with the image still ${status}.`,
+          `Timed out after ${formatDuration(timeoutMs)} with the image still ${job.status}.`,
           undefined,
           `Check it later: ${PRODUCT.binName} ai image get ${jobId} --wait`,
         );
       }
 
-      progress?.update(`Generating image… ${status}, ${formatDuration(Date.now() - startedAt)}`);
+      progress?.update(`Generating image… ${job.status}, ${formatDuration(Date.now() - startedAt)}`);
       await sleep(IMAGE_POLL_INTERVAL_MS);
     }
   } finally {
@@ -224,7 +221,8 @@ export async function waitForImage(jobId: string, timeoutMs: number, quiet?: boo
   }
 }
 
-async function downloadImage(jobId: string, imageUrl: string, output: string): Promise<string> {
+async function downloadImage(job: ImageJob, output: string): Promise<string> {
+  const imageUrl = job.imageUrl as string;
 
   let response: Response;
   try {
@@ -243,7 +241,7 @@ async function downloadImage(jobId: string, imageUrl: string, output: string): P
   if (isDirectory) {
     const type = (response.headers.get('content-type') ?? '').split(';')[0]?.trim() ?? '';
     const extension = EXTENSION_BY_TYPE[type] ?? (extname(new URL(imageUrl).pathname) || '.png');
-    path = join(path, `${jobId}${extension}`);
+    path = join(path, `${job.jobId}${extension}`);
   }
 
   try {
@@ -258,7 +256,6 @@ async function downloadImage(jobId: string, imageUrl: string, output: string): P
 }
 
 async function finishImage(job: ImageJob, options: ImageWaitOptions): Promise<void> {
-  const jobId = requireField(job.jobId, 'image job id');
   if (job.status === 'failed') {
     if (isMachine()) printResult('ai.image', job);
     throw new CliError(job.error ?? 'The image generation failed.', {
@@ -267,19 +264,18 @@ async function finishImage(job: ImageJob, options: ImageWaitOptions): Promise<vo
     });
   }
 
-  const savedTo =
-    options.output !== undefined && job.imageUrl ? await downloadImage(jobId, job.imageUrl, options.output) : undefined;
+  const savedTo = options.output !== undefined && job.imageUrl ? await downloadImage(job, options.output) : undefined;
 
   if (isMachine()) {
     printResult('ai.image', job, savedTo ? { savedTo } : undefined);
     return;
   }
 
-  success(`Image ready  ${formatId(jobId)}`);
+  success(`Image ready  ${formatId(job.jobId)}`);
   printKeyValues([
     ['url', job.imageUrl ?? '—'],
     ...(savedTo ? [['saved', savedTo] as [string, string]] : []),
-    ['session', job.sessionId ?? '—'],
+    ['session', job.sessionId],
   ]);
 }
 
@@ -299,24 +295,23 @@ async function runImage(options: ImageOptions): Promise<void> {
   }
 
   const queued = await withProgress('Queueing image…', options.quiet, () => generateImage(request));
-  const queuedJobId = requireField(queued.jobId, 'image job id');
 
   if (!options.wait && options.output === undefined) {
     if (isMachine()) {
       printResult('ai.image', queued);
       return;
     }
-    success(`Image queued  ${formatId(queuedJobId)}`);
+    success(`Image queued  ${formatId(queued.jobId)}`);
     printKeyValues([
-      ['job', queuedJobId],
-      ['session', queued.sessionId ?? '—'],
-      ['status', queued.status ?? '—'],
+      ['job', queued.jobId],
+      ['session', queued.sessionId],
+      ['status', queued.status],
     ]);
-    hint(`Fetch it with: ${PRODUCT.binName} ai image get ${queuedJobId} --wait -o ./`);
+    hint(`Fetch it with: ${PRODUCT.binName} ai image get ${queued.jobId} --wait -o ./`);
     return;
   }
 
-  await finishImage(await waitForImage(queuedJobId, timeoutMs, options.quiet), options);
+  await finishImage(await waitForImage(queued.jobId, timeoutMs, options.quiet), options);
 }
 
 async function runImageGet(jobId: string, options: ImageWaitOptions): Promise<void> {
@@ -326,8 +321,7 @@ async function runImageGet(jobId: string, options: ImageWaitOptions): Promise<vo
       ? await waitForImage(jobId, timeoutMs, options.quiet)
       : await getImageJob(jobId);
 
-  const status = requireField(job.status, 'image job status');
-  if (TERMINAL_IMAGE_STATUSES.has(status)) {
+  if (TERMINAL_IMAGE_STATUSES.has(job.status)) {
     await finishImage(job, options);
     return;
   }
@@ -339,13 +333,13 @@ async function runImageGet(jobId: string, options: ImageWaitOptions): Promise<vo
 
   printKeyValues(
     [
-      ['job', job.jobId ?? jobId],
-      ['session', job.sessionId ?? '—'],
-      ['status', status],
+      ['job', job.jobId],
+      ['session', job.sessionId],
+      ['status', job.status],
     ],
     '',
   );
-  hint(`Still ${status}. Wait for it with: ${PRODUCT.binName} ai image get ${job.jobId ?? jobId} --wait`);
+  hint(`Still ${job.status}. Wait for it with: ${PRODUCT.binName} ai image get ${job.jobId} --wait`);
 }
 
 const withWaitOptions = (command: Command): Command =>

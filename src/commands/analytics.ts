@@ -20,7 +20,6 @@ import {
   type AnalyticsTimeseriesPoint,
   type DiscoveredPost,
   type PlatformBreakdown,
-  type PlatformSyncStatus,
   type PlatformType,
   type PostAnalytics,
 } from '../api/types.js';
@@ -186,25 +185,23 @@ export const formatCount = (value: number | null | undefined, digits = 0): strin
 export const formatRate = (value: number | null | undefined): string =>
   value === null || value === undefined || !Number.isFinite(value) ? '—' : `${value.toFixed(1)}%`;
 
-export const formatChange = (metric: AnalyticsMetricValue | undefined, isRate: boolean): string => {
-  const { value, previousValue, deltaPercent } = metric ?? {};
+export const formatChange = (metric: AnalyticsMetricValue, isRate: boolean): string => {
   if (isRate) {
-    if (value === null || value === undefined || previousValue === null || previousValue === undefined) return '—';
-    const points = value - previousValue;
+    if (metric.value === null || metric.previousValue === null) return '—';
+    const points = metric.value - metric.previousValue;
     return `${points >= 0 ? '+' : ''}${points.toFixed(1)}pp`;
   }
-  if (deltaPercent === null || deltaPercent === undefined) return '—';
-  return `${deltaPercent >= 0 ? '+' : ''}${deltaPercent.toFixed(1)}%`;
+  if (metric.deltaPercent === null) return '—';
+  return `${metric.deltaPercent >= 0 ? '+' : ''}${metric.deltaPercent.toFixed(1)}%`;
 };
 
-const relative = (iso: string | null | undefined): string => {
-  if (iso === null || iso === undefined) return '—';
+const relative = (iso: string | null): string => {
+  if (iso === null) return '—';
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? '—' : formatRelative(date);
 };
 
-const day = (iso: string | undefined): string => {
-  if (iso === undefined) return '—';
+const day = (iso: string): string => {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? iso : formatDate(date);
 };
@@ -231,7 +228,7 @@ const withProgress = async <T>(label: string, operation: () => Promise<T>): Prom
 
 interface OverviewRow {
   label: string;
-  metric: AnalyticsMetricValue | undefined;
+  metric: AnalyticsMetricValue;
   rate: boolean;
 }
 
@@ -240,13 +237,13 @@ const OVERVIEW_COLUMNS: Column<OverviewRow>[] = [
   {
     header: 'VALUE',
     align: 'right',
-    value: (row) => (row.rate ? formatRate(row.metric?.value) : formatCount(row.metric?.value)),
+    value: (row) => (row.rate ? formatRate(row.metric.value) : formatCount(row.metric.value)),
   },
   {
     header: 'PREVIOUS',
     align: 'right',
     value: (row) =>
-      row.rate ? formatRate(row.metric?.previousValue) : formatCount(row.metric?.previousValue),
+      row.rate ? formatRate(row.metric.previousValue) : formatCount(row.metric.previousValue),
   },
   { header: 'CHANGE', align: 'right', value: (row) => formatChange(row.metric, row.rate) },
 ];
@@ -281,9 +278,8 @@ const runOverview = async (options: RangeOptions): Promise<void> => {
 
   print();
 
-  const partialMetrics = overview.partialMetrics ?? [];
-  if (partialMetrics.length > 0) {
-    print(yellow(`! partial metrics: ${partialMetrics.join(', ')}`));
+  if (overview.partialMetrics.length > 0) {
+    print(yellow(`! partial metrics: ${overview.partialMetrics.join(', ')}`));
   }
 
   print(dim(`last synced ${relative(overview.lastSyncedAt)}`));
@@ -330,7 +326,7 @@ const TIMESERIES_COLUMNS: Column<AnalyticsTimeseriesPoint>[] = [
 
 const runTimeseries = async (options: TimeseriesOptions): Promise<void> => {
   const range = resolveDateRange(options.from, options.to);
-  const { points = [] } = await withProgress('Loading timeseries…', () =>
+  const { points } = await withProgress('Loading timeseries…', () =>
     getAnalyticsTimeseries({
       ...range,
       granularity: options.granularity,
@@ -363,7 +359,7 @@ const runTimeseries = async (options: TimeseriesOptions): Promise<void> => {
   const width = Math.max(...TIMESERIES_METRICS.map((metric) => metric.label.length));
 
   for (const metric of TIMESERIES_METRICS) {
-    const series = points.map((point) => point[metric.key] ?? null);
+    const series = points.map((point) => point[metric.key]);
     const line = sparkline(series);
     if (line === '') continue;
 
@@ -372,22 +368,22 @@ const runTimeseries = async (options: TimeseriesOptions): Promise<void> => {
 };
 
 const BREAKDOWN_COLUMNS: Column<PlatformBreakdown>[] = [
-  { header: 'PLATFORM', value: (row) => row.platform ?? '—' },
-  { header: 'FOLLOWERS', align: 'right', value: (row) => formatCount(row.followers?.value) },
-  { header: 'VIEWS', align: 'right', value: (row) => formatCount(row.views?.value) },
-  { header: 'LIKES', align: 'right', value: (row) => formatCount(row.likes?.value) },
-  { header: 'COMMENTS', align: 'right', value: (row) => formatCount(row.comments?.value) },
-  { header: 'SHARES', align: 'right', value: (row) => formatCount(row.shares?.value) },
-  { header: 'POSTS', align: 'right', value: (row) => formatCount(row.postsCount?.value) },
-  { header: 'AVG VIEWS', align: 'right', value: (row) => formatCount(row.avgViewsPerPost?.value) },
-  { header: 'ENG', align: 'right', value: (row) => formatRate(row.engagementRate?.value) },
+  { header: 'PLATFORM', value: (row) => row.platform },
+  { header: 'FOLLOWERS', align: 'right', value: (row) => formatCount(row.followers.value) },
+  { header: 'VIEWS', align: 'right', value: (row) => formatCount(row.views.value) },
+  { header: 'LIKES', align: 'right', value: (row) => formatCount(row.likes.value) },
+  { header: 'COMMENTS', align: 'right', value: (row) => formatCount(row.comments.value) },
+  { header: 'SHARES', align: 'right', value: (row) => formatCount(row.shares.value) },
+  { header: 'POSTS', align: 'right', value: (row) => formatCount(row.postsCount.value) },
+  { header: 'AVG VIEWS', align: 'right', value: (row) => formatCount(row.avgViewsPerPost.value) },
+  { header: 'ENG', align: 'right', value: (row) => formatRate(row.engagementRate.value) },
 ];
 
 const runBreakdown = async (options: RangeOptions): Promise<void> => {
   assertBreakdownHasNoPlatformFilter(options.platform);
 
   const range = resolveDateRange(options.from, options.to);
-  const { platforms = [] } = await withProgress('Loading platform breakdown…', () =>
+  const { platforms } = await withProgress('Loading platform breakdown…', () =>
     getPlatformBreakdown({ ...range, connectionIds: connectionIdsOf(options) }),
   );
 
@@ -413,25 +409,23 @@ const runBreakdown = async (options: RangeOptions): Promise<void> => {
   print(`${platforms.length} ${platforms.length === 1 ? 'platform' : 'platforms'}`);
 
   for (const item of platforms) {
-    const platform = item.platform ?? '—';
-    const supportedMetrics = item.supportedMetrics ?? [];
-    if (supportedMetrics.length === 0) {
-      print(dim(`${platform} reports no analytics`));
+    if (item.supportedMetrics.length === 0) {
+      print(dim(`${item.platform} reports no analytics`));
       continue;
     }
-    print(dim(`${platform} reports ${supportedMetrics.join(', ')}`));
+    print(dim(`${item.platform} reports ${item.supportedMetrics.join(', ')}`));
   }
 };
 
 const POSTS_COLUMNS: Column<PostAnalytics>[] = [
-  { header: 'ID', value: (post) => (post.id === undefined ? '—' : formatId(post.id)) },
-  { header: 'PLATFORM', value: (post) => post.platform ?? '—' },
+  { header: 'ID', value: (post) => formatId(post.id) },
+  { header: 'PLATFORM', value: (post) => post.platform },
   { header: 'PUBLISHED', value: (post) => day(post.publishedAt) },
-  { header: 'VIEWS', align: 'right', value: (post) => formatCount(post.metrics?.views) },
-  { header: 'LIKES', align: 'right', value: (post) => formatCount(post.metrics?.likes) },
-  { header: 'COMMENTS', align: 'right', value: (post) => formatCount(post.metrics?.comments) },
-  { header: 'SHARES', align: 'right', value: (post) => formatCount(post.metrics?.shares) },
-  { header: 'ENG', align: 'right', value: (post) => formatRate(post.metrics?.engagementRate) },
+  { header: 'VIEWS', align: 'right', value: (post) => formatCount(post.metrics.views) },
+  { header: 'LIKES', align: 'right', value: (post) => formatCount(post.metrics.likes) },
+  { header: 'COMMENTS', align: 'right', value: (post) => formatCount(post.metrics.comments) },
+  { header: 'SHARES', align: 'right', value: (post) => formatCount(post.metrics.shares) },
+  { header: 'ENG', align: 'right', value: (post) => formatRate(post.metrics.engagementRate) },
   { header: 'TITLE', value: (post) => post.title ?? post.accountName ?? '—' },
 ];
 
@@ -463,9 +457,9 @@ const runPosts = async (options: PostsOptions): Promise<void> => {
         }),
     );
 
-    collected.push(...(response.posts ?? []));
-    total = response.total ?? 0;
-    hasMore = response.hasMore ?? false;
+    collected.push(...response.posts);
+    total = response.total;
+    hasMore = response.hasMore;
     requests += 1;
     page += 1;
   } while (options.all && hasMore && requests < MAX_POST_PAGES);
@@ -506,7 +500,7 @@ const runPosts = async (options: PostsOptions): Promise<void> => {
 const runTop = async (options: TopOptions): Promise<void> => {
   const range = resolveDateRange(options.from, options.to);
   const limit = validateLimit(Number(options.limit ?? DEFAULT_TOP_LIMIT), 1, MAX_TOP_LIMIT);
-  const { posts = [] } = await withProgress('Loading top posts…', () =>
+  const { posts } = await withProgress('Loading top posts…', () =>
     listTopPosts({
       ...range,
       platforms: platformsOf(options),
@@ -540,10 +534,10 @@ const runTop = async (options: TopOptions): Promise<void> => {
   print(`${posts.length} ${posts.length === 1 ? 'post' : 'posts'}`);
 };
 
-const oneLine = (text: string | null | undefined): string => (text ?? '').replace(/\s+/g, ' ').trim() || '—';
+const oneLine = (text: string | null): string => (text ?? '').replace(/\s+/g, ' ').trim() || '—';
 
 const DISCOVERED_COLUMNS: Column<DiscoveredPost>[] = [
-  { header: 'PLATFORM', value: (post) => post.platform ?? '—' },
+  { header: 'PLATFORM', value: (post) => post.platform },
   { header: 'PUBLISHED', value: (post) => day(post.publishedAt) },
   { header: 'ACCOUNT', value: (post) => post.accountName ?? '—' },
   { header: 'TEXT', value: (post) => oneLine(post.text) },
@@ -553,7 +547,7 @@ const DISCOVERED_COLUMNS: Column<DiscoveredPost>[] = [
 const runDiscovered = async (options: DiscoveredOptions): Promise<void> => {
   const range = resolveDateRange(options.from, options.to);
   const limit = validateLimit(Number(options.limit ?? DEFAULT_DISCOVERED_LIMIT), 1, MAX_DISCOVERED_LIMIT);
-  const { posts = [] } = await withProgress('Loading discovered posts…', () =>
+  const { posts } = await withProgress('Loading discovered posts…', () =>
     listDiscoveredPosts({ ...range, platforms: platformsOf(options), connectionIds: connectionIdsOf(options), limit }),
   );
 
@@ -579,10 +573,10 @@ const runDiscovered = async (options: DiscoveredOptions): Promise<void> => {
   }
 };
 
-const SYNC_COLUMNS: Column<PlatformSyncStatus>[] = [
-  { header: 'PLATFORM', value: (row) => row.platform ?? '—' },
+const SYNC_COLUMNS: Column<AnalyticsSyncStatus['platforms'][number]>[] = [
+  { header: 'PLATFORM', value: (row) => row.platform },
   { header: 'ACCOUNT', value: (row) => row.accountName ?? '—' },
-  { header: 'STATUS', value: (row) => (row.status === 'FAILED' ? yellow(row.status) : (row.status ?? '—')) },
+  { header: 'STATUS', value: (row) => (row.status === 'FAILED' ? yellow(row.status) : row.status) },
   { header: 'LAST SYNC', value: (row) => relative(row.lastSyncedAt) },
   { header: 'DISCOVERY', value: (row) => relative(row.lastDiscoveryAt) },
   {
@@ -597,30 +591,27 @@ const SYNC_COLUMNS: Column<PlatformSyncStatus>[] = [
 const renderSyncStatus = (status: AnalyticsSyncStatus): void => {
   printKeyValues(
     [
-      ['workspace', status.accountGroupId ?? '—'],
+      ['workspace', status.accountGroupId],
       ['syncing', status.syncInProgress ? 'yes' : 'no'],
       ['last sync', relative(status.lastSyncedAt)],
       [
         'history',
-        status.historyHorizonAt === null || status.historyHorizonAt === undefined
-          ? '—'
-          : `back to ${day(status.historyHorizonAt)}`,
+        status.historyHorizonAt === null ? '—' : `back to ${day(status.historyHorizonAt)}`,
       ],
     ],
     '',
   );
 
-  const platforms = status.platforms ?? [];
-  if (platforms.length === 0) {
+  if (status.platforms.length === 0) {
     print();
     print('No connected accounts to sync.');
     return;
   }
 
   print();
-  printTable(platforms, SYNC_COLUMNS);
+  printTable(status.platforms, SYNC_COLUMNS);
 
-  const reconnect = platforms.filter((platform) => platform.needsAnalyticsReconnect);
+  const reconnect = status.platforms.filter((platform) => platform.needsAnalyticsReconnect);
   if (reconnect.length > 0) {
     print();
     print(yellow(`! ${reconnect.length} account(s) need reconnecting before analytics can sync`));
@@ -669,9 +660,6 @@ const waitForSync = async (): Promise<AnalyticsSyncStatus> => {
   }
 };
 
-const withMessage = (lead: string, message: string | undefined): string =>
-  message === undefined ? lead : `${lead} ${message}`;
-
 const runSync = async (options: SyncOptions): Promise<void> => {
   const result = await withProgress('Queueing sync…', triggerAnalyticsSync);
 
@@ -681,12 +669,12 @@ const runSync = async (options: SyncOptions): Promise<void> => {
       return;
     }
 
-    const cooldown = result.cooldownSecondsRemaining ?? null;
+    const cooldown = result.cooldownSecondsRemaining;
     print(
       yellow(
         cooldown !== null && cooldown > 0
           ? `! Not queued. A sync ran recently; try again in ${formatDuration(cooldown * 1000)}.`
-          : withMessage('! Not queued.', result.message),
+          : `! Not queued. ${result.message}`,
       ),
     );
     return;
@@ -698,7 +686,7 @@ const runSync = async (options: SyncOptions): Promise<void> => {
       return;
     }
 
-    print(withMessage('✓ Sync queued.', result.message));
+    print(`✓ Sync queued. ${result.message}`);
     hint('follow it: adaptlypost analytics sync-status');
     return;
   }

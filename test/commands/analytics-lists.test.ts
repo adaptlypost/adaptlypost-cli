@@ -84,6 +84,7 @@ describe('analytics discovered', () => {
         text: 'Posted from the app',
         thumbnailUrl: null,
         permalink: 'https://instagram.com/p/1',
+        connectionId: 'ig_conn_1',
         accountName: 'acme',
       },
     ];
