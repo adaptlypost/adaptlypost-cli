@@ -1,16 +1,72 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-const { request } = vi.hoisted(() => ({ request: vi.fn() }));
-
-vi.mock('../../src/core/http.js', () => ({ request }));
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import * as client from '../../src/api/client.js';
+import type { ResolvedProfile } from '../../src/core/config.js';
+import { configureHttp, resetHttp } from '../../src/core/http.js';
 
-const lastCall = () => request.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+const profile: ResolvedProfile = {
+  name: 'default',
+  token: 'adaptly_ab12cd34',
+  tokenSource: 'credentials',
+  apiUrl: 'https://post.example.test/post/api/v1',
+  defaults: {},
+};
+
+const fetchMock = vi.fn<typeof fetch>();
+
+interface SentRequest {
+  method: string;
+  path: string;
+  query?: Record<string, string | string[]>;
+  body?: unknown;
+}
+
+function sent(index = -1): SentRequest {
+  const call = fetchMock.mock.calls.at(index);
+  if (!call) throw new Error('fetch was not called');
+  const [input, init] = call;
+  const url = new URL(String(input));
+  const query: Record<string, string | string[]> = {};
+  for (const key of new Set(url.searchParams.keys())) {
+    const values = url.searchParams.getAll(key);
+    query[key] = values.length > 1 ? values : values[0];
+  }
+  return {
+    method: init?.method ?? 'GET',
+    path: url.pathname.replace('/post/api/v1', ''),
+    ...(Object.keys(query).length > 0 && { query }),
+    ...(typeof init?.body === 'string' && { body: JSON.parse(init.body) }),
+  };
+}
+
+function expectedRequest(expected: Record<string, unknown>): SentRequest {
+  const { method, path, query, body } = expected;
+  const flat: Record<string, string | string[]> = {};
+  if (query && typeof query === 'object') {
+    for (const [key, value] of Object.entries(query)) {
+      flat[key] = Array.isArray(value) ? (value.length > 1 ? value.map(String) : String(value[0])) : String(value);
+    }
+  }
+  return {
+    method: String(method),
+    path: String(path),
+    ...(Object.keys(flat).length > 0 && { query: flat }),
+    ...(body !== undefined && { body }),
+  };
+}
 
 beforeEach(() => {
-  request.mockReset();
-  request.mockResolvedValue({ ok: true });
+  fetchMock.mockReset();
+  fetchMock.mockImplementation(async () =>
+    new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  configureHttp({ profile, sleep: async () => undefined });
+});
+
+afterEach(() => {
+  resetHttp();
+  vi.unstubAllGlobals();
 });
 
 describe('endpoint mapping', () => {
@@ -27,7 +83,6 @@ describe('endpoint mapping', () => {
       {
         method: 'POST',
         path: '/social-accounts/fb_page_91c/check',
-        idempotent: true,
       },
     ],
     [
@@ -362,7 +417,7 @@ describe('endpoint mapping', () => {
     [
       'triggerAnalyticsSync',
       () => client.triggerAnalyticsSync(),
-      { method: 'POST', path: '/analytics/sync', idempotent: true },
+      { method: 'POST', path: '/analytics/sync' },
     ],
     [
       'generateCaption',
@@ -405,8 +460,8 @@ describe('endpoint mapping', () => {
   it.each(cases)('%s', async (_name, call, expected) => {
     await call();
 
-    expect(request).toHaveBeenCalledTimes(1);
-    expect(lastCall()).toEqual(expected);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(sent()).toEqual(expectedRequest(expected));
   });
 });
 
@@ -414,25 +469,77 @@ describe('path building', () => {
   it('encodes ids into a single path segment', async () => {
     await client.getPost('post 9c3e/1f');
 
-    expect(lastCall().path).toBe('/social-posts/post%209c3e%2F1f');
+    expect(String(fetchMock.mock.calls[0][0])).toBe(
+      'https://post.example.test/post/api/v1/social-posts/post%209c3e%2F1f',
+    );
+  });
+});
+
+describe('request headers', () => {
+  it('sends the token, language, workspace and user agent', async () => {
+    configureHttp({ profile: { ...profile, workspaceId: 'ws_9c3e1f' }, language: 'fr' });
+
+    await client.listSocialAccounts();
+
+    const headers = new Headers(fetchMock.mock.calls[0][1]?.headers);
+    expect(headers.get('authorization')).toBe('Bearer adaptly_ab12cd34');
+    expect(headers.get('x-language')).toBe('fr');
+    expect(headers.get('x-workspace-id')).toBe('ws_9c3e1f');
+    expect(headers.get('user-agent')).toMatch(/-cli\//);
+  });
+});
+
+describe('post bodies', () => {
+  it('leaves out the imageLayout and WordPress status the CLI did not set', async () => {
+    await client.updatePost('post_9c3e1f', {
+      facebookConfigs: [{ pageId: 'fb_1', postType: 'REEL' }],
+      wordpressConfigs: [{ connectionId: 'wp_1', title: 'Hi' }],
+    });
+
+    expect(sent().body).toEqual({
+      facebookConfigs: [{ pageId: 'fb_1', postType: 'REEL' }],
+      wordpressConfigs: [{ connectionId: 'wp_1', title: 'Hi' }],
+    });
   });
 
-  it('never sends an absolute url as the path', async () => {
-    await client.listSocialAccounts();
-    await client.listWebhooks();
-    await client.getAnalyticsSyncStatus();
+  it('keeps the values the CLI set, in bulk posts too', async () => {
+    await client.bulkSchedulePosts({
+      platforms: ['FACEBOOK'],
+      timezone: 'UTC',
+      pageIds: ['fb_1'],
+      facebookConfigs: [{ pageId: 'fb_1', imageLayout: 'CAROUSEL' }],
+      posts: [
+        {
+          contentType: 'TEXT',
+          scheduledAt: '2026-09-19T09:00:00Z',
+          wordpressConfigs: [{ connectionId: 'wp_1', status: 'DRAFT' }],
+        },
+      ],
+    });
 
-    for (const [opts] of request.mock.calls) {
-      expect(opts.path).toMatch(/^\//);
-    }
+    expect(sent().body).toEqual({
+      platforms: ['FACEBOOK'],
+      timezone: 'UTC',
+      pageIds: ['fb_1'],
+      facebookConfigs: [{ pageId: 'fb_1', imageLayout: 'CAROUSEL' }],
+      posts: [
+        {
+          contentType: 'TEXT',
+          scheduledAt: '2026-09-19T09:00:00Z',
+          wordpressConfigs: [{ connectionId: 'wp_1', status: 'DRAFT' }],
+        },
+      ],
+    });
   });
 });
 
 describe('return value', () => {
-  it('passes the parsed response through untouched', async () => {
+  it('passes the parsed response through', async () => {
     const accounts = { accounts: [{ id: 'ig_7f2a' }] };
-    request.mockResolvedValueOnce(accounts);
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify(accounts), { status: 200, headers: { 'content-type': 'application/json' } }),
+    );
 
-    await expect(client.listSocialAccounts()).resolves.toBe(accounts);
+    await expect(client.listSocialAccounts()).resolves.toEqual(accounts);
   });
 });

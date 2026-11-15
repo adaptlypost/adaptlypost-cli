@@ -155,8 +155,8 @@ describe('accounts instagram-audio', () => {
 
   it('formats the audio type, artist and length', () => {
     expect(normalizeAudioType('Original Sound')).toBe('original_sound');
-    expect(audioArtist({ audioId: '1', audioType: 'original_sound', igUsername: 'ada' })).toBe('@ada');
-    expect(audioArtist({ audioId: '1', audioType: 'music', displayArtist: 'Ada' })).toBe('Ada');
+    expect(audioArtist({ audioId: '1', audioType: 'original_sound', title: 'Original audio', igUsername: 'ada' })).toBe('@ada');
+    expect(audioArtist({ audioId: '1', audioType: 'music', title: 'Morning Run', displayArtist: 'Ada' })).toBe('Ada');
     expect(formatAudioLength(65_400)).toBe('1:05');
     expect(formatAudioLength(undefined)).toBe('—');
   });

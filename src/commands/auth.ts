@@ -1,6 +1,7 @@
 import type { Command } from 'commander';
 
 import { getMe, listSocialAccounts } from '../api/client.js';
+import { getLastRateLimit } from '../api/transport.js';
 import type { Me, SocialAccount } from '../api/types.js';
 import {
   ApiError,
@@ -14,7 +15,6 @@ import {
   describeTokenSource,
   formatTimestamp,
   getGlobalOptions,
-  getLastRateLimit,
   getProfile,
   hint,
   isDebugEnabled,

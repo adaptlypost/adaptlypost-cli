@@ -1,6 +1,8 @@
 import { Command } from 'commander';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { ConnectLink } from '../../src/api/types.js';
+
 vi.mock('../../src/api/client.js', () => ({
   createConnectLink: vi.fn(),
   revokeConnectLink: vi.fn(),
@@ -38,7 +40,17 @@ beforeEach(() => {
 
 describe('connect create', () => {
   it('creates a link and prints it unmodified', async () => {
-    const link = { url: 'https://adaptlypost.com/connect/tok_1', token: 'tok_1', expiresAt: '2026-10-01T00:00:00.000Z' };
+    const link: ConnectLink = {
+      url: 'https://adaptlypost.com/connect/tok_1',
+      token: 'tok_1',
+      expiresAt: '2026-10-01T00:00:00.000Z',
+      name: null,
+      visibility: 'PUBLIC',
+      allowedPlatforms: [],
+      maxAccounts: null,
+      returnUrl: null,
+      startUrls: [],
+    };
     vi.mocked(client.createConnectLink).mockResolvedValue(link);
 
     await run(['connect', 'create']);
@@ -52,6 +64,12 @@ describe('connect create', () => {
       url: 'https://adaptlypost.com/connect/tok_2',
       token: 'tok_2',
       expiresAt: '2026-11-30T17:00:00.000Z',
+      name: 'Acme onboarding',
+      visibility: 'PRIVATE',
+      allowedPlatforms: ['INSTAGRAM', 'TIKTOK'],
+      maxAccounts: 3,
+      returnUrl: null,
+      startUrls: [],
     });
 
     await run([
@@ -75,7 +93,17 @@ describe('connect create', () => {
   });
 
   it('asks for a link that never expires and prints its null expiry', async () => {
-    const link = { url: 'https://adaptlypost.com/connect/tok_3', token: 'tok_3', expiresAt: null };
+    const link: ConnectLink = {
+      url: 'https://adaptlypost.com/connect/tok_3',
+      token: 'tok_3',
+      expiresAt: null,
+      name: null,
+      visibility: 'PUBLIC',
+      allowedPlatforms: [],
+      maxAccounts: null,
+      returnUrl: null,
+      startUrls: [],
+    };
     vi.mocked(client.createConnectLink).mockResolvedValue(link);
 
     await run(['connect', 'create', '--never-expires']);

@@ -1774,9 +1774,14 @@ interface BulkRow {
   configs: PostInput["platformConfigs"];
 }
 
-function refuseDocumentRows(rows: BulkRow[]): void {
-  for (const row of rows) {
-    if (row.item.contentType === "DOCUMENT" || row.configs?.LINKEDIN) {
+interface BulkRowDraft extends Omit<BulkRow, "item"> {
+  item: Omit<BulkPostInput, "contentType"> & { contentType: ContentType };
+}
+
+function refuseDocumentRows(rows: BulkRowDraft[]): BulkRow[] {
+  return rows.map((row) => {
+    const { contentType } = row.item;
+    if (contentType === "DOCUMENT" || row.configs?.LINKEDIN) {
       throw new CliError(`Row ${row.line}: LinkedIn document posts and reshares cannot be bulk scheduled.`, {
         exitCode: ExitCode.VALIDATION,
         hint: 'Create each one with "adaptlypost post create --type DOCUMENT" or "--li-reshare"',
@@ -1788,7 +1793,8 @@ function refuseDocumentRows(rows: BulkRow[]): void {
         hint: 'Create each one with "adaptlypost post create --x-quote"',
       });
     }
-  }
+    return { ...row, item: { ...row.item, contentType } };
+  });
 }
 
 const PLATFORM_COLUMN_PREFIXES = [
@@ -1840,7 +1846,7 @@ function bulkRowFromRecord(
   record: Record<string, string>,
   line: number,
   timezone: string,
-): BulkRow {
+): BulkRowDraft {
   const text = (record.text ?? "").trim();
   const mediaRefs = splitList(record.media);
   const alt = splitList(record.alt);
@@ -1973,7 +1979,7 @@ function bulkRowFromRecord(
     }
   }
 
-  const item: BulkPostInput = { contentType, scheduledAt };
+  const item: BulkRowDraft["item"] = { contentType, scheduledAt };
   if (text !== "") item.text = text;
   if (alt.length > 0) item.mediaAltTexts = alt;
   if (platformTexts.length > 0) item.platformTexts = platformTexts;
@@ -2010,14 +2016,14 @@ function bulkRowFromRecord(
   return { line, item, mediaRefs, configs: Object.keys(configs).length > 0 ? configs : undefined };
 }
 
-async function rowsFromDirectory(path: string, timezone: string): Promise<BulkRow[]> {
+async function rowsFromDirectory(path: string, timezone: string): Promise<BulkRowDraft[]> {
   const entries = (await readdir(path)).filter((name) => /\.(md|markdown)$/i.test(name)).sort();
 
   if (entries.length === 0) {
     throw new CliError(`No markdown files in ${path}.`, { exitCode: ExitCode.USAGE });
   }
 
-  const rows: BulkRow[] = [];
+  const rows: BulkRowDraft[] = [];
 
   for (const [index, name] of entries.entries()) {
     const input = parsePostInput(await readSource(join(path, name)));
@@ -2046,7 +2052,7 @@ async function rowsFromDirectory(path: string, timezone: string): Promise<BulkRo
       assertConfigKeys(platform as PlatformType, config, `${name}: `);
     }
 
-    const item: BulkPostInput = {
+    const item: BulkRowDraft["item"] = {
       contentType: input.contentType ?? inferContentTypeFromReferences(input.media ?? []),
       scheduledAt: toIso(parseWhen(input.at, { timezone: input.timezone ?? timezone })),
     };
@@ -2105,24 +2111,24 @@ async function runBulk(options: BulkOptions): Promise<void> {
     return;
   }
 
-  let rows: BulkRow[];
+  let drafts: BulkRowDraft[];
   let sourceLabel: string;
 
   if (options.csv !== undefined) {
     const table = readCsv(await readSource(options.csv), { strict: false });
     readBulkColumns(table.headers);
-    rows = table.records.map((record) => bulkRowFromRecord(record.record, record.line, timezone));
+    drafts = table.records.map((record) => bulkRowFromRecord(record.record, record.line, timezone));
     sourceLabel = options.csv === "-" ? "stdin" : options.csv;
   } else {
-    rows = await rowsFromDirectory(options.dir as string, timezone);
+    drafts = await rowsFromDirectory(options.dir as string, timezone);
     sourceLabel = options.dir as string;
   }
 
-  if (rows.length === 0) {
+  if (drafts.length === 0) {
     throw new CliError("Nothing to schedule.", { exitCode: ExitCode.VALIDATION });
   }
 
-  refuseDocumentRows(rows);
+  const rows = refuseDocumentRows(drafts);
 
   if (!isMachine()) print(`Read ${rows.length} rows from ${sourceLabel}`);
 

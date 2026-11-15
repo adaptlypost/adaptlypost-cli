@@ -2222,7 +2222,9 @@ export function validateDocumentPost(
   }
 }
 
-function buildRecurrence(input: PostInput, body: CreatePostRequest): Recurrence | undefined {
+type RoutedPostRequest = CreatePostRequest & Required<Pick<CreatePostRequest, "platforms">>;
+
+function buildRecurrence(input: PostInput, body: RoutedPostRequest): Recurrence | undefined {
   const recurrence = input.recurrence;
   if (!recurrence || Object.values(recurrence).every((value) => value === undefined)) return undefined;
 
@@ -2315,7 +2317,7 @@ export function buildPostBody(
     ([platform, text]) => ({ platform: platform as PlatformType, text }),
   );
 
-  const body: CreatePostRequest = {
+  const body: RoutedPostRequest = {
     platforms: routing.platforms,
     contentType,
     timezone: input.timezone ?? "UTC",

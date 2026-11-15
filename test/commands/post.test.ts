@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { PostValidationReport, SocialAccount } from "../../src/api/types.js";
+import type { PostValidationReport, SocialAccount, SocialPostPlatform } from "../../src/api/types.js";
 
 vi.mock("../../src/api/client.js", () => ({
   listPosts: vi.fn(),
@@ -26,6 +26,19 @@ vi.mock("../../src/api/client.js", () => ({
 }));
 
 const client = await import("../../src/api/client.js");
+
+const PLATFORM_ROW_DEFAULTS = {
+  mediaOverrideUrls: [],
+  mediaOverrideAltTexts: [],
+  threadReplies: [],
+  threadReplyMediaUrls: [],
+  threadReplyIds: [],
+  twitterKeepLinks: false,
+  tumblrTags: [],
+  wordpressCategoryIds: [],
+  wordpressTags: [],
+  wordpressStatus: "PUBLISH",
+} satisfies Partial<SocialPostPlatform>;
 const { registerPostCommands } = await import("../../src/commands/post.js");
 const { initOutput, setOutputMode } = await import("../../src/core/output.js");
 
@@ -128,7 +141,7 @@ describe("the post command tree", () => {
 describe("post list", () => {
   it("passes the filters through and prints the machine document", async () => {
     vi.mocked(client.listPosts).mockResolvedValue({
-      posts: [{ id: "post_1", status: "SCHEDULED", contentType: "TEXT", timezone: "UTC", mediaUrls: [], platforms: [], createdAt: "", updatedAt: "", userId: "u" }],
+      posts: [{ id: "post_1", status: "SCHEDULED", contentType: "TEXT", timezone: "UTC", mediaUrls: [], platforms: [], createdAt: "", updatedAt: "", userId: "u", mediaRetained: true }],
       total: 47,
       hasMore: true,
     });
@@ -518,14 +531,14 @@ describe("post update", () => {
       timezone: "UTC",
       mediaUrls: ["https://cdn/hero.png"],
       platforms: [
-        { id: "pp_1", platform: "TWITTER", status: "PENDING", connectionId: "tw_4d1b", text: "Short launch", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
-        { id: "pp_2", platform: "INSTAGRAM", status: "PENDING", connectionId: "ig_7c3e", instagramPostType: "FEED", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
-        { id: "pp_3", platform: "FACEBOOK", status: "PENDING", pageId: "fb_page_1", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
-        { id: "pp_4", platform: "TIKTOK", status: "PENDING", connectionId: "tt_1", tiktokPrivacyLevel: "SELF_ONLY", tiktokAllowDuet: false, mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
+        { ...PLATFORM_ROW_DEFAULTS, id: "pp_1", platform: "TWITTER", status: "PENDING", connectionId: "tw_4d1b", text: "Short launch", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
+        { ...PLATFORM_ROW_DEFAULTS, id: "pp_2", platform: "INSTAGRAM", status: "PENDING", connectionId: "ig_7c3e", instagramPostType: "FEED", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
+        { ...PLATFORM_ROW_DEFAULTS, id: "pp_3", platform: "FACEBOOK", status: "PENDING", pageId: "fb_page_1", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
+        { ...PLATFORM_ROW_DEFAULTS, id: "pp_4", platform: "TIKTOK", status: "PENDING", connectionId: "tt_1", tiktokPrivacyLevel: "SELF_ONLY", tiktokAllowDuet: false, mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u",
+      userId: "u", mediaRetained: true,
     });
 
     await run(["post", "update", "post_1", "--alt", "The CLI in a dark terminal", "--print-body"]);
@@ -552,11 +565,11 @@ describe("post update", () => {
       timezone: "UTC",
       mediaUrls: ["https://cdn/hero.png"],
       platforms: [
-        { id: "pp_1", platform: "LINKEDIN", status: "PENDING", connectionId: "li_22aa", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
+        { ...PLATFORM_ROW_DEFAULTS, id: "pp_1", platform: "LINKEDIN", status: "PENDING", connectionId: "li_22aa", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u",
+      userId: "u", mediaRetained: true,
     });
     const file = join(workspace, "update-alt.md");
     writeFileSync(file, ["---", 'alt: ["A chart going up"]', "---", ""].join("\n"));
@@ -602,7 +615,7 @@ describe("post update", () => {
       platforms: [],
       createdAt: "",
       updatedAt: "",
-      userId: "u",
+      userId: "u", mediaRetained: true,
     });
 
     await run(["post", "update", "post_1", "-t", "new text"]);
@@ -688,7 +701,7 @@ describe("post unschedule", () => {
       platforms: [],
       createdAt: "",
       updatedAt: "",
-      userId: "u",
+      userId: "u", mediaRetained: true,
     });
 
     await run(["post", "unschedule", "post_1"]);
@@ -937,12 +950,12 @@ describe("post watch", () => {
       timezone: "UTC",
       mediaUrls: [],
       platforms: [
-        { id: "pp_1", platform: "TWITTER", status: "PENDING", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
-        { id: "pp_2", platform: "LINKEDIN", status: "PENDING", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
+        { ...PLATFORM_ROW_DEFAULTS, id: "pp_1", platform: "TWITTER", status: "PENDING", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
+        { ...PLATFORM_ROW_DEFAULTS, id: "pp_2", platform: "LINKEDIN", status: "PENDING", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u",
+      userId: "u", mediaRetained: true,
     });
 
     vi.mocked(client.listPostResults).mockResolvedValue({
@@ -969,7 +982,7 @@ describe("post watch", () => {
       platforms: [],
       createdAt: "",
       updatedAt: "",
-      userId: "u",
+      userId: "u", mediaRetained: true,
     });
 
     vi.mocked(client.listPostResults).mockResolvedValue({
@@ -1753,6 +1766,7 @@ describe("per-platform options on create, update and bulk", () => {
       mediaUrls: ["https://cdn/reel.mp4"],
       platforms: [
         {
+          ...PLATFORM_ROW_DEFAULTS,
           id: "pp_1",
           platform: "INSTAGRAM",
           status: "PENDING",
@@ -1770,6 +1784,7 @@ describe("per-platform options on create, update and bulk", () => {
           updatedAt: "",
         },
         {
+          ...PLATFORM_ROW_DEFAULTS,
           id: "pp_2",
           platform: "INSTAGRAM",
           status: "PENDING",
@@ -1782,6 +1797,7 @@ describe("per-platform options on create, update and bulk", () => {
           updatedAt: "",
         },
         {
+          ...PLATFORM_ROW_DEFAULTS,
           id: "pp_3",
           platform: "GOOGLE_BUSINESS",
           status: "PENDING",
@@ -1797,7 +1813,7 @@ describe("per-platform options on create, update and bulk", () => {
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u",
+      userId: "u", mediaRetained: true,
     });
 
     await run(["post", "update", "post_1", "--alt", "A reel", "--print-body"]);
@@ -1832,6 +1848,7 @@ describe("per-platform options on create, update and bulk", () => {
       mediaUrls: ["https://cdn/launch.mp4"],
       platforms: [
         {
+          ...PLATFORM_ROW_DEFAULTS,
           id: "pp_1",
           platform: "YOUTUBE",
           status: "PENDING",
@@ -1848,7 +1865,7 @@ describe("per-platform options on create, update and bulk", () => {
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u",
+      userId: "u", mediaRetained: true,
     });
 
     await run(["post", "update", "post_1", "--alt", "Launch", "--print-body"]);
@@ -1870,6 +1887,7 @@ describe("per-platform options on create, update and bulk", () => {
       mediaUrls: ["https://cdn/launch.mp4"],
       platforms: [
         {
+          ...PLATFORM_ROW_DEFAULTS,
           id: "pp_1",
           platform: "YOUTUBE",
           status: "PENDING",
@@ -1884,7 +1902,7 @@ describe("per-platform options on create, update and bulk", () => {
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u",
+      userId: "u", mediaRetained: true,
     });
 
     await run(["post", "update", "post_1", "--alt", "Launch", "--print-body"]);
@@ -1904,6 +1922,7 @@ describe("per-platform options on create, update and bulk", () => {
       mediaUrls: ["https://cdn/reel.mp4"],
       platforms: [
         {
+          ...PLATFORM_ROW_DEFAULTS,
           id: "pp_1",
           platform: "FACEBOOK",
           status: "PENDING",
@@ -1919,7 +1938,7 @@ describe("per-platform options on create, update and bulk", () => {
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u",
+      userId: "u", mediaRetained: true,
     });
 
     await run(["post", "update", "post_1", "--alt", "A reel", "--print-body"]);
@@ -1940,6 +1959,7 @@ describe("per-platform options on create, update and bulk", () => {
       mediaUrls: ["https://cdn/a.png", "https://cdn/b.png"],
       platforms: [
         {
+          ...PLATFORM_ROW_DEFAULTS,
           id: "pp_1",
           platform: "FACEBOOK",
           status: "PENDING",
@@ -1956,7 +1976,7 @@ describe("per-platform options on create, update and bulk", () => {
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u",
+      userId: "u", mediaRetained: true,
     });
 
     await run(["post", "update", "post_1", "--alt", "Shoes", "--print-body"]);
@@ -2006,6 +2026,7 @@ describe("per-platform options on create, update and bulk", () => {
       mediaUrls: ["https://cdn/a.png"],
       platforms: [
         {
+          ...PLATFORM_ROW_DEFAULTS,
           id: "pp_1",
           platform: "PINTEREST",
           status: "PENDING",
@@ -2021,7 +2042,7 @@ describe("per-platform options on create, update and bulk", () => {
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u",
+      userId: "u", mediaRetained: true,
     });
 
     await run(["post", "update", "post_1", "--alt", "A photo", "--print-body"]);
@@ -2042,12 +2063,12 @@ describe("per-platform options on create, update and bulk", () => {
       timezone: "UTC",
       mediaUrls: ["https://cdn/a.png"],
       platforms: [
-        { id: "pp_1", platform: "TWITTER", status: "PENDING", connectionId: "tw_4d1b", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
-        { id: "pp_2", platform: "TELEGRAM", status: "PENDING", connectionId: "tg_1", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
+        { ...PLATFORM_ROW_DEFAULTS, id: "pp_1", platform: "TWITTER", status: "PENDING", connectionId: "tw_4d1b", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
+        { ...PLATFORM_ROW_DEFAULTS, id: "pp_2", platform: "TELEGRAM", status: "PENDING", connectionId: "tg_1", mediaUrls: [], mediaAltTexts: [], previewUrls: [], createdAt: "", updatedAt: "" },
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u",
+      userId: "u", mediaRetained: true,
     });
 
     await run(["post", "update", "post_1", "--alt", "A photo", "--print-body"]);
@@ -2069,6 +2090,7 @@ describe("per-platform options on create, update and bulk", () => {
       mediaUrls: ["https://cdn/a.png"],
       platforms: [
         {
+          ...PLATFORM_ROW_DEFAULTS,
           id: "pp_1",
           platform: "TUMBLR",
           status: "PENDING",
@@ -2083,6 +2105,7 @@ describe("per-platform options on create, update and bulk", () => {
           updatedAt: "",
         },
         {
+          ...PLATFORM_ROW_DEFAULTS,
           id: "pp_2",
           platform: "TELEGRAM",
           status: "PENDING",
@@ -2096,7 +2119,7 @@ describe("per-platform options on create, update and bulk", () => {
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u",
+      userId: "u", mediaRetained: true,
     });
 
     await run(["post", "update", "post_1", "--alt", "A print", "--print-body"]);
@@ -2121,6 +2144,7 @@ describe("per-platform options on create, update and bulk", () => {
       mediaUrls: ["https://cdn/a.png"],
       platforms: [
         {
+          ...PLATFORM_ROW_DEFAULTS,
           id: "pp_1",
           platform: "WORDPRESS",
           status: "PENDING",
@@ -2137,6 +2161,7 @@ describe("per-platform options on create, update and bulk", () => {
           updatedAt: "",
         },
         {
+          ...PLATFORM_ROW_DEFAULTS,
           id: "pp_2",
           platform: "YOUTUBE",
           status: "PENDING",
@@ -2151,7 +2176,7 @@ describe("per-platform options on create, update and bulk", () => {
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u",
+      userId: "u", mediaRetained: true,
     });
 
     await run(["post", "update", "post_1", "--alt", "A photo", "--print-body"]);
