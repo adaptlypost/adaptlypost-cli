@@ -444,6 +444,32 @@ export type CreateWebhookRequest = RequestBody<'createWebhook'>;
 export type UpdateWebhookRequest = RequestBody<'updateWebhook'>;
 export type WebhookTestResult = ResponseBody<'testWebhook'>;
 
+export type WorkspaceSummary = Schemas['Workspace'];
+export type WorkspacesResponse = ResponseBody<'listWorkspaces'>;
+export type CreateWorkspaceRequest = RequestBody<'createWorkspace'>;
+export type CreatedWorkspace = ResponseBody<'createWorkspace'>;
+export type DeleteWorkspaceResponse = ResponseBody<'deleteWorkspace'>;
+export const WORKSPACE_NAME_MAX_LENGTH = 100;
+export const WORKSPACE_DESCRIPTION_MAX_LENGTH = 500;
+export const WORKSPACE_CONNECTION_LIMIT_MAX = 10000;
+
+export type MembersResponse = ResponseBody<'listMembers'>;
+export type WorkspaceMember = MembersResponse['members'][number];
+export type WorkspaceRole = WorkspaceMember['role'];
+export const WORKSPACE_ROLES = ['admin', 'editor', 'contributor', 'viewer'] as const satisfies readonly WorkspaceRole[];
+export type RemoveMemberResponse = ResponseBody<'removeMember'>;
+export type RemoveOrganizationMemberResponse = ResponseBody<'removeOrganizationMember'>;
+
+export type SendInvitationRequest = RequestBody<'sendInvitation'>;
+export type InvitationWorkspace = SendInvitationRequest['workspaces'][number];
+export type OrganizationRole = NonNullable<SendInvitationRequest['organizationRole']>;
+export type CreditAllowance = NonNullable<SendInvitationRequest['creditAllowance']>;
+export const CREDIT_ALLOWANCE_MAX = 100000;
+export type Invitation = ResponseBody<'sendInvitation'>;
+export type InvitationsResponse = ResponseBody<'listInvitations'>;
+export type ListInvitationsQuery = QueryParams<'listInvitations'>;
+export type RevokedInvitation = ResponseBody<'revokeInvitation'>;
+
 export type AnalyticsRangeQuery = QueryParams<'getAnalyticsOverview'>;
 export type AnalyticsBreakdownQuery = QueryParams<'getAnalyticsPlatformBreakdown'>;
 export type AnalyticsTimeseriesQuery = QueryParams<'getAnalyticsTimeseries'>;

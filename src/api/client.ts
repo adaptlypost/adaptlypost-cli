@@ -20,7 +20,10 @@ import type {
   CreatePostResponse,
   CreateUploadUrlsRequest,
   CreateWebhookRequest,
+  CreateWorkspaceRequest,
+  CreatedWorkspace,
   CreatedWebhook,
+  DeleteWorkspaceResponse,
   DeletedResponse,
   DiscoveredPostsResponse,
   GenerateCaptionRequest,
@@ -49,14 +52,18 @@ import type {
   InboxTextRequest,
   SentInboxMessage,
   InstagramAudioResponse,
+  Invitation,
+  InvitationsResponse,
   LinkedInOrganizationLookupResponse,
   ListPostAnalyticsResponse,
   ListPostsQuery,
   ListPostsResponse,
   ListRecurringPostsQuery,
   ListRecurringPostsResponse,
+  ListInvitationsQuery,
   LookupLinkedInOrganizationQuery,
   Me,
+  MembersResponse,
   PinterestBoardsResponse,
   WordPressCategoriesResponse,
   PlatformBreakdownResponse,
@@ -66,9 +73,13 @@ import type {
   PublishResponse,
   RecurringPost,
   RefineCaptionRequest,
+  RemoveMemberResponse,
+  RemoveOrganizationMemberResponse,
   RetryFailedPlatformsRequest,
   RevokeConnectLinkResponse,
+  RevokedInvitation,
   SearchInstagramAudioQuery,
+  SendInvitationRequest,
   SocialAccountCheck,
   SocialAccountRemoval,
   SocialAccountsResponse,
@@ -81,6 +92,7 @@ import type {
   Webhook,
   WebhookTestResult,
   WebhooksResponse,
+  WorkspacesResponse,
 } from './types.js';
 
 export const getMe = (): Promise<Me> => callApi((api, options) => api.me(options));
@@ -196,6 +208,31 @@ export const deleteWebhook = (webhookId: string): Promise<DeletedResponse> =>
 
 export const testWebhook = (webhookId: string): Promise<WebhookTestResult> =>
   callApi((api, options) => api.webhooks.test(webhookId, options));
+
+export const listWorkspaces = (): Promise<WorkspacesResponse> => callApi((api, options) => api.workspaces.list(options));
+
+export const createWorkspace = (createWorkspaceRequest: CreateWorkspaceRequest): Promise<CreatedWorkspace> =>
+  callApi((api, options) => api.workspaces.create(createWorkspaceRequest, options));
+
+export const deleteWorkspace = (workspaceId: string): Promise<DeleteWorkspaceResponse> =>
+  callApi((api, options) => api.workspaces.delete(workspaceId, options));
+
+export const listMembers = (): Promise<MembersResponse> => callApi((api, options) => api.members.list(options));
+
+export const removeMember = (userId: string): Promise<RemoveMemberResponse> =>
+  callApi((api, options) => api.members.remove(userId, options));
+
+export const removeOrganizationMember = (userId: string): Promise<RemoveOrganizationMemberResponse> =>
+  callApi((api, options) => api.members.removeFromOrganization(userId, options));
+
+export const listInvitations = (listInvitationsQuery: ListInvitationsQuery = {}): Promise<InvitationsResponse> =>
+  callApi((api, options) => api.invitations.list(listInvitationsQuery, options));
+
+export const sendInvitation = (sendInvitationRequest: SendInvitationRequest): Promise<Invitation> =>
+  callApi((api, options) => api.invitations.send(sendInvitationRequest, options));
+
+export const revokeInvitation = (invitationId: string): Promise<RevokedInvitation> =>
+  callApi((api, options) => api.invitations.revoke(invitationId, options));
 
 export const getAnalyticsOverview = (analyticsRangeQuery: AnalyticsRangeQuery): Promise<AnalyticsOverview> =>
   callApi((api, options) => api.analytics.overview(analyticsRangeQuery, options));

@@ -313,6 +313,51 @@ describe('endpoint mapping', () => {
       () => client.testWebhook('wh_3f9a'),
       { method: 'POST', path: '/webhooks/wh_3f9a/test' },
     ],
+    ['listWorkspaces', () => client.listWorkspaces(), { method: 'GET', path: '/workspaces' }],
+    [
+      'createWorkspace',
+      () => client.createWorkspace({ name: 'Client B', connectionLimit: 5 }),
+      { method: 'POST', path: '/workspaces', body: { name: 'Client B', connectionLimit: 5 } },
+    ],
+    [
+      'deleteWorkspace',
+      () => client.deleteWorkspace('ws_2b7d'),
+      { method: 'DELETE', path: '/workspaces/ws_2b7d' },
+    ],
+    ['listMembers', () => client.listMembers(), { method: 'GET', path: '/members' }],
+    [
+      'removeMember',
+      () => client.removeMember('user_4c1e'),
+      { method: 'DELETE', path: '/members/user_4c1e' },
+    ],
+    [
+      'removeOrganizationMember',
+      () => client.removeOrganizationMember('user_4c1e'),
+      { method: 'DELETE', path: '/organization/members/user_4c1e' },
+    ],
+    [
+      'listInvitations',
+      () => client.listInvitations({ limit: 10, offset: 20 }),
+      { method: 'GET', path: '/invitations', query: { limit: 10, offset: 20 } },
+    ],
+    [
+      'sendInvitation',
+      () =>
+        client.sendInvitation({
+          email: 'ana@example.com',
+          workspaces: [{ workspaceId: 'ws_2b7d', role: 'editor' }],
+        }),
+      {
+        method: 'POST',
+        path: '/invitations',
+        body: { email: 'ana@example.com', workspaces: [{ workspaceId: 'ws_2b7d', role: 'editor' }] },
+      },
+    ],
+    [
+      'revokeInvitation',
+      () => client.revokeInvitation('inv_8e3a'),
+      { method: 'DELETE', path: '/invitations/inv_8e3a' },
+    ],
     [
       'getAnalyticsOverview',
       () =>

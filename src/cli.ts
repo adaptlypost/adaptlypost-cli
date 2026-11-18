@@ -118,6 +118,18 @@ const MODULES: Array<{ names: string[]; load: () => Promise<Registrar> }> = [
     load: async () => (await import('./commands/webhook.js')).registerWebhookCommands,
   },
   {
+    names: ['workspace', 'workspaces'],
+    load: async () => (await import('./commands/workspace.js')).registerWorkspaceCommands,
+  },
+  {
+    names: ['member', 'members'],
+    load: async () => (await import('./commands/member.js')).registerMemberCommands,
+  },
+  {
+    names: ['invite', 'invites', 'invitation', 'invitations'],
+    load: async () => (await import('./commands/invite.js')).registerInviteCommands,
+  },
+  {
     names: ['inbox'],
     load: async () => (await import('./commands/inbox.js')).registerInboxCommands,
   },

@@ -77,7 +77,7 @@ Every API key is issued under a workspace role, chosen when the key is created, 
 
 | Role | Can |
 |---|---|
-| Admin | Everything, including connecting and disconnecting accounts, connect links and account checks |
+| Admin | Everything, including connecting and disconnecting accounts, connect links, account checks, members, invitations and workspaces |
 | Editor | Create, schedule, publish, retry, bulk schedule and delete posts, edit teammates' posts, manage webhooks and the signature, upload media, use AI |
 | Contributor | Create and edit its own drafts, upload media, use AI. Cannot schedule, publish, retry, bulk schedule, or touch teammates' posts |
 | Viewer | Read posts, accounts and analytics |
@@ -459,6 +459,37 @@ Per-platform config keys, for `--config`, frontmatter platform blocks and `confi
 | `webhook update <id>` | `--url`, `--active`, `--inactive`, `--event` (repeatable), `--default-events` | `--event` replaces the stored events. `--default-events` goes back to the default set |
 | `webhook delete <id>` | `--yes` | Confirms first |
 | `webhook test <id>` | | Sends a test delivery. Exits 1 when the endpoint does not answer 2xx |
+
+### workspace
+
+| Command | Key flags | Notes |
+|---|---|---|
+| `workspace list` | | Every workspace the token reaches, with your role in each. `(current)` marks the one commands act in |
+| `workspace create` | `--name`, `--description`, `--connection-limit` | Every organization owner and admin becomes its admin. `--name` must be unique in the organization, up to 100 characters. `--connection-limit` caps the social accounts it may connect; leave it out for no limit. Needs an Admin key created by an organization owner or admin, and room in the plan for another workspace |
+| `workspace delete <id>` | `--yes` | Confirms first. Deletes its posts, feeds, inbox, API keys and connect links. The API refuses the default workspace, the last one, and one with connected social accounts |
+
+### member
+
+| Command | Key flags | Notes |
+|---|---|---|
+| `member list` | | Members of this workspace with their workspace role and organization roles. Needs `members.read` |
+| `member remove <userId>` | `--organization`, `--yes` | Confirms first. Removes the person from this workspace and revokes their API keys and connect links here; they stay in the organization. The API refuses to remove someone's last workspace. `--organization` removes them from the organization and every workspace in it, and needs a key created by an organization owner or admin. The owner cannot be removed, and only the owner can remove an organization admin |
+
+### invite
+
+| Command | Key flags | Notes |
+|---|---|---|
+| `invite send <email>` | `--workspace` (repeatable), `--role`, `--org-admin`, `--monthly-credits`, `--fixed-credits` | Emails an invitation that lasts 7 days. `--workspace` takes `<id>` or `<id>:<role>`; `--role` (`admin`, `editor`, `contributor` or `viewer`) applies to every workspace without one. With `--role` and no `--workspace` the person joins this workspace. `--org-admin` makes them an organization admin, which only the owner can do. `--monthly-credits` gives them an AI credit allowance that resets each plan cycle, `--fixed-credits` one that only goes down as they spend; only an organization owner or admin can set either. A key creator who is not an organization admin can invite only to workspaces where they hold `members.manage`, with a role no higher than their own |
+| `invite list` | `--limit`, `--offset`, `--all` | Invitations that include this workspace, newest first, with status `pending`, `accepted`, `expired` or `revoked` |
+| `invite revoke <id>` | `--yes` | Confirms first. Only a pending invitation can be revoked |
+
+Everything here needs `members.manage` unless noted. When the plan has no room for another workspace or team seat, the API answers 403 with `code: subscription_required` and the CLI exits 9.
+
+```bash
+adaptlypost workspace create --name "Client B" --connection-limit 10
+adaptlypost invite send ana@example.com --workspace <id>:editor
+adaptlypost member remove <userId> --organization --yes
+```
 
 ### inbox
 
