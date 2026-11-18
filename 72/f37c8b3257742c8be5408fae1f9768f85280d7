@@ -1,0 +1,43 @@
+src/commands/member.ts
+  s_35fc76a6ffa3cd::t_1ed829c56616cd 1-112
+src/commands/invite.ts
+  s_35fc76a6ffa3cd::t_1b613cb69907ec 1-277
+src/commands/workspace.ts
+  s_35fc76a6ffa3cd::t_a6dbfeb2c897ed 1-163
+README.md
+  s_35fc76a6ffa3cd::t_de816bd108c509 80,463-493
+package-lock.json
+  s_35fc76a6ffa3cd::t_882957d43a055b 16,32-34
+package.json
+  s_35fc76a6ffa3cd::t_1e910c8f05ff4a 56
+src/api/client.ts
+  s_35fc76a6ffa3cd::t_9bf2d266a988c1 23-24,26,55-56,63,66,76-77,80,82,95,212-236
+src/api/types.ts
+  s_35fc76a6ffa3cd::t_703a6690141750 447-472
+src/cli.ts
+  s_35fc76a6ffa3cd::t_a9f0ae6cbc6841 120-131
+test/api/client.test.ts
+  s_35fc76a6ffa3cd::t_0d5b9f8cc871d7 316-360
+test/commands/invite.test.ts
+  s_35fc76a6ffa3cd::t_a28d2687bc15d2 1-188
+test/commands/member.test.ts
+  s_35fc76a6ffa3cd::t_4e0d497384d09e 1-107
+test/commands/workspace.test.ts
+  s_35fc76a6ffa3cd::t_a23b71b475b2c6 1-134
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "72f37c8b3257742c8be5408fae1f9768f85280d7",
+  "prompts": {},
+  "sessions": {
+    "s_35fc76a6ffa3cd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b1ddb3cb-0d26-434e-a3f6-94b5e8e8a8bd",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}
