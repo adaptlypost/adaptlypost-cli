@@ -292,6 +292,15 @@ describe('accounts linkedin-organization', () => {
     });
   });
 
+  it('says no page has that vanity name when the lookup finds none', async () => {
+    lookupLinkedInOrganization.mockResolvedValue({ organization: null });
+    setOutputMode('human');
+
+    await run(['li-org', 'acm']);
+
+    expect(stdout.join('')).toMatch(/No LinkedIn company page has that vanity name/);
+  });
+
   it('prints the id, urn and mention, and where the mention goes', async () => {
     lookupLinkedInOrganization.mockResolvedValue({ organization: { ...organization, vanityName: null } });
     setOutputMode('human');
@@ -331,12 +340,6 @@ describe('accounts linkedin-organization', () => {
       message: 'No LinkedIn account of this workspace could look up the page',
       hint: expect.stringMatching(/Connect or reconnect a LinkedIn account/),
     });
-
-    const notFound = withLinkedInOrganizationHint(
-      new ApiError({ status: 404, body: { code: 'linkedin_organization_not_found', message: 'Not found' } }),
-    ) as InstanceType<typeof ApiError>;
-    expect(notFound.status).toBe(404);
-    expect(notFound.hint).toMatch(/exact vanity name/);
 
     const invalid = withLinkedInOrganizationHint(
       new ApiError({ status: 400, body: { code: 'linkedin_organization_query_invalid', message: 'Invalid' } }),

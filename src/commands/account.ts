@@ -482,8 +482,6 @@ const runWordPressCategories = async (id: string): Promise<void> => {
 export const LINKEDIN_ORGANIZATION_REFUSAL_HINTS: Record<string, string> = {
   linkedin_organization_query_invalid:
     'Pass a company page URL such as https://www.linkedin.com/company/acme/, its vanity name (acme) or @acme.',
-  linkedin_organization_not_found:
-    'LinkedIn matches the exact vanity name, the part after linkedin.com/company/ in the page URL. It does not search by name, so copy it from the page URL.',
   linkedin_organization_lookup_unavailable: `No LinkedIn account in this workspace could run the lookup. Connect or reconnect a LinkedIn account on the Connectors page in ${PRODUCT.displayName}, ideally a company page you administer.`,
 };
 
@@ -520,7 +518,7 @@ const runLinkedInOrganization = async (value: string): Promise<void> => {
   const query = normalizeLinkedInOrganizationQuery(value);
 
   const progress = isQuiet() || isMachine() ? null : spinner('Asking LinkedIn…');
-  let organization: LinkedInOrganization;
+  let organization: LinkedInOrganization | null;
   try {
     ({ organization } = await lookupLinkedInOrganization({ query }));
   } catch (error) {
@@ -531,6 +529,12 @@ const runLinkedInOrganization = async (value: string): Promise<void> => {
 
   if (isMachine()) {
     printResult('accounts.linkedin-organization', organization);
+    return;
+  }
+
+  if (!organization) {
+    print('No LinkedIn company page has that vanity name.');
+    hint('LinkedIn matches the exact vanity name, the part after linkedin.com/company/ in the page URL, so copy it from there');
     return;
   }
 
