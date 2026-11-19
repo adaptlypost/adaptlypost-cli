@@ -1,0 +1,21 @@
+src/commands/account.ts
+  s_5060465269eb56::t_fe9c1d658de204 521,535-540
+test/commands/account.test.ts
+  s_5060465269eb56::t_3e2aac4e2c0b3b 295-303
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d0408a5a853008aea65abc61de34f066bfdd5ed0",
+  "prompts": {},
+  "sessions": {
+    "s_5060465269eb56": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f4fc9f55-5983-4e41-9e33-d24ecf5636ed",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}
