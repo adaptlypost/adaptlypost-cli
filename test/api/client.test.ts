@@ -96,6 +96,11 @@ describe('endpoint mapping', () => {
       { method: 'GET', path: '/social-accounts/pin_3c1d/pinterest-boards' },
     ],
     [
+      'listYouTubePlaylists',
+      () => client.listYouTubePlaylists('yt_8f4b'),
+      { method: 'GET', path: '/social-accounts/yt_8f4b/youtube-playlists' },
+    ],
+    [
       'listWordPressCategories',
       () => client.listWordPressCategories('wp_7e2a'),
       { method: 'GET', path: '/social-accounts/wp_7e2a/wordpress-categories' },

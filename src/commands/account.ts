@@ -5,6 +5,7 @@ import {
   listPinterestBoards,
   listSocialAccounts,
   listWordPressCategories,
+  listYouTubePlaylists,
   lookupLinkedInOrganization,
   removeSocialAccount,
   searchInstagramAudio,
@@ -25,6 +26,7 @@ import {
   type SocialAccountRemoval,
   type SocialAccountStatus,
   type WordPressCategory,
+  type YouTubePlaylist,
 } from '../api/types.js';
 import {
   ApiError,
@@ -434,6 +436,52 @@ const runPinterestBoards = async (id: string): Promise<void> => {
   hint('pin to one: adaptlypost post create --pinterest-board <boardId> or --pinterest-board-name "<name>" …');
 };
 
+const PLAYLIST_COLUMNS: Column<YouTubePlaylist>[] = [
+  { header: 'PLAYLIST ID', value: (playlist) => playlist.id, align: 'left' },
+  { header: 'TITLE', value: (playlist) => playlist.title || '—' },
+  { header: 'PRIVACY', value: (playlist) => playlist.privacyStatus?.toLowerCase() ?? '—' },
+  { header: 'VIDEOS', value: (playlist) => playlist.itemCount ?? '—', align: 'right' },
+];
+
+const runYouTubePlaylists = async (id: string): Promise<void> => {
+  const account = findAccount(await fetchAccounts('Loading account…'), id);
+
+  if (!account) {
+    throw notFoundError(
+      `No account with id "${id}" in this workspace`,
+      'list them with: adaptlypost accounts list --platform YOUTUBE',
+    );
+  }
+
+  if (account.platform !== 'YOUTUBE') {
+    throw usageError(`${account.platform} accounts have no YouTube playlists`, 'pass a YOUTUBE account id');
+  }
+
+  const progress = isQuiet() || isMachine() ? null : spinner('Asking YouTube…');
+  let playlists: YouTubePlaylist[];
+  try {
+    ({ playlists } = await listYouTubePlaylists(account.id));
+  } finally {
+    progress?.stop();
+  }
+
+  if (isMachine()) {
+    printResult('accounts.youtube-playlists', playlists, { total: playlists.length, hasMore: false });
+    return;
+  }
+
+  if (playlists.length === 0) {
+    print('This YouTube channel has no playlists.');
+    hint('a post without playlistId uploads the video to the channel without adding it to a playlist');
+    return;
+  }
+
+  printTable(playlists, PLAYLIST_COLUMNS);
+  print();
+  print(`${playlists.length} ${playlists.length === 1 ? 'playlist' : 'playlists'}`);
+  hint(`add the video to one: adaptlypost post create --config 'YOUTUBE={"playlistId":"<playlistId>"}' …`);
+};
+
 const CATEGORY_COLUMNS: Column<WordPressCategory>[] = [
   { header: 'CATEGORY ID', value: (category) => category.id, align: 'left' },
   { header: 'NAME', value: (category) => category.name || '—' },
@@ -617,6 +665,13 @@ export const registerAccountCommands = (program: Command): void => {
     .description('list the boards a Pinterest account can pin to, secret boards included')
     .action(async (id: string) => {
       await runPinterestBoards(id);
+    });
+
+  accounts
+    .command('youtube-playlists <id>')
+    .description('list the playlists of a YouTube channel, private and unlisted ones included')
+    .action(async (id: string) => {
+      await runYouTubePlaylists(id);
     });
 
   accounts

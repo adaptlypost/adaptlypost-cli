@@ -323,6 +323,9 @@ export type SocialAccountRemoval = ResponseBody<'removeSocialAccount'>;
 export type PinterestBoard = Schemas['PinterestBoard'];
 export type PinterestBoardsResponse = ResponseBody<'getPinterestBoards'>;
 
+export type YouTubePlaylist = Schemas['YouTubePlaylist'];
+export type YouTubePlaylistsResponse = ResponseBody<'getYouTubePlaylists'>;
+
 export type WordPressCategory = Schemas['WordPressCategory'];
 export type WordPressCategoriesResponse = ResponseBody<'getWordPressCategories'>;
 

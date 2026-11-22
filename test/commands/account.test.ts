@@ -6,6 +6,7 @@ const {
   listPinterestBoards,
   listSocialAccounts,
   listWordPressCategories,
+  listYouTubePlaylists,
   lookupLinkedInOrganization,
   removeSocialAccount,
   searchInstagramAudio,
@@ -14,6 +15,7 @@ const {
   listPinterestBoards: vi.fn(),
   listSocialAccounts: vi.fn(),
   listWordPressCategories: vi.fn(),
+  listYouTubePlaylists: vi.fn(),
   lookupLinkedInOrganization: vi.fn(),
   removeSocialAccount: vi.fn(),
   searchInstagramAudio: vi.fn(),
@@ -24,6 +26,7 @@ vi.mock('../../src/api/client.js', () => ({
   listPinterestBoards,
   listSocialAccounts,
   listWordPressCategories,
+  listYouTubePlaylists,
   lookupLinkedInOrganization,
   removeSocialAccount,
   searchInstagramAudio,
@@ -82,6 +85,7 @@ beforeEach(() => {
   listPinterestBoards.mockReset();
   listSocialAccounts.mockReset();
   listWordPressCategories.mockReset();
+  listYouTubePlaylists.mockReset();
   lookupLinkedInOrganization.mockReset();
   removeSocialAccount.mockReset();
   searchInstagramAudio.mockReset();
@@ -100,7 +104,7 @@ beforeEach(() => {
 });
 
 describe('registerAccountCommands', () => {
-  it('registers list, view, check, remove, instagram-audio, pinterest-boards, wordpress-categories and linkedin-organization', () => {
+  it('registers list, view, check, remove, instagram-audio, pinterest-boards, youtube-playlists, wordpress-categories and linkedin-organization', () => {
     expect(accountsCommand(buildProgram()).commands.map((command) => command.name())).toEqual([
       'list',
       'view',
@@ -108,6 +112,7 @@ describe('registerAccountCommands', () => {
       'remove',
       'instagram-audio',
       'pinterest-boards',
+      'youtube-playlists',
       'wordpress-categories',
       'linkedin-organization',
     ]);
@@ -218,6 +223,64 @@ describe('accounts pinterest-boards', () => {
     await expect(run(['pinterest-boards', 'acc_1'])).rejects.toThrow(/no Pinterest boards/);
     await expect(run(['pinterest-boards', 'pin_missing'])).rejects.toThrow(/No account with id/);
     expect(listPinterestBoards).not.toHaveBeenCalled();
+  });
+});
+
+describe('accounts youtube-playlists', () => {
+  const youtube = (overrides: Partial<SocialAccount> = {}): SocialAccount =>
+    account({ id: 'yt_1', platform: 'YOUTUBE', ...overrides });
+
+  const playlists = [
+    { id: 'PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf', title: 'Tutorials', privacyStatus: 'public', itemCount: 12 },
+    { id: 'PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG', title: 'Drafts', privacyStatus: 'private' },
+  ];
+
+  it('lists the playlists of the channel and prints the API payload', async () => {
+    listSocialAccounts.mockResolvedValue({ accounts: [youtube()] });
+    listYouTubePlaylists.mockResolvedValue({ playlists });
+
+    await run(['youtube-playlists', 'yt_1']);
+
+    expect(listYouTubePlaylists).toHaveBeenCalledWith('yt_1');
+    expect(JSON.parse(stdout.join(''))).toMatchObject({
+      command: 'accounts.youtube-playlists',
+      data: playlists,
+      meta: { total: 2, hasMore: false },
+    });
+  });
+
+  it('prints a table with the full playlist id, privacy and video count', async () => {
+    listSocialAccounts.mockResolvedValue({ accounts: [youtube()] });
+    listYouTubePlaylists.mockResolvedValue({ playlists });
+    setOutputMode('human');
+
+    await run(['youtube-playlists', 'yt_1']);
+
+    const lines = stdout.join('').split('\n');
+    expect(lines[0]).toMatch(/^PLAYLIST ID\s+TITLE\s+PRIVACY\s+VIDEOS$/);
+    expect(lines[1]).toMatch(/^PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf\s+Tutorials\s+public\s+12$/);
+    expect(lines[2]).toMatch(/^PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG\s+Drafts\s+private\s+—$/);
+    expect(stdout.join('')).toContain('2 playlists');
+    expect(stderr.join('')).toContain('"playlistId"');
+  });
+
+  it('says what a post does when the channel has no playlists', async () => {
+    listSocialAccounts.mockResolvedValue({ accounts: [youtube()] });
+    listYouTubePlaylists.mockResolvedValue({ playlists: [] });
+    setOutputMode('human');
+
+    await run(['youtube-playlists', 'yt_1']);
+
+    expect(stdout.join('')).toContain('This YouTube channel has no playlists.');
+    expect(stderr.join('')).toContain('without adding it to a playlist');
+  });
+
+  it('refuses other platforms and unknown ids before calling the API', async () => {
+    listSocialAccounts.mockResolvedValue({ accounts: [account(), youtube()] });
+
+    await expect(run(['youtube-playlists', 'acc_1'])).rejects.toThrow(/no YouTube playlists/);
+    await expect(run(['youtube-playlists', 'yt_missing'])).rejects.toThrow(/No account with id/);
+    expect(listYouTubePlaylists).not.toHaveBeenCalled();
   });
 });
 

@@ -93,6 +93,7 @@ import type {
   WebhookTestResult,
   WebhooksResponse,
   WorkspacesResponse,
+  YouTubePlaylistsResponse,
 } from './types.js';
 
 export const getMe = (): Promise<Me> => callApi((api, options) => api.me(options));
@@ -114,6 +115,9 @@ export const searchInstagramAudio = (
 
 export const listPinterestBoards = (accountId: string): Promise<PinterestBoardsResponse> =>
   callApi((api, options) => api.accounts.pinterestBoards(accountId, options));
+
+export const listYouTubePlaylists = (accountId: string): Promise<YouTubePlaylistsResponse> =>
+  callApi((api, options) => api.accounts.youtubePlaylists(accountId, options));
 
 export const listWordPressCategories = (accountId: string): Promise<WordPressCategoriesResponse> =>
   callApi((api, options) => api.accounts.wordpressCategories(accountId, options));
