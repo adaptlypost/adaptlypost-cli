@@ -1,0 +1,22 @@
+README.md
+  s_be37a3ed22325d::t_73bda55094e683 403
+test/commands/post.test.ts
+  s_be37a3ed22325d::t_73bda55094e683 801,803-807,812-816
+  s_be37a3ed22325d::t_9b67e04e51d827 810-811
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5a6cb2e004e37ec63a9bca71bb3a6b96b52fc413",
+  "prompts": {},
+  "sessions": {
+    "s_be37a3ed22325d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "742b46c7-804d-4925-8d13-8274cbc033fa",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}
