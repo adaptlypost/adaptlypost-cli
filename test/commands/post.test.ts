@@ -805,7 +805,7 @@ describe("post bulk", () => {
 
     await expect(run(["post", "bulk", "--csv", path, "-P", "TWITTER"])).rejects.toMatchObject({
       exitCode: 5,
-      message: expect.stringMatching(/X quotes cannot be bulk scheduled/),
+      message: expect.stringMatching(/X quotes and X AI labels cannot be bulk scheduled/),
     });
     expect(client.bulkSchedulePosts).not.toHaveBeenCalled();
   });
@@ -1055,6 +1055,22 @@ describe("per-platform options on create, update and bulk", () => {
       avatarUrl: "",
       status: "active",
     },
+    {
+      id: "th_1",
+      platform: "THREADS",
+      displayName: "Acme",
+      username: "acme",
+      avatarUrl: "",
+      status: "active",
+    },
+    {
+      id: "pin_1",
+      platform: "PINTEREST",
+      displayName: "Acme Pins",
+      username: "acmepins",
+      avatarUrl: "",
+      status: "active",
+    },
   ];
 
   const csvPath = (contents: string): string => {
@@ -1250,6 +1266,84 @@ describe("per-platform options on create, update and bulk", () => {
 
     expect(stdoutJson().data).toMatchObject({
       facebookConfigs: [{ pageId: "fb_1", postType: "REEL", shareToStory: true, aiGenerated: true }],
+    });
+  });
+
+  it("sends the X, Threads and Pinterest AI labels from their flags", async () => {
+    await run([
+      "post",
+      "create",
+      "-t",
+      "Made with AI",
+      "-a",
+      "tw_4d1b",
+      "-a",
+      "th_1",
+      "-a",
+      "pin_1",
+      "-m",
+      "https://cdn/art.jpg",
+      "--pinterest-board",
+      "board_1",
+      "--x-ai-generated",
+      "--threads-ai-generated",
+      "--pinterest-ai-generated",
+      "--print-body",
+    ]);
+
+    expect(stdoutJson().data).toMatchObject({
+      twitterConfigs: [{ connectionId: "tw_4d1b", aiGenerated: true }],
+      threadsConfigs: [{ connectionId: "th_1", aiGenerated: true }],
+      pinterestConfigs: [{ connectionId: "pin_1", boardId: "board_1", aiGenerated: true }],
+    });
+  });
+
+  it("resends the X and Threads AI labels a post already has", async () => {
+    vi.mocked(client.getPost).mockResolvedValue({
+      id: "post_1",
+      status: "SCHEDULED",
+      contentType: "TEXT",
+      text: "Made with AI",
+      timezone: "UTC",
+      mediaUrls: [],
+      platforms: [
+        {
+          ...PLATFORM_ROW_DEFAULTS,
+          id: "pp_1",
+          platform: "TWITTER",
+          status: "PENDING",
+          connectionId: "tw_4d1b",
+          twitterAiGenerated: true,
+          mediaUrls: [],
+          mediaAltTexts: [],
+          previewUrls: [],
+          createdAt: "",
+          updatedAt: "",
+        },
+        {
+          ...PLATFORM_ROW_DEFAULTS,
+          id: "pp_2",
+          platform: "THREADS",
+          status: "PENDING",
+          connectionId: "th_1",
+          threadsAiGenerated: true,
+          mediaUrls: [],
+          mediaAltTexts: [],
+          previewUrls: [],
+          createdAt: "",
+          updatedAt: "",
+        },
+      ],
+      createdAt: "",
+      updatedAt: "",
+      userId: "u", mediaRetained: true,
+    });
+
+    await run(["post", "update", "post_1", "--alt", "AI art", "--print-body"]);
+
+    expect(stdoutJson().data).toMatchObject({
+      twitterConfigs: [{ connectionId: "tw_4d1b", aiGenerated: true }],
+      threadsConfigs: [{ connectionId: "th_1", aiGenerated: true }],
     });
   });
 

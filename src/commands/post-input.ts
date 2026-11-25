@@ -167,6 +167,7 @@ export const CONFIG_FIELD: Partial<Record<PlatformType, keyof PostTargets>> = {
   YOUTUBE: "youtubeConfigs",
   LINKEDIN: "linkedinConfigs",
   TWITTER: "twitterConfigs",
+  THREADS: "threadsConfigs",
   TUMBLR: "tumblrConfigs",
   WORDPRESS: "wordpressConfigs",
   GOOGLE_BUSINESS: "googleBusinessConfigs",
@@ -196,7 +197,7 @@ export const CONFIG_KEYS: Partial<Record<PlatformType, readonly string[]>> = {
     "brandedContentOwnBrand",
     "autoAddMusic",
   ],
-  PINTEREST: ["boardId", "boardName", "title", "link"],
+  PINTEREST: ["boardId", "boardName", "title", "link", "aiGenerated"],
   YOUTUBE: [
     "postType",
     "videoTitle",
@@ -213,7 +214,8 @@ export const CONFIG_KEYS: Partial<Record<PlatformType, readonly string[]>> = {
     "scheduleOnYouTube",
   ],
   LINKEDIN: ["documentTitle", "reshareOf"],
-  TWITTER: ["quoteOf"],
+  TWITTER: ["quoteOf", "aiGenerated"],
+  THREADS: ["aiGenerated"],
   TUMBLR: ["tags", "title", "sourceUrl"],
   WORDPRESS: ["title", "excerpt", "categoryIds", "tags", "status"],
   GOOGLE_BUSINESS: [
@@ -1928,7 +1930,16 @@ export function normalizeConfig(platform: PlatformType, config: FrontmatterMap):
         "Keep boardId to pick the board by id, or boardName to pick it by name",
       );
     }
-    return definedEntries({ ...config, boardId, boardName });
+    return definedEntries({
+      ...config,
+      boardId,
+      boardName,
+      aiGenerated: configBoolean(config.aiGenerated, "PINTEREST aiGenerated"),
+    });
+  }
+
+  if (platform === "TWITTER" || platform === "THREADS") {
+    return definedEntries({ ...config, aiGenerated: configBoolean(config.aiGenerated, `${platform} aiGenerated`) });
   }
 
   return config;

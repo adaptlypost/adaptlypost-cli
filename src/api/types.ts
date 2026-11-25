@@ -397,6 +397,7 @@ export type PostTargets = Pick<
   | 'youtubeConfigs'
   | 'linkedinConfigs'
   | 'twitterConfigs'
+  | 'threadsConfigs'
   | 'tumblrConfigs'
   | 'wordpressConfigs'
   | 'googleBusinessConfigs'

@@ -240,9 +240,12 @@ interface ContentOptions {
   ytScheduleOnYoutube?: boolean;
   pinterestBoard?: string;
   pinterestBoardName?: string;
+  pinterestAiGenerated?: boolean;
   documentTitle?: string;
   liReshare?: string;
   xQuote?: string;
+  xAiGenerated?: boolean;
+  threadsAiGenerated?: boolean;
   tumblrTag: string[];
   tumblrTitle?: string;
   tumblrSourceUrl?: string;
@@ -537,7 +540,14 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
     mergeConfig("LINKEDIN", { documentTitle: options.documentTitle });
   }
   if (options.liReshare !== undefined) mergeConfig("LINKEDIN", { reshareOf: options.liReshare.trim() });
+  if (options.pinterestAiGenerated !== undefined) {
+    mergeConfig("PINTEREST", { aiGenerated: options.pinterestAiGenerated });
+  }
   if (options.xQuote !== undefined) mergeConfig("TWITTER", { quoteOf: options.xQuote.trim() });
+  if (options.xAiGenerated !== undefined) mergeConfig("TWITTER", { aiGenerated: options.xAiGenerated });
+  if (options.threadsAiGenerated !== undefined) {
+    mergeConfig("THREADS", { aiGenerated: options.threadsAiGenerated });
+  }
   if (options.tumblrTag.length > 0) mergeConfig("TUMBLR", { tags: options.tumblrTag });
   if (options.tumblrTitle !== undefined) mergeConfig("TUMBLR", { title: options.tumblrTitle });
   if (options.tumblrSourceUrl !== undefined) mergeConfig("TUMBLR", { sourceUrl: options.tumblrSourceUrl });
@@ -1228,7 +1238,12 @@ function storedConfig(target: SocialPostPlatform): ConfigEntry | undefined {
             autoAddMusic: target.tiktokAutoAddMusic,
           });
     case "PINTEREST":
-      return definedOnly({ boardId: target.pinterestBoardId, title: target.pinterestTitle, link: target.pinterestLink });
+      return definedOnly({
+        boardId: target.pinterestBoardId,
+        title: target.pinterestTitle,
+        link: target.pinterestLink,
+        aiGenerated: target.pinterestAiGenerated,
+      });
     case "YOUTUBE":
       return definedOnly({
         postType: target.youtubePostType,
@@ -1248,7 +1263,9 @@ function storedConfig(target: SocialPostPlatform): ConfigEntry | undefined {
     case "LINKEDIN":
       return definedOnly({ documentTitle: target.linkedinDocumentTitle, reshareOf: target.linkedinReshareOf });
     case "TWITTER":
-      return definedOnly({ quoteOf: target.twitterQuoteOf });
+      return definedOnly({ quoteOf: target.twitterQuoteOf, aiGenerated: target.twitterAiGenerated });
+    case "THREADS":
+      return definedOnly({ aiGenerated: target.threadsAiGenerated });
     case "TUMBLR":
       return definedOnly({ tags: target.tumblrTags, title: target.tumblrTitle, sourceUrl: target.tumblrSourceUrl });
     case "WORDPRESS":
@@ -1808,9 +1825,9 @@ function refuseDocumentRows(rows: BulkRowDraft[]): BulkRow[] {
       });
     }
     if (row.configs?.TWITTER) {
-      throw new CliError(`Row ${row.line}: X quotes cannot be bulk scheduled.`, {
+      throw new CliError(`Row ${row.line}: X quotes and X AI labels cannot be bulk scheduled.`, {
         exitCode: ExitCode.VALIDATION,
-        hint: 'Create each one with "adaptlypost post create --x-quote"',
+        hint: 'Create each one with "adaptlypost post create --x-quote" or "--x-ai-generated"',
       });
     }
     return { ...row, item: { ...row.item, contentType } };
@@ -2466,6 +2483,10 @@ const withContentOptions = (command: Command): Command =>
       "Pinterest board name, looked up on the account: an exact match first, then one ignoring case. Not with --pinterest-board",
     )
     .option(
+      "--pinterest-ai-generated",
+      "Disclose that the Pin was made or modified with AI, so Pinterest shows its AI modified label. Image, video and carousel Pins",
+    )
+    .option(
       "--document-title <title>",
       "LinkedIn document title, max 100 characters. Defaults to the file name; ignored for non-DOCUMENT posts",
     )
@@ -2476,6 +2497,11 @@ const withContentOptions = (command: Command): Command =>
     .option(
       "--x-quote <url|id>",
       "Quote one of the X account's own posts with the text as the commentary: a post link or its numeric id. Media is not attached on X",
+    )
+    .option("--x-ai-generated", "Disclose that the X post contains AI-generated media, so X shows its made with AI label")
+    .option(
+      "--threads-ai-generated",
+      "Disclose that the Threads post contains AI-generated content, so Threads shows its AI info label. Not on thread replies",
     )
     .option(
       "--tumblr-tag <tag>",

@@ -1179,6 +1179,13 @@ describe("normalizeConfig", () => {
     expect(exitCodeOf(() => normalizeConfig("FACEBOOK", { aiGenerated: "maybe" }))).toBe(ExitCode.VALIDATION);
   });
 
+  it("reads the X, Threads and Pinterest AI labels as booleans", () => {
+    for (const platform of ["TWITTER", "THREADS", "PINTEREST"] as const) {
+      expect(normalizeConfig(platform, { aiGenerated: true })).toEqual({ aiGenerated: true });
+      expect(exitCodeOf(() => normalizeConfig(platform, { aiGenerated: "maybe" }))).toBe(ExitCode.VALIDATION);
+    }
+  });
+
   it("reads the YouTube altered or synthetic content label as a boolean", () => {
     expect(normalizeConfig("YOUTUBE", { aiGenerated: true })).toEqual({ aiGenerated: true });
     expect(exitCodeOf(() => normalizeConfig("YOUTUBE", { aiGenerated: "maybe" }))).toBe(ExitCode.VALIDATION);
