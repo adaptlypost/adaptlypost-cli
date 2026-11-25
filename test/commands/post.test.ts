@@ -798,15 +798,22 @@ describe("post bulk", () => {
     expect(client.bulkSchedulePosts).not.toHaveBeenCalled();
   });
 
-  it("refuses config_TWITTER, since bulk takes no X quotes", async () => {
+  it("sends config_TWITTER as twitterConfigs, so bulk X posts carry quotes and the AI label", async () => {
     const path = csvPath(
-      ["text,scheduledAt,config_TWITTER", 'Quote,2026-09-19T09:00:00Z,"{""quoteOf"":""1850000000000000000""}"', ""].join("\n"),
+      [
+        "text,scheduledAt,config_TWITTER",
+        'Quote,2026-09-19T09:00:00Z,"{""quoteOf"":""1850000000000000000"",""aiGenerated"":true}"',
+        "",
+      ].join("\n"),
     );
 
-    await expect(run(["post", "bulk", "--csv", path, "-P", "TWITTER"])).rejects.toMatchObject({
-      exitCode: 5,
-      message: expect.stringMatching(/X quotes and X AI labels cannot be bulk scheduled/),
-    });
+    vi.mocked(client.listSocialAccounts).mockResolvedValue({ accounts });
+
+    await run(["post", "bulk", "--csv", path, "-a", "tw_4d1b", "--print-body"]);
+
+    expect(stdoutJson().data).toMatchObject([
+      { twitterConfigs: [{ connectionId: "tw_4d1b", quoteOf: "1850000000000000000", aiGenerated: true }] },
+    ]);
     expect(client.bulkSchedulePosts).not.toHaveBeenCalled();
   });
 

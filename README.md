@@ -400,7 +400,7 @@ adaptlypost post create -t "Slides from today's talk" -a li_22aa -a tw_4d1b \
   --first-comment-delay LINKEDIN=60
 ```
 
-Like the other config flags, the Instagram, Facebook, Google Business Profile, Tumblr and WordPress flags, the AI label flags, `--x-quote` and `--li-reshare` reach the API on `post update` only together with `--platform` or `--account`. `post bulk` refuses LinkedIn document posts, LinkedIn reshares, X quotes and the X AI label, because the bulk endpoint takes neither `linkedinConfigs` nor `twitterConfigs`. The Threads and Pinterest AI labels work in bulk through `config.THREADS` and `config.PINTEREST`. `--first-comment`, `--first-comment-delay`, the thumbnail, media and aspect ratio flags and `--x-keep-links` work on their own.
+Like the other config flags, the Instagram, Facebook, Google Business Profile, Tumblr and WordPress flags, the AI label flags, `--x-quote` and `--li-reshare` reach the API on `post update` only together with `--platform` or `--account`. `post bulk` refuses LinkedIn document posts and LinkedIn reshares, because the bulk endpoint takes no `linkedinConfigs`. X quotes and the AI labels for X, Threads and Pinterest work in bulk through `config_TWITTER`, `config_THREADS` and `config_PINTEREST`. `--first-comment`, `--first-comment-delay`, the thumbnail, media and aspect ratio flags and `--x-keep-links` work on their own.
 
 Repeat flags, `post create` only:
 

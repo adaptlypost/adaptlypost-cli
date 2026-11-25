@@ -1824,12 +1824,6 @@ function refuseDocumentRows(rows: BulkRowDraft[]): BulkRow[] {
         hint: 'Create each one with "adaptlypost post create --type DOCUMENT" or "--li-reshare"',
       });
     }
-    if (row.configs?.TWITTER) {
-      throw new CliError(`Row ${row.line}: X quotes and X AI labels cannot be bulk scheduled.`, {
-        exitCode: ExitCode.VALIDATION,
-        hint: 'Create each one with "adaptlypost post create --x-quote" or "--x-ai-generated"',
-      });
-    }
     return { ...row, item: { ...row.item, contentType } };
   });
 }
