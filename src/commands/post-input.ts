@@ -119,6 +119,7 @@ export interface PostInput {
   platformAspectRatios?: Partial<Record<PlatformType, AspectRatioInput>>;
   platformMedia?: Partial<Record<PlatformType, PlatformMediaInput>>;
   twitterKeepLinks?: boolean;
+  labels?: string[];
   recurrence?: RecurrenceInput;
 }
 
@@ -315,6 +316,9 @@ const PLATFORM_ALIASES: Record<string, PlatformType> = {
 const SCALAR_KEYS = new Map<string, keyof PostInput | keyof RecurrenceInput | "documentTitle">([
   ["keeplinks", "twitterKeepLinks"],
   ["twitterkeeplinks", "twitterKeepLinks"],
+  ["labels", "labels"],
+  ["label", "labels"],
+  ["labelids", "labels"],
   ["text", "text"],
   ["platforms", "platforms"],
   ["platform", "platforms"],
@@ -1046,6 +1050,10 @@ export function parsePostInput(source: string): PostInput {
     }
     if (target === "twitterKeepLinks") {
       input.twitterKeepLinks = asBoolean(value, rawKey);
+      continue;
+    }
+    if (target === "labels") {
+      input.labels = asStringList(value, rawKey);
       continue;
     }
     if (target === "documentTitle") {
@@ -2385,6 +2393,7 @@ export function buildPostBody(
   if (input.thumbnailMs !== undefined) body.thumbnailTimestampMs = input.thumbnailMs;
   if (platformTexts.length > 0) body.platformTexts = platformTexts;
   if (input.twitterKeepLinks !== undefined) body.twitterKeepLinks = input.twitterKeepLinks;
+  if (input.labels?.length) body.labelIds = input.labels;
 
   const extras = buildPlatformExtras(input);
   Object.assign(body, extras);

@@ -141,7 +141,7 @@ describe("the post command tree", () => {
 describe("post list", () => {
   it("passes the filters through and prints the machine document", async () => {
     vi.mocked(client.listPosts).mockResolvedValue({
-      posts: [{ id: "post_1", status: "SCHEDULED", contentType: "TEXT", timezone: "UTC", mediaUrls: [], platforms: [], createdAt: "", updatedAt: "", userId: "u", mediaRetained: true }],
+      posts: [{ id: "post_1", status: "SCHEDULED", contentType: "TEXT", timezone: "UTC", mediaUrls: [], platforms: [], createdAt: "", updatedAt: "", userId: "u", mediaRetained: true, labels: [] }],
       total: 47,
       hasMore: true,
     });
@@ -538,7 +538,7 @@ describe("post update", () => {
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u", mediaRetained: true,
+      userId: "u", mediaRetained: true, labels: [],
     });
 
     await run(["post", "update", "post_1", "--alt", "The CLI in a dark terminal", "--print-body"]);
@@ -569,7 +569,7 @@ describe("post update", () => {
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u", mediaRetained: true,
+      userId: "u", mediaRetained: true, labels: [],
     });
     const file = join(workspace, "update-alt.md");
     writeFileSync(file, ["---", 'alt: ["A chart going up"]', "---", ""].join("\n"));
@@ -615,7 +615,7 @@ describe("post update", () => {
       platforms: [],
       createdAt: "",
       updatedAt: "",
-      userId: "u", mediaRetained: true,
+      userId: "u", mediaRetained: true, labels: [],
     });
 
     await run(["post", "update", "post_1", "-t", "new text"]);
@@ -701,7 +701,7 @@ describe("post unschedule", () => {
       platforms: [],
       createdAt: "",
       updatedAt: "",
-      userId: "u", mediaRetained: true,
+      userId: "u", mediaRetained: true, labels: [],
     });
 
     await run(["post", "unschedule", "post_1"]);
@@ -962,7 +962,7 @@ describe("post watch", () => {
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u", mediaRetained: true,
+      userId: "u", mediaRetained: true, labels: [],
     });
 
     vi.mocked(client.listPostResults).mockResolvedValue({
@@ -989,7 +989,7 @@ describe("post watch", () => {
       platforms: [],
       createdAt: "",
       updatedAt: "",
-      userId: "u", mediaRetained: true,
+      userId: "u", mediaRetained: true, labels: [],
     });
 
     vi.mocked(client.listPostResults).mockResolvedValue({
@@ -1343,7 +1343,7 @@ describe("per-platform options on create, update and bulk", () => {
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u", mediaRetained: true,
+      userId: "u", mediaRetained: true, labels: [],
     });
 
     await run(["post", "update", "post_1", "--alt", "AI art", "--print-body"]);
@@ -1754,6 +1754,7 @@ describe("per-platform options on create, update and bulk", () => {
         { ...target, id: "pp_1", platform: "INSTAGRAM", connectionId: "ig_7c3e", mediaOverrideUrls: ["https://cdn/short.mp4"] },
         { ...target, id: "pp_2", platform: "LINKEDIN", connectionId: "li_22aa", mediaOverrideUrls: [] },
       ],
+      labels: [],
     } as never);
 
     await run(["post", "get", "post_1"]);
@@ -1976,6 +1977,7 @@ describe("per-platform options on create, update and bulk", () => {
           firstCommentDelayMinutes: 30,
         },
       ],
+      labels: [],
     } as never);
 
     await run(["post", "get", "post_1"]);
@@ -2042,7 +2044,7 @@ describe("per-platform options on create, update and bulk", () => {
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u", mediaRetained: true,
+      userId: "u", mediaRetained: true, labels: [],
     });
 
     await run(["post", "update", "post_1", "--alt", "A reel", "--print-body"]);
@@ -2094,7 +2096,7 @@ describe("per-platform options on create, update and bulk", () => {
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u", mediaRetained: true,
+      userId: "u", mediaRetained: true, labels: [],
     });
 
     await run(["post", "update", "post_1", "--alt", "Launch", "--print-body"]);
@@ -2131,7 +2133,7 @@ describe("per-platform options on create, update and bulk", () => {
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u", mediaRetained: true,
+      userId: "u", mediaRetained: true, labels: [],
     });
 
     await run(["post", "update", "post_1", "--alt", "Launch", "--print-body"]);
@@ -2167,7 +2169,7 @@ describe("per-platform options on create, update and bulk", () => {
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u", mediaRetained: true,
+      userId: "u", mediaRetained: true, labels: [],
     });
 
     await run(["post", "update", "post_1", "--alt", "A reel", "--print-body"]);
@@ -2205,7 +2207,7 @@ describe("per-platform options on create, update and bulk", () => {
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u", mediaRetained: true,
+      userId: "u", mediaRetained: true, labels: [],
     });
 
     await run(["post", "update", "post_1", "--alt", "Shoes", "--print-body"]);
@@ -2271,7 +2273,7 @@ describe("per-platform options on create, update and bulk", () => {
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u", mediaRetained: true,
+      userId: "u", mediaRetained: true, labels: [],
     });
 
     await run(["post", "update", "post_1", "--alt", "A photo", "--print-body"]);
@@ -2297,7 +2299,7 @@ describe("per-platform options on create, update and bulk", () => {
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u", mediaRetained: true,
+      userId: "u", mediaRetained: true, labels: [],
     });
 
     await run(["post", "update", "post_1", "--alt", "A photo", "--print-body"]);
@@ -2348,7 +2350,7 @@ describe("per-platform options on create, update and bulk", () => {
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u", mediaRetained: true,
+      userId: "u", mediaRetained: true, labels: [],
     });
 
     await run(["post", "update", "post_1", "--alt", "A print", "--print-body"]);
@@ -2405,7 +2407,7 @@ describe("per-platform options on create, update and bulk", () => {
       ],
       createdAt: "",
       updatedAt: "",
-      userId: "u", mediaRetained: true,
+      userId: "u", mediaRetained: true, labels: [],
     });
 
     await run(["post", "update", "post_1", "--alt", "A photo", "--print-body"]);
@@ -2874,6 +2876,7 @@ describe("thread replies", () => {
           threadError: "Rate limited",
         },
       ],
+      labels: [],
     } as never);
 
     await run(["post", "get", "post_1"]);
@@ -3188,5 +3191,120 @@ describe("post bulk --dry-run", () => {
     expect(result.meta).toMatchObject({ dryRun: true, total: 2, valid: 1, invalid: 1 });
     expect((result.data as { line: number }[]).map((row) => row.line)).toEqual([1, 2]);
     expect(process.exitCode).toBe(5);
+  });
+});
+
+describe("labels on posts", () => {
+  const labelled = {
+    id: "post_1",
+    status: "SCHEDULED" as const,
+    contentType: "TEXT" as const,
+    text: "Launch",
+    timezone: "UTC",
+    mediaUrls: [],
+    platforms: [],
+    createdAt: "",
+    updatedAt: "",
+    userId: "u",
+    mediaRetained: true,
+    labels: [
+      { id: "lbl_brand_a", name: "Brand A", color: "#3B82F6" },
+      { id: "lbl_launch", name: "Launch", color: "#EF4444" },
+    ],
+  };
+
+  const writeTemp = (name: string, contents: string): string => {
+    const path = join(mkdtempSync(join(workspace, "labels-")), name);
+    writeFileSync(path, contents);
+    return path;
+  };
+
+  it("sends one labelIds entry per --label on create, and refuses a comma-separated value", async () => {
+    vi.mocked(client.listSocialAccounts).mockResolvedValue({ accounts });
+
+    await run(["post", "create", "-t", "Hi", "-a", "tw_4d1b", "--label", "lbl_brand_a", "--label", "lbl_launch", "--print-body"]);
+
+    expect(stdoutJson().data).toMatchObject({ labelIds: ["lbl_brand_a", "lbl_launch"] });
+
+    await expect(
+      run(["post", "create", "-t", "Hi", "-a", "tw_4d1b", "--label", "lbl_brand_a,lbl_launch", "--print-body"]),
+    ).rejects.toMatchObject({ exitCode: 2, message: expect.stringContaining("one label id") });
+  });
+
+  it("lets --label override the labels of the file", async () => {
+    vi.mocked(client.listSocialAccounts).mockResolvedValue({ accounts });
+    const file = writeTemp("post.md", ["---", "accounts: [tw_4d1b]", "labels: [lbl_old]", "---", "Hi", ""].join("\n"));
+
+    await run(["post", "create", "--file", file, "--label", "lbl_launch", "--print-body"]);
+
+    expect(stdoutJson().data).toMatchObject({ labelIds: ["lbl_launch"] });
+  });
+
+  it("sends labels on update on their own, and --clear-labels as an empty list", async () => {
+    await run(["post", "update", "post_1", "--label", "lbl_brand_a", "--print-body"]);
+    expect(stdoutJson().data).toEqual({ labelIds: ["lbl_brand_a"] });
+
+    written = [];
+    await run(["post", "update", "post_1", "--clear-labels", "--print-body"]);
+    expect(stdoutJson().data).toEqual({ labelIds: [] });
+
+    await expect(
+      run(["post", "update", "post_1", "--clear-labels", "--label", "lbl_brand_a", "--print-body"]),
+    ).rejects.toMatchObject({ exitCode: 2 });
+  });
+
+  it("names the label flags when an update changes nothing", async () => {
+    await expect(run(["post", "update", "post_1"])).rejects.toMatchObject({
+      exitCode: 2,
+      hint: expect.stringContaining("--label, --clear-labels"),
+    });
+  });
+
+  it("filters post list by label and shows a LABELS column only when a post has labels", async () => {
+    vi.mocked(client.listPosts).mockResolvedValue({ posts: [labelled], total: 1, hasMore: false });
+
+    await run(["post", "list", "--label", "lbl_brand_a", "--label", "lbl_launch"]);
+
+    expect(client.listPosts).toHaveBeenCalledWith(expect.objectContaining({ labelIds: ["lbl_brand_a", "lbl_launch"] }));
+
+    setOutputMode("human");
+    written = [];
+    await run(["post", "list"]);
+    expect(written.join("")).toMatch(/LABELS[\s\S]*Brand A, Launch/);
+
+    vi.mocked(client.listPosts).mockResolvedValue({ posts: [{ ...labelled, labels: [] }], total: 1, hasMore: false });
+    written = [];
+    await run(["post", "list"]);
+    expect(written.join("")).not.toContain("LABELS");
+  });
+
+  it("shows the label names in post get", async () => {
+    vi.mocked(client.getPost).mockResolvedValue(labelled);
+    setOutputMode("human");
+
+    await run(["post", "get", "post_1"]);
+
+    expect(written.join("")).toMatch(/labels\s+Brand A, Launch/);
+  });
+
+  it("refuses labels in every bulk source before sending anything", async () => {
+    const dirFile = writeTemp("01.md", ["---", "at: 2026-10-20T09:00:00Z", "labels: [lbl_launch]", "---", "Hi", ""].join("\n"));
+    const csv = writeTemp("bulk.csv", ["text,scheduledAt,labels", "Hi,2026-10-20T09:00:00Z,lbl_launch", ""].join("\n"));
+    const json = writeTemp(
+      "bulk.json",
+      JSON.stringify({
+        platforms: ["TWITTER"],
+        twitterConnectionIds: ["tw_4d1b"],
+        posts: [{ contentType: "TEXT", text: "Hi", scheduledAt: "2026-10-20T09:00:00Z", labelIds: ["lbl_launch"] }],
+      }),
+    );
+
+    for (const source of [["--dir", join(dirFile, "..")], ["--csv", csv], ["--json-file", json]]) {
+      await expect(run(["post", "bulk", ...source, "-P", "TWITTER", "--print-body"])).rejects.toMatchObject({
+        exitCode: 5,
+        message: expect.stringContaining("labels are not available for bulk scheduling"),
+      });
+    }
+    expect(client.bulkSchedulePosts).not.toHaveBeenCalled();
   });
 });

@@ -329,6 +329,17 @@ describe("parsePostInput", () => {
     expect(exitCodeOf(() => parsePostInput("---\nuntil: next week\n---\nBody"))).toBe(ExitCode.VALIDATION);
   });
 
+  it("reads labels as a YAML list and sends them as labelIds", () => {
+    const input = parsePostInput(["---", "labels: [lbl_brand_a, lbl_launch]", "---", "Body"].join("\n"));
+
+    expect(input.labels).toEqual(["lbl_brand_a", "lbl_launch"]);
+    expect(buildPostBody({ ...input, accounts: ["tw_4d1b"] }, { accounts }).labelIds).toEqual([
+      "lbl_brand_a",
+      "lbl_launch",
+    ]);
+    expect(buildPostBody({ text: "Body", accounts: ["tw_4d1b"] }, { accounts }).labelIds).toBeUndefined();
+  });
+
   it("refuses an unknown frontmatter key", () => {
     expect(exitCodeOf(() => parsePostInput("---\nnonsense: 1\n---\nBody"))).toBe(
       ExitCode.VALIDATION,

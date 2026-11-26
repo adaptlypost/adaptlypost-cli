@@ -169,6 +169,16 @@ const collectWeekday = (value: string, previous: Weekday[]): Weekday[] => {
   return [...previous, normalizeWeekday(value)];
 };
 
+const collectLabel = (value: string, previous: string[]): string[] => {
+  if (value.includes(",")) {
+    throw new CliError(`--label takes one label id, got "${value}".`, {
+      exitCode: ExitCode.USAGE,
+      hint: "Repeat the flag: --label <labelId> --label <labelId>",
+    });
+  }
+  return [...previous, value.trim()];
+};
+
 const parsePair = (value: string, flag: string): [string, string] => {
   const index = value.indexOf("=");
   if (index <= 0) {
@@ -279,6 +289,7 @@ interface ContentOptions {
   fbLayout?: string;
   fbCard: string[];
   xKeepLinks?: boolean;
+  label: string[];
   gbpTopic?: string;
   gbpCta?: string;
   gbpCtaUrl?: string;
@@ -631,6 +642,7 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
   if (Object.keys(configs).length > 0) input.platformConfigs = configs;
 
   if (options.xKeepLinks !== undefined) input.twitterKeepLinks = options.xKeepLinks;
+  if (options.label.length > 0) input.labels = options.label;
 
   for (const entry of options.firstComment) {
     const [platform, text] = parsePair(entry, "--first-comment");
@@ -909,6 +921,7 @@ interface ListOptions extends GlobalOptions {
   all?: boolean;
   status: string[];
   platform: PlatformType[];
+  label: string[];
   from?: string;
   to?: string;
   sort: string;
@@ -940,6 +953,7 @@ async function runList(options: ListOptions): Promise<void> {
   const query = {
     statuses: statuses.length > 0 ? statuses : undefined,
     platforms: options.platform.length > 0 ? options.platform : undefined,
+    labelIds: options.label.length > 0 ? options.label : undefined,
     startDate: options.from === undefined ? undefined : toIso(parseWhen(options.from, { timezone })),
     endDate: options.to === undefined ? undefined : toIso(parseWhen(options.to, { timezone })),
     sortOrder,
@@ -989,6 +1003,7 @@ async function runList(options: ListOptions): Promise<void> {
     { header: "WHEN", value: (post) => whenCell(post, post.timezone || timezone) },
     { header: "STATUS", value: (post) => post.status },
     { header: "PLATFORMS", value: (post) => platformsOf(post).join(", ") || "—" },
+    ...(posts.some((post) => post.labels.length > 0) ? [{ header: "LABELS", value: labelNames }] : []),
     { header: "TEXT", value: (post) => oneLine(post.text) },
   ]);
 
@@ -997,6 +1012,8 @@ async function runList(options: ListOptions): Promise<void> {
 
   if (hasMore) print(`next: --offset ${offset + posts.length}`);
 }
+
+const labelNames = (post: SocialPost): string => post.labels.map((label) => label.name).join(", ") || "—";
 
 async function runView(id: string, options: GlobalOptions): Promise<void> {
   const post = await getPost(id);
@@ -1019,6 +1036,7 @@ async function runView(id: string, options: GlobalOptions): Promise<void> {
         : "not scheduled",
     ],
     ["text", oneLine(post.text)],
+    ...(post.labels.length > 0 ? [["labels", labelNames(post)] as [string, string]] : []),
     ...(post.recurringPostId ? [["recurring", formatId(post.recurringPostId)] as [string, string]] : []),
   ]);
 
@@ -1178,6 +1196,7 @@ interface UpdateOptions extends ContentOptions, GlobalOptions {
   printBody?: boolean;
   clearThreads?: boolean;
   clearPlatformMedia?: boolean;
+  clearLabels?: boolean;
 }
 
 type ConfigEntry = Record<string, unknown>;
@@ -1397,6 +1416,16 @@ async function runUpdate(id: string, options: UpdateOptions): Promise<void> {
     input.platformMedia = {};
   }
 
+  if (options.clearLabels) {
+    if ((input.labels ?? []).length > 0) {
+      throw new CliError("Pass --clear-labels or the labels to keep, not both.", {
+        exitCode: ExitCode.USAGE,
+        hint: "The labels you pass replace every stored label, so --clear-labels is only needed to remove them all",
+      });
+    }
+    input.labels = [];
+  }
+
   const accounts = (input.accounts ?? []).length > 0 ? await loadAccounts(quiet) : [];
   const mediaUrls = options.media.length > 0 ? await resolveMedia(input, quiet) : [];
 
@@ -1417,6 +1446,7 @@ async function runUpdate(id: string, options: UpdateOptions): Promise<void> {
   if (options.thumbnail !== undefined) body.thumbnailUrl = full.thumbnailUrl;
   if (options.thumbnailMs !== undefined) body.thumbnailTimestampMs = full.thumbnailTimestampMs;
   if (input.twitterKeepLinks !== undefined) body.twitterKeepLinks = input.twitterKeepLinks;
+  if (input.labels !== undefined) body.labelIds = input.labels;
   if (input.firstComments !== undefined) body.firstComments = full.firstComments;
   if (input.threadReplies !== undefined) body.threadReplies = full.threadReplies ?? [];
   if (input.platformThumbnails !== undefined) body.platformThumbnails = full.platformThumbnails;
@@ -1465,7 +1495,7 @@ async function runUpdate(id: string, options: UpdateOptions): Promise<void> {
   if (Object.keys(body).length === 0) {
     throw new CliError("Nothing to update.", {
       exitCode: ExitCode.USAGE,
-      hint: "Pass at least one of --text, --file, --at, --timezone, --type, --thumbnail, --alt, --first-comment, --first-comment-delay, --thread-reply, --clear-threads, --thumbnail-for, --media-for, --clear-platform-media, --aspect-ratio, --x-keep-links or --platform",
+      hint: "Pass at least one of --text, --file, --at, --timezone, --type, --thumbnail, --alt, --first-comment, --first-comment-delay, --thread-reply, --clear-threads, --thumbnail-for, --media-for, --clear-platform-media, --aspect-ratio, --x-keep-links, --label, --clear-labels or --platform",
     });
   }
 
@@ -1790,6 +1820,9 @@ async function runWatch(id: string, options: WatchOptions): Promise<void> {
   }
 }
 
+const BULK_LABELS_HINT = 'Put them on each post afterwards with "adaptlypost post update <id> --label <labelId>"';
+const LABEL_COLUMN = /^(labels?|labelids)$/i;
+
 const CORE_COLUMNS = new Set(["text", "scheduledAt", "contentType", "media", "alt", "thumbnail", "thumbnailMs"]);
 
 const splitList = (value: string | undefined): string[] =>
@@ -1864,6 +1897,14 @@ const columnPattern = (prefix: PlatformColumnPrefix): string =>
   NUMBERED_COLUMN_PREFIXES.includes(prefix) ? `${prefix}<N>_<PLATFORM>` : `${prefix}_<PLATFORM>`;
 
 function readBulkColumns(headers: string[]): void {
+  const labelColumn = headers.find((header) => LABEL_COLUMN.test(header));
+  if (labelColumn !== undefined) {
+    throw new CliError(`CSV column "${labelColumn}": labels are not available for bulk scheduling.`, {
+      exitCode: ExitCode.VALIDATION,
+      hint: BULK_LABELS_HINT,
+    });
+  }
+
   const unknown = headers.filter((header) => !CORE_COLUMNS.has(header) && !platformColumn(header));
 
   if (unknown.length > 0) {
@@ -2086,6 +2127,13 @@ async function rowsFromDirectory(path: string, timezone: string): Promise<BulkRo
       throw new CliError(`${name}: keeping X links is not available for bulk scheduling.`, {
         exitCode: ExitCode.VALIDATION,
         hint: 'Create the post with "adaptlypost post create --x-keep-links"',
+      });
+    }
+
+    if (input.labels !== undefined) {
+      throw new CliError(`${name}: labels are not available for bulk scheduling.`, {
+        exitCode: ExitCode.VALIDATION,
+        hint: BULK_LABELS_HINT,
       });
     }
 
@@ -2365,6 +2413,13 @@ async function runBulkFromJson(path: string, options: BulkOptions): Promise<void
     throw new CliError(`${path} has no platforms.`, { exitCode: ExitCode.VALIDATION });
   }
 
+  if ("labelIds" in request || request.posts.some((item) => "labelIds" in item)) {
+    throw new CliError(`${path}: labels are not available for bulk scheduling.`, {
+      exitCode: ExitCode.VALIDATION,
+      hint: BULK_LABELS_HINT,
+    });
+  }
+
   request.timezone = assertTimeZone(request.timezone ?? resolveTimezone(options.timezone));
 
   const chunks: BulkSchedulePostsRequest[] = [];
@@ -2633,6 +2688,12 @@ const withContentOptions = (command: Command): Command =>
     )
     .option("--no-x-keep-links", "Break links in the X text again (the default)")
     .option(
+      "--label <labelId>",
+      "Label to put on the post, repeatable, one id per flag, up to 10. On update they replace the stored labels. Find ids with: labels list",
+      collectLabel,
+      [],
+    )
+    .option(
       "--gbp-topic <type>",
       `Google Business Profile post type: ${GOOGLE_BUSINESS_TOPIC_TYPES.join(", ")}. Defaults to STANDARD (an update)`,
     )
@@ -2660,6 +2721,7 @@ export function registerPostCommands(program: Command): void {
     .option("--all", "Page until the server runs out")
     .option("--status <status>", "Filter by status, repeatable", collect, [])
     .option("--platform <platform>", "Filter by platform, repeatable", collectPlatform, [])
+    .option("--label <labelId>", "Only posts carrying any of these labels, repeatable, one id per flag", collectLabel, [])
     .option("--from <date>", "Lower bound on scheduledAt")
     .option("--to <date>", "Upper bound on scheduledAt")
     .option("--sort <order>", "NEWEST or OLDEST", "NEWEST")
@@ -2698,6 +2760,7 @@ export function registerPostCommands(program: Command): void {
     .description("Update a draft or scheduled post. A scheduled post cannot move into the past")
     .option("--clear-threads", "Remove every thread from the post")
     .option("--clear-platform-media", "Remove every platform's own media, so each platform uses the post media again")
+    .option("--clear-labels", "Remove every label from the post")
     .option("--dry-run", "Print the request body and exit")
     .option("--print-body", "Print the request body and exit")
     .action(async (id: string, _options: UpdateOptions, command: Command) => {

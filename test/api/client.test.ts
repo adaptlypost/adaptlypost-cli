@@ -136,6 +136,15 @@ describe('endpoint mapping', () => {
       },
     ],
     [
+      'listPosts by label',
+      () => client.listPosts({ labelIds: ['lbl_brand_a', 'lbl_brand_b'] }),
+      {
+        method: 'GET',
+        path: '/social-posts',
+        query: { labelIds: ['lbl_brand_a', 'lbl_brand_b'] },
+      },
+    ],
+    [
       'listPosts without arguments',
       () => client.listPosts(),
       { method: 'GET', path: '/social-posts', query: {} },
@@ -330,6 +339,7 @@ describe('endpoint mapping', () => {
       { method: 'DELETE', path: '/workspaces/ws_2b7d' },
     ],
     ['listMembers', () => client.listMembers(), { method: 'GET', path: '/members' }],
+    ['listLabels', () => client.listLabels(), { method: 'GET', path: '/labels' }],
     [
       'removeMember',
       () => client.removeMember('user_4c1e'),

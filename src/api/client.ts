@@ -54,6 +54,7 @@ import type {
   InstagramAudioResponse,
   Invitation,
   InvitationsResponse,
+  LabelsResponse,
   LinkedInOrganizationLookupResponse,
   ListPostAnalyticsResponse,
   ListPostsQuery,
@@ -129,6 +130,8 @@ export const lookupLinkedInOrganization = (
 
 export const createUploadUrls = (createUploadUrlsRequest: CreateUploadUrlsRequest): Promise<UploadUrlsResponse> =>
   callApi((api, options) => api.media.getUploadUrls(createUploadUrlsRequest, options));
+
+export const listLabels = (): Promise<LabelsResponse> => callApi((api, options) => api.labels.list(options));
 
 export const listPosts = (listPostsQuery: ListPostsQuery = {}): Promise<ListPostsResponse> =>
   callApi((api, options) => api.posts.list(listPostsQuery, options));

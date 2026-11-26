@@ -126,6 +126,10 @@ const MODULES: Array<{ names: string[]; load: () => Promise<Registrar> }> = [
     load: async () => (await import('./commands/member.js')).registerMemberCommands,
   },
   {
+    names: ['labels', 'label'],
+    load: async () => (await import('./commands/label.js')).registerLabelCommands,
+  },
+  {
     names: ['invite', 'invites', 'invitation', 'invitations'],
     load: async () => (await import('./commands/invite.js')).registerInviteCommands,
   },

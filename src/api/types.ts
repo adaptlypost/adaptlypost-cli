@@ -403,6 +403,9 @@ export type PostTargets = Pick<
   | 'googleBusinessConfigs'
 >;
 
+export type Label = Schemas['Label'];
+export type LabelsResponse = ResponseBody<'listLabels'>;
+
 export type SocialPostPlatform = Schemas['PostPlatform'];
 export type SocialPost = ResponseBody<'getPost'>;
 export type ListPostsResponse = ResponseBody<'listPosts'>;
