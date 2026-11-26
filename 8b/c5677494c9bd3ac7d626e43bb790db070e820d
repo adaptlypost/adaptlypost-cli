@@ -1,0 +1,53 @@
+test/commands/post-input.test.ts
+  s_c48832d3574fdd::t_6ec3db4abee5b7 332-342
+test/commands/label.test.ts
+  s_c48832d3574fdd::t_30b738717eb60e 1-95
+  s_090e595bff8e94::t_4cfba8523c97a3 96-98
+src/commands/label.ts
+  s_c48832d3574fdd::t_22d9f547113574 1-40,44
+  s_090e595bff8e94::t_534f7faa328f44 41-43,45-65
+README.md
+  s_c48832d3574fdd::t_345bc073ea917a 246-253,294,322-325,423-428
+package-lock.json
+  s_c48832d3574fdd::t_e395efb1e65b35 3,9,16,32-34
+package.json
+  s_c48832d3574fdd::t_cbb53118b370ba 3,56
+src/api/client.ts
+  s_c48832d3574fdd::t_ee713bde8ce686 57,134-135
+src/api/types.ts
+  s_c48832d3574fdd::t_76ab74f3c6a078 406-408
+src/cli.ts
+  s_c48832d3574fdd::t_3eb299468f37c5 128-131
+src/commands/post-input.ts
+  s_c48832d3574fdd::t_af7348aa3b4000 122,319-321,1055-1058,2396
+src/commands/post.ts
+  s_c48832d3574fdd::t_89daf57d3a7b32 172-181,292,645,924,956,1006,1016-1017,1039,1199,1419-1428,1449,1498,1823-1825,1900-1907,2133-2139,2416-2422,2690-2695,2724,2763
+test/api/client.test.ts
+  s_c48832d3574fdd::t_90f76badb6bb7b 138-146,342
+test/commands/post.test.ts
+  s_c48832d3574fdd::t_24d233ec41bf53 144,541,572,618,704,965,992,1346,1757,1980,2047,2099,2136,2172,2210,2276,2302,2353,2410,2879,3196-3310
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8bc5677494c9bd3ac7d626e43bb790db070e820d",
+  "prompts": {},
+  "sessions": {
+    "s_090e595bff8e94": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "054a1bee-e925-48f1-aabb-c88c834a8d54",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    },
+    "s_c48832d3574fdd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "980c9e06-63e7-42d8-a06c-1720ae9a87d1",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}
