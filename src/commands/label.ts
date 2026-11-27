@@ -45,6 +45,9 @@ async function runList(): Promise<void> {
   hint(
     `Put one on a post with: ${PRODUCT.binName} post create --label <labelId> …`,
   );
+  hint(
+    `Change the labels of any post, published ones too, with: ${PRODUCT.binName} post labels <postId> --label <labelId>`,
+  );
 }
 
 export function registerLabelCommands(program: Command): void {

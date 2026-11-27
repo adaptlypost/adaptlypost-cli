@@ -154,6 +154,9 @@ export const deletePost = (postId: string): Promise<DeletedResponse> =>
 export const unschedulePost = (postId: string): Promise<SocialPost> =>
   callApi((api, options) => api.posts.unschedule(postId, options));
 
+export const setPostLabels = (postId: string, labelIds: string[]): Promise<SocialPost> =>
+  callApi((api, options) => api.posts.setLabels(postId, { labelIds }, options));
+
 export const publishDraft = (postId: string, publishDraftRequest: PublishDraftRequest): Promise<PublishResponse> =>
   callApi((api, options) => api.posts.publish(postId, publishDraftRequest, options));
 

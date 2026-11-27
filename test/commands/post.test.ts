@@ -15,6 +15,7 @@ vi.mock("../../src/api/client.js", () => ({
   deletePost: vi.fn(),
   publishDraft: vi.fn(),
   unschedulePost: vi.fn(),
+  setPostLabels: vi.fn(),
   listPostResults: vi.fn(),
   retryFailedPlatforms: vi.fn(),
   bulkSchedulePosts: vi.fn(),
@@ -123,6 +124,7 @@ describe("the post command tree", () => {
       "delete",
       "publish",
       "unschedule",
+      "labels",
       "results",
       "retry",
       "bulk",
@@ -1274,6 +1276,65 @@ describe("per-platform options on create, update and bulk", () => {
     expect(stdoutJson().data).toMatchObject({
       facebookConfigs: [{ pageId: "fb_1", postType: "REEL", shareToStory: true, aiGenerated: true }],
     });
+  });
+
+  it("sends the Pinterest board section and the AI-generated person label from their flags", async () => {
+    await run([
+      "post",
+      "create",
+      "-t",
+      "Made with AI",
+      "-a",
+      "pin_1",
+      "-m",
+      "https://cdn/art.jpg",
+      "--pinterest-board",
+      "board_1",
+      "--pinterest-board-section-name",
+      " Spring ",
+      "--pinterest-ai-generated-person",
+      "--print-body",
+    ]);
+
+    expect(stdoutJson().data).toMatchObject({
+      pinterestConfigs: [
+        { connectionId: "pin_1", boardId: "board_1", boardSectionName: "Spring", aiGeneratedPerson: true },
+      ],
+    });
+
+    await expect(
+      run([
+        "post",
+        "create",
+        "-t",
+        "Hi",
+        "-a",
+        "pin_1",
+        "-m",
+        "https://cdn/art.jpg",
+        "--pinterest-board-section",
+        "section_1",
+        "--pinterest-board-section-name",
+        "Spring",
+        "--print-body",
+      ]),
+    ).rejects.toMatchObject({ exitCode: 5 });
+
+    await expect(
+      run([
+        "post",
+        "create",
+        "-t",
+        "Hi",
+        "-a",
+        "pin_1",
+        "-m",
+        "https://cdn/art.jpg",
+        "--pinterest-board-section-name",
+        "x".repeat(181),
+        "--print-body",
+      ]),
+    ).rejects.toMatchObject({ message: expect.stringContaining("the limit is 180") });
   });
 
   it("sends the X, Threads and Pinterest AI labels from their flags", async () => {
@@ -3258,6 +3319,30 @@ describe("labels on posts", () => {
       exitCode: 2,
       hint: expect.stringContaining("--label, --clear-labels"),
     });
+  });
+
+  it("replaces the labels of a post of any status with post labels, and --clear-labels sends an empty list", async () => {
+    vi.mocked(client.setPostLabels).mockResolvedValue({ ...labelled, status: "COMPLETED" });
+
+    await run(["post", "labels", "post_1", "--label", "lbl_brand_a", "--label", "lbl_launch"]);
+    expect(client.setPostLabels).toHaveBeenCalledWith("post_1", ["lbl_brand_a", "lbl_launch"]);
+    expect(stdoutJson().data).toMatchObject({ id: "post_1", status: "COMPLETED" });
+
+    await run(["post", "labels", "post_1", "--clear-labels"]);
+    expect(client.setPostLabels).toHaveBeenLastCalledWith("post_1", []);
+
+    setOutputMode("human");
+    written = [];
+    await run(["post", "labels", "post_1", "--label", "lbl_brand_a"]);
+    expect(written.join("")).toMatch(/labels\s+Brand A, Launch/);
+  });
+
+  it("refuses post labels with neither or both of --label and --clear-labels", async () => {
+    await expect(run(["post", "labels", "post_1"])).rejects.toMatchObject({ exitCode: 2 });
+    await expect(
+      run(["post", "labels", "post_1", "--label", "lbl_brand_a", "--clear-labels"]),
+    ).rejects.toMatchObject({ exitCode: 2 });
+    expect(client.setPostLabels).not.toHaveBeenCalled();
   });
 
   it("filters post list by label and shows a LABELS column only when a post has labels", async () => {

@@ -214,6 +214,11 @@ describe('endpoint mapping', () => {
       { method: 'POST', path: '/social-posts/post_9c3e1f/unschedule' },
     ],
     [
+      'setPostLabels',
+      () => client.setPostLabels('post_9c3e1f', ['lbl_brand_a']),
+      { method: 'PUT', path: '/social-posts/post_9c3e1f/labels', body: { labelIds: ['lbl_brand_a'] } },
+    ],
+    [
       'listRecurringPosts',
       () => client.listRecurringPosts({ limit: 5, statuses: ['ACTIVE', 'PAUSED'] }),
       {

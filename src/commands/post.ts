@@ -14,6 +14,7 @@ import {
   listSocialAccounts,
   publishDraft,
   retryFailedPlatforms,
+  setPostLabels,
   unschedulePost,
   updatePost,
   validateBulkPosts,
@@ -250,7 +251,10 @@ interface ContentOptions {
   ytScheduleOnYoutube?: boolean;
   pinterestBoard?: string;
   pinterestBoardName?: string;
+  pinterestBoardSection?: string;
+  pinterestBoardSectionName?: string;
   pinterestAiGenerated?: boolean;
+  pinterestAiGeneratedPerson?: boolean;
   documentTitle?: string;
   liReshare?: string;
   xQuote?: string;
@@ -547,12 +551,27 @@ async function inputFromOptions(options: ContentOptions): Promise<PostInput> {
   if (options.pinterestBoardName !== undefined) {
     mergeConfig("PINTEREST", { boardName: options.pinterestBoardName, boardId: undefined });
   }
+  if (options.pinterestBoardSection !== undefined && options.pinterestBoardSectionName !== undefined) {
+    throw new CliError("Pass --pinterest-board-section or --pinterest-board-section-name, not both.", {
+      exitCode: ExitCode.VALIDATION,
+      hint: "--pinterest-board-section picks the section by id, --pinterest-board-section-name by its name",
+    });
+  }
+  if (options.pinterestBoardSection !== undefined) {
+    mergeConfig("PINTEREST", { boardSectionId: options.pinterestBoardSection, boardSectionName: undefined });
+  }
+  if (options.pinterestBoardSectionName !== undefined) {
+    mergeConfig("PINTEREST", { boardSectionName: options.pinterestBoardSectionName, boardSectionId: undefined });
+  }
   if (options.documentTitle !== undefined) {
     mergeConfig("LINKEDIN", { documentTitle: options.documentTitle });
   }
   if (options.liReshare !== undefined) mergeConfig("LINKEDIN", { reshareOf: options.liReshare.trim() });
   if (options.pinterestAiGenerated !== undefined) {
     mergeConfig("PINTEREST", { aiGenerated: options.pinterestAiGenerated });
+  }
+  if (options.pinterestAiGeneratedPerson !== undefined) {
+    mergeConfig("PINTEREST", { aiGeneratedPerson: options.pinterestAiGeneratedPerson });
   }
   if (options.xQuote !== undefined) mergeConfig("TWITTER", { quoteOf: options.xQuote.trim() });
   if (options.xAiGenerated !== undefined) mergeConfig("TWITTER", { aiGenerated: options.xAiGenerated });
@@ -1259,9 +1278,11 @@ function storedConfig(target: SocialPostPlatform): ConfigEntry | undefined {
     case "PINTEREST":
       return definedOnly({
         boardId: target.pinterestBoardId,
+        boardSectionId: target.pinterestBoardSectionId,
         title: target.pinterestTitle,
         link: target.pinterestLink,
         aiGenerated: target.pinterestAiGenerated,
+        aiGeneratedPerson: target.pinterestAiGeneratedPerson,
       });
     case "YOUTUBE":
       return definedOnly({
@@ -1553,6 +1574,39 @@ async function runDelete(id: string, options: GlobalOptions): Promise<void> {
   }
 
   success("Deleted");
+}
+
+interface SetLabelsOptions {
+  label: string[];
+  clearLabels?: boolean;
+}
+
+async function runSetLabels(id: string, options: SetLabelsOptions): Promise<void> {
+  if (options.clearLabels && options.label.length > 0) {
+    throw new CliError("Pass --clear-labels or the labels to keep, not both.", {
+      exitCode: ExitCode.USAGE,
+      hint: "The labels you pass replace every stored label, so --clear-labels is only needed to remove them all",
+    });
+  }
+  if (!options.clearLabels && options.label.length === 0) {
+    throw new CliError("Pass --label <labelId> or --clear-labels.", {
+      exitCode: ExitCode.USAGE,
+      hint: "Find label ids with: adaptlypost labels list",
+    });
+  }
+
+  const post = await setPostLabels(id, options.label);
+
+  if (isMachine()) {
+    printResult("post.labels", post);
+    return;
+  }
+
+  success(`Labels set  ${formatId(post.id)}`);
+  printKeyValues([
+    ["status", post.status],
+    ["labels", labelNames(post)],
+  ]);
 }
 
 async function runUnschedule(id: string): Promise<void> {
@@ -2521,7 +2575,7 @@ const withContentOptions = (command: Command): Command =>
     )
     .option(
       "--yt-schedule-on-youtube",
-      "Upload the YouTube video when the post is scheduled, as a private video that YouTube publishes at --at, so you can set up Test & Compare in YouTube Studio first. Needs privacy public or unset, and no repeat",
+      "Upload the YouTube video 48 hours before --at, at once when --at is closer, as a private video that YouTube publishes at --at, so you can set up Test & Compare in YouTube Studio first. Needs privacy public or unset, and no repeat",
     )
     .option(
       "--pinterest-board <id>",
@@ -2532,8 +2586,20 @@ const withContentOptions = (command: Command): Command =>
       "Pinterest board name, looked up on the account: an exact match first, then one ignoring case. Not with --pinterest-board",
     )
     .option(
+      "--pinterest-board-section <id>",
+      "Section id of the chosen Pinterest board. Needs --pinterest-board, --pinterest-board-name or a stored board. Without it the Pin goes on the board itself",
+    )
+    .option(
+      "--pinterest-board-section-name <name>",
+      "Name of a section of the chosen Pinterest board, max 180 characters, looked up when the post is saved: an exact match first, then one ignoring case. Not with --pinterest-board-section",
+    )
+    .option(
       "--pinterest-ai-generated",
       "Disclose that the Pin was made or modified with AI, so Pinterest shows its AI modified label. Image, video and carousel Pins",
+    )
+    .option(
+      "--pinterest-ai-generated-person",
+      "Disclose that the Pin shows a person generated with AI, so Pinterest gets its synthetic performer disclosure. Image, video and carousel Pins",
     )
     .option(
       "--document-title <title>",
@@ -2792,6 +2858,17 @@ export function registerPostCommands(program: Command): void {
     .description("Turn a scheduled post back into an undated draft")
     .action(async (id: string) => {
       await runUnschedule(id);
+    });
+
+  post
+    .command("labels <id>")
+    .description(
+      "Replace the labels of a post in any status, published ones included. Labels stay in AdaptlyPost and never reach a platform",
+    )
+    .option("--label <labelId>", "Label id from labels list, repeatable. Replaces every stored label", collectLabel, [])
+    .option("--clear-labels", "Remove every label from the post")
+    .action(async (id: string, options: SetLabelsOptions) => {
+      await runSetLabels(id, options);
     });
 
   post

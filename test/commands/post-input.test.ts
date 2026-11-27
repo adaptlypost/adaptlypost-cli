@@ -1271,6 +1271,24 @@ describe("normalizeConfig", () => {
       "Pass boardId or boardName for a Pinterest account, not both.",
     );
   });
+
+  it("trims a Pinterest board section and refuses its name empty, too long, or next to a section id", () => {
+    expect(
+      normalizeConfig("PINTEREST", { boardId: "b1", boardSectionName: " Spring ", aiGeneratedPerson: true }),
+    ).toEqual({ boardId: "b1", boardSectionName: "Spring", aiGeneratedPerson: true });
+    expect(normalizeConfig("PINTEREST", { boardId: "b1", boardSectionId: " s1 " })).toEqual({
+      boardId: "b1",
+      boardSectionId: "s1",
+    });
+    expect(exitCodeOf(() => normalizeConfig("PINTEREST", { boardSectionName: "  " }))).toBe(ExitCode.VALIDATION);
+    expect(exitCodeOf(() => normalizeConfig("PINTEREST", { boardSectionName: "x".repeat(181) }))).toBe(
+      ExitCode.VALIDATION,
+    );
+    expect(exitCodeOf(() => normalizeConfig("PINTEREST", { aiGeneratedPerson: "maybe" }))).toBe(ExitCode.VALIDATION);
+    expect(() => normalizeConfig("PINTEREST", { boardSectionId: "s1", boardSectionName: "Spring" })).toThrow(
+      "Pass boardSectionId or boardSectionName for a Pinterest account, not both.",
+    );
+  });
 });
 
 describe("normalizeConfig for TUMBLR", () => {

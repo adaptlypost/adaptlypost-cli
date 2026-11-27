@@ -198,7 +198,16 @@ export const CONFIG_KEYS: Partial<Record<PlatformType, readonly string[]>> = {
     "brandedContentOwnBrand",
     "autoAddMusic",
   ],
-  PINTEREST: ["boardId", "boardName", "title", "link", "aiGenerated"],
+  PINTEREST: [
+    "boardId",
+    "boardName",
+    "boardSectionId",
+    "boardSectionName",
+    "title",
+    "link",
+    "aiGenerated",
+    "aiGeneratedPerson",
+  ],
   YOUTUBE: [
     "postType",
     "videoTitle",
@@ -1832,16 +1841,20 @@ function normalizeYouTubeAudioLanguage(value: FrontmatterValue | undefined): str
   return language;
 }
 
-function normalizePinterestBoardName(value: FrontmatterValue | undefined): string | undefined {
-  const raw = configString(value, "PINTEREST boardName");
+function normalizePinterestName(
+  value: FrontmatterValue | undefined,
+  key: "boardName" | "boardSectionName",
+  noun: "board" | "board section",
+): string | undefined {
+  const raw = configString(value, `PINTEREST ${key}`);
   if (raw === undefined) return undefined;
   const name = raw.trim();
   if (name === "") {
-    throw configError("The Pinterest board name is empty.", "Give the board's name, or leave boardName out");
+    throw configError(`The Pinterest ${noun} name is empty.`, `Give the ${noun}'s name, or leave ${key} out`);
   }
   if (name.length > PINTEREST_BOARD_NAME_MAX_LENGTH) {
     throw configError(
-      `The Pinterest board name is ${name.length} characters; the limit is ${PINTEREST_BOARD_NAME_MAX_LENGTH}.`,
+      `The Pinterest ${noun} name is ${name.length} characters; the limit is ${PINTEREST_BOARD_NAME_MAX_LENGTH}.`,
     );
   }
   return name;
@@ -1931,18 +1944,29 @@ export function normalizeConfig(platform: PlatformType, config: FrontmatterMap):
 
   if (platform === "PINTEREST") {
     const boardId = configString(config.boardId, "PINTEREST boardId")?.trim() || undefined;
-    const boardName = normalizePinterestBoardName(config.boardName);
+    const boardName = normalizePinterestName(config.boardName, "boardName", "board");
     if (boardId !== undefined && boardName !== undefined) {
       throw configError(
         "Pass boardId or boardName for a Pinterest account, not both.",
         "Keep boardId to pick the board by id, or boardName to pick it by name",
       );
     }
+    const boardSectionId = configString(config.boardSectionId, "PINTEREST boardSectionId")?.trim() || undefined;
+    const boardSectionName = normalizePinterestName(config.boardSectionName, "boardSectionName", "board section");
+    if (boardSectionId !== undefined && boardSectionName !== undefined) {
+      throw configError(
+        "Pass boardSectionId or boardSectionName for a Pinterest account, not both.",
+        "Keep boardSectionId to pick the section by id, or boardSectionName to pick it by name",
+      );
+    }
     return definedEntries({
       ...config,
       boardId,
       boardName,
+      boardSectionId,
+      boardSectionName,
       aiGenerated: configBoolean(config.aiGenerated, "PINTEREST aiGenerated"),
+      aiGeneratedPerson: configBoolean(config.aiGeneratedPerson, "PINTEREST aiGeneratedPerson"),
     });
   }
 
